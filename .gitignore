@@ -5,8 +5,13 @@
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
+.plastic/
+RunFolder/
+results/
+UIElementsSchema/
 .vs/
 .idea/
+.vscode/
 *.csproj
 *.sln
 *.user
@@ -15,3 +20,6 @@
 *.svd
 *.pdb
 *.mdb
+*.opendb
+*.VC.db
+*.tmp
