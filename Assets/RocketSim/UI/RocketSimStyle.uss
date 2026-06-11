@@ -1,0 +1,660 @@
+﻿/* ══════════════════════════════════════════════════════════════════════════
+   RocketSimStyles.uss  —  Right Config Panel
+   Fixes: TextField text invisible, EnumField PPO/SAC text invisible,
+          text overflowing boxes, per-tab colour themes, general polish.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Panel shell ─────────────────────────────────────────────────────────── */
+.rs-right-panel {
+    position: absolute;
+    top: 14px;
+    bottom: 14px;
+    width: 320px;
+    background-color: rgba(9, 12, 20, 0.96);
+    border-top-left-radius: 14px;
+    border-bottom-left-radius: 14px;
+    border-left-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-color: rgba(70, 130, 255, 0.28);
+    flex-direction: column;
+}
+
+/* ── Slide tab ───────────────────────────────────────────────────────────── */
+.rs-right-tab {
+    position: absolute;
+    top: 50%;
+    width: 20px;
+    height: 52px;
+    translate: 0 -26px;
+    background-color: rgba(9, 12, 20, 0.96);
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-left-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-right-width: 0;
+    border-color: rgba(70, 130, 255, 0.28);
+    color: rgba(140, 180, 255, 1);
+    font-size: 14px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.rs-right-tab:hover { background-color: rgba(30, 55, 140, 0.65); }
+
+/* ══ TAB BAR ════════════════════════════════════════════════════════════════ */
+.rs-tab-bar {
+    flex-direction: row;
+    padding: 5px 5px 0;
+    border-bottom-width: 1px;
+    border-color: rgba(70, 130, 255, 0.14);
+}
+
+.rs-tab-btn {
+    flex-grow: 1;
+    height: 25px;
+    background-color: transparent;
+    border-width: 0;
+    border-radius: 5px;
+    color: rgba(120, 150, 190, 1);
+    font-size: 10px;
+    padding: 0;
+    overflow: hidden;
+    -unity-text-align: middle-center;
+}
+.rs-tab-btn:hover { background-color: rgba(35, 60, 140, 0.30); }
+
+/* ── Per-tab active colours (button) ────────────────────────────────────── */
+.rs-theme-parts.rs-tab-btn-active      { background-color: rgba(20, 65, 175, 0.50); color: rgb(110, 195, 255); -unity-font-style: bold; }
+.rs-theme-telemetry.rs-tab-btn-active  { background-color: rgba(75, 20, 175, 0.50); color: rgb(195, 120, 255); -unity-font-style: bold; }
+.rs-theme-env.rs-tab-btn-active        { background-color: rgba(15, 120, 80,  0.50); color: rgb(70,  210, 155); -unity-font-style: bold; }
+.rs-theme-scenario.rs-tab-btn-active   { background-color: rgba(160, 100, 10, 0.50); color: rgb(255, 190, 70);  -unity-font-style: bold; }
+.rs-theme-ml.rs-tab-btn-active         { background-color: rgba(165, 15, 75,  0.50); color: rgb(255, 110, 165); -unity-font-style: bold; }
+
+/* ══ CONTENT AREA ═══════════════════════════════════════════════════════════ */
+.rs-panel-content {
+    padding: 8px 10px 12px;
+    flex-direction: column;
+}
+
+/* ── Section labels — base ───────────────────────────────────────────────── */
+.rs-section-label {
+    font-size: 9px;
+    -unity-font-style: bold;
+    letter-spacing: 1.2px;
+    margin-top: 14px;
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+    border-bottom-width: 1px;
+    /* fallback colour; overridden per-tab below */
+    color: rgba(100, 150, 255, 0.85);
+    border-color: rgba(70, 130, 255, 0.14);
+}
+
+/* ── Per-tab section label accent colours ────────────────────────────────── */
+.rs-theme-parts      .rs-section-label { color: rgba(80, 185, 255, 0.90);  border-color: rgba(70, 160, 255, 0.18); }
+.rs-theme-telemetry  .rs-section-label { color: rgba(185, 105, 255, 0.90); border-color: rgba(155, 75, 255, 0.18); }
+.rs-theme-env        .rs-section-label { color: rgba(60, 205, 145, 0.90);  border-color: rgba(45, 180, 120, 0.18); }
+.rs-theme-scenario   .rs-section-label { color: rgba(255, 185, 60, 0.90);  border-color: rgba(220, 155, 40, 0.18); }
+.rs-theme-ml         .rs-section-label { color: rgba(255, 100, 155, 0.90); border-color: rgba(220, 75,  130, 0.18); }
+
+/* ── Field rows ──────────────────────────────────────────────────────────── */
+.rs-field-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+    min-height: 20px;
+}
+.rs-field-label {
+    color: rgb(155, 180, 210);
+    font-size: 11px;
+    width: 118px;
+    flex-shrink: 0;
+    overflow: hidden;
+    -unity-text-overflow-position: end;
+    white-space: nowrap;
+}
+.rs-slider         { flex-grow: 1; margin-left: 4px; margin-right: 4px; }
+.rs-field-value    { color: rgb(80, 200, 120); font-size: 11px; width: 44px; -unity-text-align: upper-right; flex-shrink: 0; }
+.rs-field-readonly { color: rgb(130, 175, 130); font-size: 11px; flex-grow: 1; -unity-text-align: upper-right; overflow: hidden; white-space: nowrap; }
+.rs-toggle         { margin-left: auto; flex-shrink: 0; }
+
+/* ── Section description (path display, etc.) ────────────────────────────── */
+.rs-section-desc {
+    color: rgb(100, 130, 165);
+    font-size: 10px;
+    white-space: normal;
+    overflow: hidden;
+    word-wrap: break-word;
+}
+
+/* ══ ENUM FIELDS — Fix invisible PPO / SAC text ══════════════════════════════
+   Unity UIToolkit EnumField structure:
+     EnumField > .unity-base-field__input (.unity-enum-field__input)
+                     > .unity-enum-field__text
+                     > .unity-enum-field__arrow
+   The popup is rendered into a separate overlay layer but also picks up the
+   document's stylesheet, so .unity-base-dropdown__* rules apply.           */
+
+.rs-enum-field {
+    margin-bottom: 7px;
+    color: rgb(165, 190, 215);
+    font-size: 11px;
+}
+
+/* Label part of the enum row */
+.rs-enum-field > .unity-base-field__label {
+    color: rgb(155, 180, 210);
+    font-size: 11px;
+    min-width: 118px;
+    flex-shrink: 0;
+    -unity-text-overflow-position: end;
+    overflow: hidden;
+}
+
+/* The clickable input box */
+.rs-enum-field > .unity-base-field__input,
+.rs-enum-field .unity-enum-field__input {
+    background-color: rgba(12, 18, 38, 0.85);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.35);
+    border-radius: 4px;
+    flex-grow: 1;
+    height: 22px;
+    padding: 0 6px;
+}
+.rs-enum-field > .unity-base-field__input:hover,
+.rs-enum-field .unity-enum-field__input:hover {
+    border-color: rgba(100, 160, 255, 0.60);
+}
+
+/* The selected value text — this was invisible before */
+.rs-enum-field .unity-enum-field__text,
+.rs-enum-field .unity-base-popup-field__text {
+    color: rgb(195, 220, 255);
+    font-size: 11px;
+    -unity-text-align: middle-left;
+}
+
+/* Dropdown arrow */
+.rs-enum-field .unity-enum-field__arrow {
+    -unity-background-image-tint-color: rgba(140, 175, 230, 0.80);
+}
+
+/* ── Popup dropdown overlay (EnumField options list) ─────────────────────── */
+.unity-base-dropdown__container-outer,
+.unity-base-dropdown__container-inner {
+    background-color: rgba(10, 14, 28, 0.98);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.40);
+    border-radius: 5px;
+}
+
+.unity-base-dropdown__item {
+    background-color: transparent;
+    border-radius: 3px;
+    margin: 1px 3px;
+    padding: 2px 6px;
+    min-height: 22px;
+}
+.unity-base-dropdown__item:hover {
+    background-color: rgba(35, 70, 170, 0.45);
+}
+/* Item label — the actual text (was invisible / white-on-white) */
+.unity-base-dropdown__item-label {
+    color: rgb(195, 220, 255);
+    font-size: 11px;
+}
+/* Checked item */
+.unity-base-dropdown__item.unity-checked > .unity-base-dropdown__item-label {
+    color: rgb(130, 210, 255);
+    -unity-font-style: bold;
+}
+.unity-base-dropdown__checkmark {
+    -unity-background-image-tint-color: rgb(90, 185, 255);
+    width: 12px;
+    height: 12px;
+}
+/* Separator */
+.unity-base-dropdown__separator {
+    background-color: rgba(70, 130, 255, 0.15);
+    height: 1px;
+    margin: 2px 6px;
+}
+
+/* ══ RUN ID TEXT FIELD — Fix invisible typed text ════════════════════════════
+   Unity TextField structure:
+     TextField > .unity-base-field__input (.unity-base-text-field__input)
+                     > .unity-text-element (cursor + typed text)             */
+
+.rs-run-id-field {
+    flex-grow: 1;
+    height: 22px;
+    font-size: 11px;
+    margin-left: 4px;
+}
+
+/* The actual input box */
+.rs-run-id-field > .unity-base-field__input,
+.rs-run-id-field .unity-base-text-field__input {
+    background-color: rgba(10, 15, 32, 0.85);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.38);
+    border-radius: 4px;
+    padding: 0 5px;
+    color: rgb(200, 220, 255);
+}
+.rs-run-id-field > .unity-base-field__input:focus,
+.rs-run-id-field .unity-base-text-field__input:focus {
+    border-color: rgba(90, 155, 255, 0.70);
+}
+
+/* The text element that actually renders typed characters */
+.rs-run-id-field .unity-text-element,
+.rs-run-id-field .unity-base-text-field__input > .unity-text-element {
+    color: rgb(200, 220, 255);
+    font-size: 11px;
+    -unity-text-align: middle-left;
+}
+
+/* Cursor */
+.rs-run-id-field .unity-text-element--inner-input-field-component {
+    color: rgb(200, 220, 255);
+}
+
+/* ══ RUN AUTOCOMPLETE DROPDOWN ══════════════════════════════════════════════ */
+.rs-run-dropdown {
+    background-color: rgba(10, 14, 28, 0.98);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.38);
+    border-radius: 5px;
+    margin-bottom: 4px;
+    overflow: hidden;
+}
+
+.rs-run-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 8px;
+    border-bottom-width: 1px;
+    border-color: rgba(70, 130, 255, 0.08);
+    cursor: default;
+    min-height: 26px;
+}
+.rs-run-item:hover { background-color: rgba(35, 70, 170, 0.38); }
+
+.rs-run-item-name {
+    color: rgb(185, 210, 255);
+    font-size: 11px;
+    flex-grow: 1;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.rs-run-item-meta {
+    color: rgb(90, 130, 170);
+    font-size: 10px;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+/* ══ VALIDATION HINT ════════════════════════════════════════════════════════ */
+.rs-validation-label {
+    font-size: 10px;
+    margin-left: 6px;
+    margin-bottom: 4px;
+    white-space: normal;
+}
+
+/* ══ LOADED-CONFIG BANNER ═══════════════════════════════════════════════════ */
+.rs-info-banner {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(14, 60, 32, 0.65);
+    border-width: 1px;
+    border-color: rgba(50, 170, 80, 0.45);
+    border-radius: 5px;
+    padding: 5px 8px;
+    margin-bottom: 6px;
+}
+.rs-banner-label {
+    color: rgb(105, 210, 130);
+    font-size: 10px;
+    flex-grow: 1;
+    white-space: normal;
+    overflow: hidden;
+}
+.rs-banner-btn {
+    background-color: rgba(22, 90, 45, 0.55);
+    border-color: rgba(60, 170, 90, 0.55);
+    border-width: 1px;
+    border-radius: 4px;
+    color: rgb(140, 230, 160);
+    height: 20px;
+    font-size: 10px;
+    padding: 0 6px;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+.rs-banner-btn:hover { background-color: rgba(38, 125, 65, 0.75); }
+
+/* ══ ACTION BUTTONS ═════════════════════════════════════════════════════════ */
+.rs-action-btn {
+    background-color: rgba(22, 80, 200, 0.40);
+    border-color: rgba(70, 140, 255, 0.65);
+    border-width: 1px;
+    border-radius: 7px;
+    color: rgb(190, 215, 255);
+    height: 30px;
+    font-size: 11px;
+    margin-bottom: 5px;
+}
+.rs-action-btn:hover { background-color: rgba(38, 112, 255, 0.58); }
+
+.rs-danger-btn {
+    background-color: rgba(140, 24, 24, 0.35);
+    border-color: rgba(215, 65, 65, 0.55);
+    border-width: 1px;
+    border-radius: 7px;
+    color: rgb(255, 145, 145);
+    height: 27px;
+    font-size: 11px;
+    margin-top: 12px;
+}
+.rs-danger-btn:hover { background-color: rgba(190, 44, 44, 0.60); }
+
+/* Hardware test controls */
+.rs-test-wrapper {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    width: 220px;
+    flex-direction: column-reverse;
+}
+.rs-test-main-btn {
+    height: 32px;
+}
+.rs-test-options {
+    flex-direction: column;
+    background-color: rgba(12, 18, 34, 0.78);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.22);
+    border-radius: 7px;
+    padding: 6px;
+    margin-bottom: 6px;
+}
+.rs-test-status {
+    color: rgb(150, 180, 215);
+    font-size: 10px;
+    white-space: normal;
+    margin-top: 4px;
+}
+
+/* ══ ENGINE SELECTOR ════════════════════════════════════════════════════════ */
+.rs-engine-row {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+.rs-engine-card {
+    width: 86px;
+    padding: 5px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 8px;
+    align-items: center;
+    cursor: default;
+    overflow: hidden;
+}
+.rs-engine-card:hover        { border-color: rgba(90, 150, 255, 0.50); }
+.rs-engine-card-active {
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(90, 155, 255, 0.82);
+}
+.rs-engine-img {
+    width: 62px;
+    height: 62px;
+    margin-bottom: 3px;
+    -unity-background-image-tint-color: rgba(160, 200, 255, 0.90);
+}
+.rs-engine-label {
+    color: rgb(175, 205, 255);
+    font-size: 11px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* ══ FIN SELECTOR ═══════════════════════════════════════════════════════════ */
+.rs-fin-row {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+.rs-fin-card {
+    width: 86px;
+    padding: 5px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 8px;
+    align-items: center;
+    cursor: default;
+    overflow: hidden;
+}
+.rs-fin-card:hover     { border-color: rgba(90, 150, 255, 0.50); }
+.rs-fin-card-active {
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(90, 155, 255, 0.82);
+}
+.rs-fin-img {
+    width: 62px;
+    height: 62px;
+    margin-bottom: 3px;
+    -unity-background-image-tint-color: rgba(160, 200, 255, 0.90);
+}
+.rs-fin-label {
+    color: rgb(175, 205, 255);
+    font-size: 11px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* ══ MODE SELECTOR (Training / Inference) ═══════════════════════════════════ */
+.rs-mode-row {
+    flex-direction: row;
+    margin-top: 4px;
+    margin-bottom: 6px;
+}
+.rs-mode-card {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin: 0 3px;
+    padding: 8px 5px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 8px;
+    align-items: center;
+    cursor: default;
+    overflow: hidden;
+}
+.rs-mode-card:hover { border-color: rgba(90, 150, 255, 0.45); }
+.rs-mode-card-active {
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(90, 155, 255, 0.80);
+}
+.rs-mode-title {
+    color: rgb(185, 210, 255);
+    font-size: 12px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    margin-bottom: 2px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.rs-mode-desc {
+    color: rgb(100, 130, 168);
+    font-size: 10px;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    overflow: hidden;
+}
+
+/* ══ SCENARIO GRID ══════════════════════════════════════════════════════════ */
+.rs-scenario-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+.rs-scenario-card {
+    width: 134px;
+    margin: 3px;
+    padding: 7px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 7px;
+    cursor: default;
+    overflow: hidden;
+}
+.rs-scenario-card:hover  { border-color: rgba(90, 150, 255, 0.50); }
+.rs-scenario-card-active {
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(255, 185, 60, 0.80);   /* amber highlight for Scenario tab */
+}
+.rs-scenario-title {
+    color: rgb(175, 205, 255);
+    font-size: 12px;
+    -unity-font-style: bold;
+    margin-bottom: 3px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.rs-scenario-desc {
+    color: rgb(110, 140, 170);
+    font-size: 10px;
+    white-space: normal;
+    overflow: hidden;
+}
+
+/* ══ WEATHER BUTTONS ════════════════════════════════════════════════════════ */
+.rs-btn-group { flex-direction: row; flex-wrap: wrap; margin-bottom: 5px; }
+.rs-weather-btn {
+    flex-grow: 1;
+    height: 24px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 5px;
+    color: rgb(130, 160, 205);
+    font-size: 11px;
+    margin: 2px;
+    overflow: hidden;
+}
+.rs-weather-btn:hover  { border-color: rgba(90, 150, 255, 0.45); }
+.rs-weather-btn-active {
+    background-color: rgba(15, 110, 75, 0.55);  /* green to match Env tab */
+    border-color: rgba(55, 200, 135, 0.70);
+    color: rgb(80, 220, 160);
+}
+
+/* ══ INFERENCE RUN GRID ═════════════════════════════════════════════════════ */
+.rs-inference-grid {
+    flex-direction: column;
+    margin-top: 4px;
+    margin-bottom: 6px;
+}
+.rs-inference-card {
+    padding: 7px 10px;
+    margin-bottom: 4px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 7px;
+    cursor: default;
+    overflow: hidden;
+}
+.rs-inference-card:hover {
+    border-color: rgba(90, 150, 255, 0.50);
+    background-color: rgba(25, 36, 65, 0.82);
+}
+.rs-inference-card-active {
+    background-color: rgba(22, 55, 155, 0.50);
+    border-color: rgba(90, 155, 255, 0.80);
+}
+.rs-inference-card-name {
+    color: rgb(185, 210, 255);
+    font-size: 12px;
+    -unity-font-style: bold;
+    margin-bottom: 2px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.rs-inference-card-scenario {
+    color: rgb(100, 155, 210);
+    font-size: 10px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* ══ EMPTY STATE ════════════════════════════════════════════════════════════ */
+.rs-empty-state {
+    color: rgb(88, 115, 150);
+    font-size: 11px;
+    white-space: normal;
+    margin: 12px 8px;
+    -unity-text-align: middle-center;
+}
+
+/* ══ TOGGLE BASELINE FIX ════════════════════════════════════════════════════
+   Ensure Unity Toggle label text is readable.                               */
+.unity-toggle__label { color: rgb(155, 180, 210); font-size: 11px; }
+.unity-toggle__checkmark {
+    -unity-background-image-tint-color: rgb(80, 185, 255);
+}
+
+/* ══ SLIDER BASELINE FIX ════════════════════════════════════════════════════ */
+.unity-slider__input { border-width: 0; background-color: transparent; }
+.unity-base-slider__drag-container {
+    margin-left: 0;
+    margin-right: 0;
+    height: 12px;           /* explicit height = same as dragger */
+}
+.unity-base-slider__tracker {
+    background-color: rgba(40, 65, 130, 0.55);
+    border-radius: 2px;
+    height: 4px;
+    margin-top: 4px;        /* (12 - 4) / 2 */
+}
+.unity-base-slider__dragger {
+    background-color: rgb(80, 165, 255);
+    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    border-width: 0;
+    margin-top: 0;
+}
+.unity-base-slider__dragger:hover { background-color: rgb(110, 190, 255); }
+
+/* ══ SCROLL VIEW THEMING ════════════════════════════════════════════════════ */
+.unity-scroll-view__vertical-scroller { width: 6px; }
+.unity-scroller__slider .unity-base-slider__dragger {
+    background-color: rgba(70, 130, 255, 0.40);
+    border-radius: 3px;
+    width: 6px;
+    top: 0;
+}
+.unity-scroller__slider .unity-base-slider__dragger:hover {
+    background-color: rgba(90, 155, 255, 0.65);
+}
+.unity-scroller__slider .unity-base-slider__tracker {
+    background-color: rgba(30, 40, 70, 0.50);
+}
