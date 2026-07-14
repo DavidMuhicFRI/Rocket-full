@@ -132,7 +132,7 @@ Terminal rules:
 if upright_dot < 0.35 or horizontal_error_m > 150 or fuel_kg <= 0:
     reward = -35
 
-if altitude_m > max(240, episode_spawn_altitude_max_m + 100):
+if altitude_m > actual_episode_start_altitude_m + 100:
     reward = -30
 
 if altitude_m <= ground_clearance_m:
@@ -234,6 +234,11 @@ recoverable braking and lateral-control envelope. The platform is a visual and
 logical capture volume from the first curriculum episode. It has no collision
 surfaces: capture is simulated from CatchFrame position, velocity, attitude,
 yaw, and stable time inside the volume.
+
+Flyaway termination is episode-relative. Moving more than 150 m horizontally
+from the target or climbing more than 100 m above the sampled CatchFrame start
+height ends the episode. A high curriculum spawn is therefore valid, while the
+early-training "boost upward" failure mode still terminates promptly.
 
 ## Hover
 

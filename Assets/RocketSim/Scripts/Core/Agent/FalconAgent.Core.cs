@@ -124,6 +124,7 @@ namespace RocketSim
 
             ResetWindForEpisode();
             SpawnForScenario();
+            CaptureLandingEpisodeStartAltitude();
             RandomizeTarget();
             UpdateLandingPlatformGeometry();
             UpdateLandingPlatformState(0f);
@@ -420,6 +421,12 @@ namespace RocketSim
                 curriculumReplay = envConfig != null &&
                                    envConfig.scenario == ScenarioType.Landing &&
                                    _landingEpisodeUsesEasierReplay,
+                landingStartAltitude = envConfig != null && envConfig.scenario == ScenarioType.Landing
+                    ? _landingEpisodeStartAltitude
+                    : 0f,
+                landingFlyawayAltitude = envConfig != null && envConfig.scenario == ScenarioType.Landing
+                    ? _landingEpisodeFlyawayAltitude
+                    : 0f,
                 durationSeconds = _episodeElapsedSeconds,
                 fixedDeltaTimeSeconds = Time.fixedDeltaTime,
                 decisionPeriod = decisionRequester ? decisionRequester.DecisionPeriod : 1
@@ -469,9 +476,9 @@ namespace RocketSim
                 ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
                 fuel,
                 envConfig.hoverTrackSettleRadius,
-                envConfig.behaviorType == BehaviorType.Inference
-                    ? envConfig.ActiveLandingFailureAltitude
-                    : landing.failureAltitude,
+                _landingEpisodeFlyawayAltitude > 0f
+                    ? _landingEpisodeFlyawayAltitude
+                    : ScenarioReferenceLocalPosition().y + LandingFlyawayAltitudeMargin,
                 landing.successRadius,
                 landing.successMaxSpeed,
                 landing.successMaxVerticalSpeed,
@@ -549,7 +556,8 @@ namespace RocketSim
                 $"[LandingEpisodeEnd] area={_areaIndex} episode={_episode} step={_step} " +
                 $"duration={_step * Time.fixedDeltaTime:F2}s reason={reason} success={successfulTouchdown} " +
                 $"terminalAltitudeReached={reachedCaptureAltitude} altitude={context.altitude:F2}m " +
-                $"terminalAltitude={context.terminalAltitude:F2}m failureAltitude={context.landingFailureAltitude:F2}m " +
+                $"terminalAltitude={context.terminalAltitude:F2}m startAltitude={_landingEpisodeStartAltitude:F2}m " +
+                $"flyawayAltitude={context.landingFlyawayAltitude:F2}m " +
                 $"distance3D={terms.distance3D:F2}m planarDistance={terms.planarDistance:F2}m " +
                 $"uprightness={terms.upDot:F3} tilt={tiltDeg:F2}deg totalSpeed={terms.speed:F2}m/s " +
                 $"verticalSpeed={terms.verticalSpeed:F2}m/s horizontalSpeed={terms.planarSpeed:F2}m/s " +

@@ -115,12 +115,15 @@ namespace RocketSim
         LandingCurriculumProfile _landingEpisodeProfile;
         bool _landingEpisodeProfileInitialized;
         bool _landingEpisodeUsesEasierReplay;
+        float _landingEpisodeStartAltitude;
+        float _landingEpisodeFlyawayAltitude;
 
         const float Rho0 = 1.225f; // ISA sea-level density (kg/m³)
         const float HScale = 8500f; // ISA scale height (m)
         const float G0 = 9.80665f;
         const float BaseGroundClearance = 0.5f;
         const float HoverTrackCycleCompleteReward = 4.0f;
+        const float LandingFlyawayAltitudeMargin = 100f;
         const float EngineIgnitionThreshold = 0.08f;
         const float EngineShutdownThreshold = 0.03f;
         const float RcsValveActionThreshold = 0.5f;

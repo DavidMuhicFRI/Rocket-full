@@ -228,6 +228,8 @@ namespace RocketSim
         public float curriculumGlobalDifficulty01;
         public float curriculumDifficulty01;
         public bool curriculumReplay;
+        public float landingStartAltitude;
+        public float landingFlyawayAltitude;
         public float durationSeconds;
         public float fixedDeltaTimeSeconds;
         public int decisionPeriod;

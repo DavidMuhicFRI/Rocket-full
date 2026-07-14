@@ -80,7 +80,7 @@ namespace RocketSim
                     Terminal(-35f, f),
                     terminationReason: EpisodeTerminationReason.LandingFuelDepleted);
 
-            if (ctx.altitude > ctx.landingFailureAltitude)
+            if (ctx.altitude > ctx.landingFlyawayAltitude)
                 return RewardDecision.Terminate(
                     reward,
                     Terminal(-30f, f),

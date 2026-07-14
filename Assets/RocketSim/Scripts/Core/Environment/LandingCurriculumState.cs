@@ -40,7 +40,6 @@ namespace RocketSim
         public readonly float spawnTiltRangeDeg;
         public readonly float angularSpeedMaxDegS;
         public readonly float spawnYawRangeDeg;
-        public readonly float failureAltitude;
         public readonly float successRadius;
         public readonly float successMaxSpeed;
         public readonly float successMaxVerticalSpeed;
@@ -82,7 +81,6 @@ namespace RocketSim
             this.spawnTiltRangeDeg = spawnTiltRangeDeg;
             this.angularSpeedMaxDegS = angularSpeedMaxDegS;
             this.spawnYawRangeDeg = spawnYawRangeDeg;
-            failureAltitude = Mathf.Max(240f, spawnAltitudeMax + 100f);
             this.successRadius = successRadius;
             this.successMaxSpeed = successMaxSpeed;
             this.successMaxVerticalSpeed = successMaxVerticalSpeed;
@@ -312,18 +310,6 @@ namespace RocketSim
         public float CurrentLandingSpawnTiltRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnTiltRangeDeg;
         public float CurrentLandingAngularSpeedMaxDegS => GetLandingCurriculumProfile(landingCurriculumProgress).angularSpeedMaxDegS;
         public float CurrentLandingSpawnYawRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnYawRangeDeg;
-        public float CurrentLandingFailureAltitude => GetLandingCurriculumProfile(landingCurriculumProgress).failureAltitude;
-        public float ActiveLandingFailureAltitude
-        {
-            get
-            {
-                if (behaviorType != BehaviorType.Inference)
-                    return CurrentLandingFailureAltitude;
-
-                InferenceSpawnProfile profile = GetInferenceSpawnProfile(ScenarioType.Landing);
-                return Mathf.Max(240f, Mathf.Max(profile.altitudeMin, profile.altitudeMax) + 100f);
-            }
-        }
         public float CurrentLandingSuccessRadius => GetLandingCurriculumProfile(landingCurriculumProgress).successRadius;
         public float CurrentLandingSuccessMaxSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxSpeed;
         public float CurrentLandingSuccessMaxVerticalSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxVerticalSpeed;

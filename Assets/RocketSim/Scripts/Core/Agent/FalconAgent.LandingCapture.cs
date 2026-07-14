@@ -134,6 +134,25 @@ namespace RocketSim
             _landingPlatformInsideCapture = false;
             _landingPlatformStable = false;
             _landingPlatformStableTime = 0f;
+            _landingEpisodeStartAltitude = 0f;
+            _landingEpisodeFlyawayAltitude = 0f;
+        }
+
+        /// <summary>
+        /// Captures the sampled CatchFrame start height and defines this
+        /// episode's upward flyaway ceiling exactly 100 m above it.
+        /// </summary>
+        void CaptureLandingEpisodeStartAltitude()
+        {
+            if (envConfig == null || envConfig.scenario != ScenarioType.Landing)
+            {
+                _landingEpisodeStartAltitude = 0f;
+                _landingEpisodeFlyawayAltitude = 0f;
+                return;
+            }
+
+            _landingEpisodeStartAltitude = ScenarioReferenceLocalPosition().y;
+            _landingEpisodeFlyawayAltitude = _landingEpisodeStartAltitude + LandingFlyawayAltitudeMargin;
         }
 
         /// <summary>

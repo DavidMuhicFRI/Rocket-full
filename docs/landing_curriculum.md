@@ -37,7 +37,8 @@ update cannot change an episode while it is in flight.
 
 Episode telemetry records global difficulty, the actual per-episode difficulty,
 and a replay flag separately. This keeps replay samples identifiable during
-analysis while preserving their ordinary success and return measurements.
+analysis while preserving their ordinary success and return measurements. It
+also records the sampled CatchFrame start altitude and flyaway altitude.
 
 ## Simulated chopstick catch
 
@@ -47,6 +48,11 @@ The generated arms and supports are visual only. A trigger-shaped logical volume
 is used for geometry, while containment is evaluated directly in code. The
 platform never applies a collision impulse, closes arms, creates joints, or
 supports the rocket after success.
+
+The upward flyaway ceiling is recalculated after every spawn as
+`CatchFrame start altitude + 100 m`; it is not derived from the curriculum's
+largest possible spawn. Horizontal displacement beyond 150 m remains a separate
+flyaway condition.
 
 Capture requires the CatchFrame to remain inside the current volume while the
 rocket satisfies the current limits for total, vertical, horizontal, and angular

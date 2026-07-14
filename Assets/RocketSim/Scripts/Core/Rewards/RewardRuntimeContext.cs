@@ -18,7 +18,7 @@ namespace RocketSim
         public readonly float terminalAltitude;
         public readonly float fuelKg;
         public readonly float hoverTrackSettleRadius;
-        public readonly float landingFailureAltitude;
+        public readonly float landingFlyawayAltitude;
         public readonly float landingSuccessRadius;
         public readonly float landingSuccessMaxSpeed;
         public readonly float landingSuccessMaxVerticalSpeed;
@@ -39,7 +39,7 @@ namespace RocketSim
             float terminalAltitude,
             float fuelKg,
             float hoverTrackSettleRadius,
-            float landingFailureAltitude,
+            float landingFlyawayAltitude,
             float landingSuccessRadius,
             float landingSuccessMaxSpeed,
             float landingSuccessMaxVerticalSpeed,
@@ -58,7 +58,7 @@ namespace RocketSim
             this.terminalAltitude = terminalAltitude;
             this.fuelKg = fuelKg;
             this.hoverTrackSettleRadius = hoverTrackSettleRadius;
-            this.landingFailureAltitude = landingFailureAltitude;
+            this.landingFlyawayAltitude = landingFlyawayAltitude;
             this.landingSuccessRadius = landingSuccessRadius;
             this.landingSuccessMaxSpeed = landingSuccessMaxSpeed;
             this.landingSuccessMaxVerticalSpeed = landingSuccessMaxVerticalSpeed;
