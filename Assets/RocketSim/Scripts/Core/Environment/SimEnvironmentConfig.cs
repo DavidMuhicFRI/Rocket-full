@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/SimEnvironmentConfig.cs
-// Purpose: Stores user-editable scenario, weather, reward, curriculum, and behavior settings.
+// Purpose: Stores user-editable scenario, environment randomization, reward,
+// curriculum, and behavior settings.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -106,7 +107,7 @@ namespace RocketSim
         public const float DefaultWindGustAmplitude = 5f;
         public const float DefaultWindChangeRate = 0.25f;
 
-        [Header("Weather")] public WeatherType weather = WeatherType.Clear;
+        [Header("Environment Domain Randomization")] public WeatherType weather = WeatherType.Clear;
         [Range(0.5f, 1.5f)] public float airDensityMultiplier = 1f;
 
         [Header("Scenario")] public ScenarioType scenario = ScenarioType.Landing;
@@ -114,8 +115,10 @@ namespace RocketSim
         [Header("Reward Model")] public RewardModelConfig rewardModel = new();
         [Header("Faults")] public RocketFaultConfig faults = new();
 
-        [Header("Run Config")] public string runId = "Falcon9DefaultRun";
+        [Header("Run Config")] public string runId = "ReusableBoosterDefaultRun";
         public BehaviorType behaviorType = BehaviorType.Training;
+        [Tooltip("Seeds episode spawn, target, wind, and evaluation randomization independently for each area.")]
+        public int environmentSeed = 1;
 
         public float AirDensityMultiplier => Mathf.Clamp(airDensityMultiplier, 0.5f, 1.5f);
         public float EffectiveGustAmp => Mathf.Max(0f, windGustAmplitude);

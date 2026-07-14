@@ -46,7 +46,8 @@ namespace RocketSim
 
         /// <summary>
         /// Keeps the policy in a single continuous action space. RCS valves are
-        /// thresholded continuous channels, not discrete branches, because the
+        /// binary actuators driven by continuous commands above a neutral
+        /// dead-zone threshold, not discrete branches, because the
         /// ML-Agents CUDA trainer path has a known categorical-device mismatch.
         /// </summary>
         public static int[] DiscreteActionBranches(RocketPartsConfig parts)

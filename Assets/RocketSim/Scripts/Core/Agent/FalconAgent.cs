@@ -7,7 +7,7 @@
 
 using UnityEngine;
 using Unity.MLAgents;
-using Random = UnityEngine.Random;
+using UnityEngine.Serialization;
 
 namespace RocketSim
 {
@@ -27,6 +27,9 @@ namespace RocketSim
 
         public RocketAssembly assembly;
         public Transform targetPad;
+        [FormerlySerializedAs("topControlPoint")]
+        [Tooltip("Guidance/capture reference point near the grid-fin hardpoint.")]
+        public Transform catchFrame;
 
         [Header("Configs — assigned by TrainingAreaManager via ConfigBridge")]
         public SimEnvironmentConfig envConfig = new();
@@ -46,6 +49,7 @@ namespace RocketSim
         bool _landingEpisodeEndLogged;
         bool _hoverTrackTargetReachedThisStep;
         bool _landingEpisodeSucceeded;
+        EpisodeTerminationReason _episodeTerminationReason;
         int _hoverTrackEpisodeCaptures;
         
 
@@ -80,6 +84,9 @@ namespace RocketSim
 
         // ── Wind ──────────────────────────────────────────────────────────────
         Vector3 wind, targetWind;
+        Vector3 _episodePrevailingWind;
+        DeterministicRandom _episodeRandom;
+        int _episodeSeed;
 
         // Up to three simple actuator faults can be active in one episode.
         // Fixed arrays avoid allocations inside the physics loop.
@@ -115,6 +122,7 @@ namespace RocketSim
         const float HoverTrackCycleCompleteReward = 4.0f;
         const float EngineIgnitionThreshold = 0.08f;
         const float EngineShutdownThreshold = 0.03f;
+        const float RcsValveActionThreshold = 0.5f;
         const float VacuumThrustMultiplier = 1.08f;
         const float VacuumIspMultiplier = 1.10f;
         const float EngineCommandEpsilon = 0.01f;
@@ -142,12 +150,25 @@ namespace RocketSim
         public float AngleOfAttackDeg => aoaDeg;
         public bool HardwareTestMode => _hardwareTestMode;
         
-        static Vector3 RandomPlanarVector(float maxMagnitude)
+        void ResetEpisodeRandom()
+        {
+            int baseSeed = envConfig != null ? envConfig.environmentSeed : 1;
+            _episodeSeed = DeterministicRandom.EpisodeSeed(baseSeed, _areaIndex, _episode);
+            _episodeRandom = new DeterministicRandom(_episodeSeed);
+        }
+
+        float RandomRange(float min, float max) => _episodeRandom.Range(min, max);
+
+        Vector2 RandomInsideUnitCircle() => _episodeRandom.InsideUnitCircle();
+
+        Vector3 RandomUnitVector3() => _episodeRandom.UnitVector3();
+
+        Vector3 RandomPlanarVector(float maxMagnitude)
         {
             if (maxMagnitude <= 0f) return Vector3.zero;
 
-            float angle = Random.Range(0f, Mathf.PI * 2f);
-            float magnitude = Random.Range(0f, maxMagnitude);
+            float angle = RandomRange(0f, Mathf.PI * 2f);
+            float magnitude = RandomRange(0f, maxMagnitude);
             return new Vector3(Mathf.Cos(angle) * magnitude, 0f, Mathf.Sin(angle) * magnitude);
         }
         static string PassFail(bool passed) => passed ? "PASS" : "FAIL";

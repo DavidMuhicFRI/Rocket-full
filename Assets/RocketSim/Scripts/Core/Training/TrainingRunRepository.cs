@@ -28,6 +28,7 @@ namespace RocketSim
     internal static class TrainingRunRepository
     {
         const string EnvConfigFileName = "EnvConfig.json";
+        const string InitialEnvConfigFileName = "EnvConfig.initial.json";
         const string PartsConfigFileName = "PartsConfig.json";
         const string MlConfigFileName = "TrainingConfig.yaml";
 
@@ -66,10 +67,47 @@ namespace RocketSim
             Directory.CreateDirectory(runRoot);
 
             File.WriteAllText(Path.Combine(runRoot, mlConfigPath), mlConfig.ToYAML());
-            File.WriteAllText(Path.Combine(runRoot, envConfigPath), JsonUtility.ToJson(envConfig));
+            string serializedEnvironment = JsonUtility.ToJson(envConfig);
+            File.WriteAllText(Path.Combine(runRoot, envConfigPath), serializedEnvironment);
+            string initialEnvironmentPath = Path.Combine(runRoot, InitialEnvConfigFileName);
+            if (!File.Exists(initialEnvironmentPath))
+                File.WriteAllText(initialEnvironmentPath, serializedEnvironment);
             File.WriteAllText(Path.Combine(runRoot, partsConfigPath), JsonUtility.ToJson(partsConfig));
 
             return runRoot;
+        }
+
+        /// <summary>
+        /// Persists the live environment state, including curriculum counters
+        /// and difficulty, so a resumed trainer does not silently restart the
+        /// curriculum from its launch-time value.
+        /// </summary>
+        public static void SaveEnvironmentState(string runId, SimEnvironmentConfig envConfig)
+        {
+            if (string.IsNullOrWhiteSpace(runId) || envConfig == null)
+                return;
+
+            string runRoot = RunRoot(runId);
+            Directory.CreateDirectory(runRoot);
+            string path = Path.Combine(runRoot, EnvConfigFileName);
+            string temporaryPath = path + ".tmp";
+
+            File.WriteAllText(temporaryPath, JsonUtility.ToJson(envConfig));
+            if (File.Exists(path))
+            {
+                try
+                {
+                    File.Replace(temporaryPath, path, null);
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    // Fall through to the portable copy-and-delete path.
+                }
+            }
+
+            File.Copy(temporaryPath, path, true);
+            File.Delete(temporaryPath);
         }
 
         /// <summary>

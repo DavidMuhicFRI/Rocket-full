@@ -43,6 +43,7 @@ namespace RocketSim
                 CommunicatorFactory.Enabled = true;
 
                 runId = manager.envConfig.runId;
+                TelemetryLogger.Instance?.Initialize(manager.telemetryConfig, runId);
                 string runRoot = TrainingRunRepository.SaveTrainingConfigs(
                     runId,
                     manager.mlConfig,
@@ -67,14 +68,15 @@ namespace RocketSim
                 }
                 catch (Exception e) {
                     UnityEngine.Debug.LogError($"Launch Failed: {e.Message}");
+                    TelemetryLogger.Instance?.DisableLogging();
                     SetState(TrainingState.Failed);
                 }
             }
             else
             {
                 CommunicatorFactory.Enabled = false;
-                TelemetryLogger.Instance?.DisableLogging();
                 runId = manager.envConfig.runId;
+                TelemetryLogger.Instance?.InitializeEvaluation(manager.telemetryConfig, runId);
                 manager.SpawnAreas();
             }
         }
@@ -93,6 +95,7 @@ namespace RocketSim
                 if (_trainerProcess == null || _trainerProcess.HasExited) {
                     _trainerProcess?.Dispose();
                     _trainerProcess = null;
+                    TelemetryLogger.Instance?.DisableLogging();
                     SetState(TrainingState.Failed);
                     yield break;
                 }
@@ -109,6 +112,7 @@ namespace RocketSim
                 timeout -= 1f;
             }
             StopTraining();
+            TelemetryLogger.Instance?.DisableLogging();
             SetState(TrainingState.Failed);
         }
 

@@ -34,20 +34,21 @@ namespace RocketSim
         [HideInInspector] public float landingPlatformStableHoldInitial = LandingDefaultPlatformStableHoldInitial;
         [HideInInspector] public float landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
 
-        public const float DefaultLandingCatchAltitude = 30f;
+        public const float DefaultLandingCatchAltitude = 60f;
         public const float LandingDefaultCurriculumSuccessesToFullDifficulty = 360f;
-        public const float LandingInitialSpawnAltitudeMin = 45f;
-        public const float LandingInitialSpawnAltitudeMax = 70f;
-        public const float LandingFullSpawnAltitudeMin = 120f;
-        public const float LandingFullSpawnAltitudeMax = 300f;
-        public const float LandingInitialSpawnRadius = 5f;
-        public const float LandingFullSpawnRadius = 50f;
+        // Landing altitudes describe the catch-frame height, not the engine plane.
+        public const float LandingInitialSpawnAltitudeMin = 120f;
+        public const float LandingInitialSpawnAltitudeMax = 220f;
+        public const float LandingFullSpawnAltitudeMin = 300f;
+        public const float LandingFullSpawnAltitudeMax = 1000f;
+        public const float LandingInitialSpawnRadius = 8f;
+        public const float LandingFullSpawnRadius = 100f;
         public const float LandingInitialVerticalSpeedMin = 5f;
-        public const float LandingInitialVerticalSpeedMax = 15f;
-        public const float LandingFullVerticalSpeedMin = 12f;
-        public const float LandingFullVerticalSpeedMax = 60f;
-        public const float LandingInitialHorizontalSpeedMax = 0.5f;
-        public const float LandingFullHorizontalSpeedMax = 15f;
+        public const float LandingInitialVerticalSpeedMax = 20f;
+        public const float LandingFullVerticalSpeedMin = 20f;
+        public const float LandingFullVerticalSpeedMax = 120f;
+        public const float LandingInitialHorizontalSpeedMax = 1f;
+        public const float LandingFullHorizontalSpeedMax = 25f;
         public const float LandingInitialSpawnTiltRangeDeg = 3f;
         public const float LandingFullSpawnTiltRangeDeg = 18f;
         public const float LandingInitialAngularSpeedMaxDegS = 0f;
@@ -194,7 +195,7 @@ namespace RocketSim
         /// <summary>
         /// Current failure ceiling, kept above the active spawn altitude range.
         /// </summary>
-        public float CurrentLandingFailureAltitude => Mathf.Max(140f, CurrentLandingSpawnAltitudeMax + 60f);
+        public float CurrentLandingFailureAltitude => Mathf.Max(240f, CurrentLandingSpawnAltitudeMax + 100f);
         public float ActiveLandingFailureAltitude
         {
             get
@@ -203,7 +204,7 @@ namespace RocketSim
                     return CurrentLandingFailureAltitude;
 
                 InferenceSpawnProfile profile = GetInferenceSpawnProfile(ScenarioType.Landing);
-                return Mathf.Max(140f, Mathf.Max(profile.altitudeMin, profile.altitudeMax) + 60f);
+                return Mathf.Max(240f, Mathf.Max(profile.altitudeMin, profile.altitudeMax) + 100f);
             }
         }
         /// <summary>

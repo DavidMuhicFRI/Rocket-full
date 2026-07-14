@@ -175,6 +175,8 @@ namespace RocketSim
                 "Sets how many recent checkpoints remain on disk."));
             root.Add(UIHelper.IntSlider("trainer seed", mlConfig.trainerSeed, 0, 100000, v => mlConfig.trainerSeed = v,
                 "Sets ML-Agents' random seed for repeatable experiments."));
+            root.Add(UIHelper.IntSlider("environment seed", envConfig.environmentSeed, 0, 100000, v => envConfig.environmentSeed = v,
+                "Seeds spawn, wind, target, and evaluation samples independently from the trainer."));
 
             root.Add(UIHelper.Toggle("threaded", mlConfig.threaded, v => mlConfig.threaded = v));
             root.Add(BuildMlDescription("Run inference in a background thread. Helps CPU-heavy environments."));

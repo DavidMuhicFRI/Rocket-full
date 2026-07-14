@@ -215,14 +215,14 @@ namespace RocketSim
                 ? "Each episode samples independently from the configured ranges."
                 : "Range midpoints are used; offset and horizontal motion use the +X direction."));
 
-            float altitudeMax = envConfig.scenario == ScenarioType.Takeoff ? 200f : 500f;
+            float altitudeMax = envConfig.scenario == ScenarioType.Takeoff ? 200f : 1500f;
             AddProfileSlider(root, profile, "Altitude Min (m)", profile.altitudeMin, 0f, altitudeMax,
                 value => profile.altitudeMin = value,
                 "Lowest altitude from which an inference episode can start.");
             AddProfileSlider(root, profile, "Altitude Max (m)", profile.altitudeMax, 0f, altitudeMax,
                 value => profile.altitudeMax = value,
                 "Highest altitude from which an inference episode can start.");
-            AddProfileSlider(root, profile, "Offset Radius (m)", profile.horizontalOffsetMax, 0f, 100f,
+            AddProfileSlider(root, profile, "Offset Radius (m)", profile.horizontalOffsetMax, 0f, 200f,
                 value => profile.horizontalOffsetMax = value,
                 "Maximum horizontal distance between the rocket and target at spawn.");
         }
@@ -231,16 +231,16 @@ namespace RocketSim
         void BuildInitialMotionControls(VisualElement root, InferenceSpawnProfile profile)
         {
             root.Add(UIHelper.SectionLabel("Initial Motion"));
-            AddProfileSlider(root, profile, "Vertical Speed Min", profile.verticalSpeedMin, -100f, 100f,
+            AddProfileSlider(root, profile, "Vertical Speed Min", profile.verticalSpeedMin, -150f, 150f,
                 value => profile.verticalSpeedMin = value,
                 "Lowest initial vertical velocity; negative values mean downward motion.");
-            AddProfileSlider(root, profile, "Vertical Speed Max", profile.verticalSpeedMax, -100f, 100f,
+            AddProfileSlider(root, profile, "Vertical Speed Max", profile.verticalSpeedMax, -150f, 150f,
                 value => profile.verticalSpeedMax = value,
                 "Highest initial vertical velocity; positive values mean upward motion.");
-            AddProfileSlider(root, profile, "Horizontal Speed Min", profile.horizontalSpeedMin, 0f, 30f,
+            AddProfileSlider(root, profile, "Horizontal Speed Min", profile.horizontalSpeedMin, 0f, 50f,
                 value => profile.horizontalSpeedMin = value,
                 "Lowest horizontal speed used when the episode begins.");
-            AddProfileSlider(root, profile, "Horizontal Speed Max", profile.horizontalSpeedMax, 0f, 30f,
+            AddProfileSlider(root, profile, "Horizontal Speed Max", profile.horizontalSpeedMax, 0f, 50f,
                 value => profile.horizontalSpeedMax = value,
                 "Highest horizontal speed used when the episode begins.");
         }
@@ -281,10 +281,10 @@ namespace RocketSim
         /// <summary>Builds inference catch height/yaw controls and capture-limit readouts.</summary>
         void BuildLandingTargetControls(VisualElement root)
         {
-            root.Add(UIHelper.SectionLabel("Chopstick Target"));
-            root.Add(UIHelper.Slider("Catch Height - Base (m)", envConfig.landingCatchAltitude, 0.5f, 80f,
-                value => envConfig.landingCatchAltitude = Mathf.Max(0.5f, value),
-                "Sets the target catch height above the base of the launch structure."));
+            root.Add(UIHelper.SectionLabel("Tower Capture Target"));
+            root.Add(UIHelper.Slider("Catch-Frame Height (m)", envConfig.landingCatchAltitude, 20f, 150f,
+                value => envConfig.landingCatchAltitude = Mathf.Max(20f, value),
+                "Sets the tower-arm height matched by the booster's upper catch frame near the grid fins."));
             root.Add(UIHelper.Slider("Target Yaw (deg)", envConfig.landingTargetYawDeg, -180f, 180f,
                 value => envConfig.landingTargetYawDeg = value,
                 "Sets the heading the rocket should match when reaching the catch point."));

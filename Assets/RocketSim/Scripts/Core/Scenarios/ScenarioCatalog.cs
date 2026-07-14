@@ -128,11 +128,11 @@ namespace RocketSim
             new(
                 ScenarioType.Landing,
                 "Landing",
-                "Descend and land on the chopstick scaffold",
+                "Guide a reusable booster into the tower capture envelope",
                 LandingStartFuelFraction,
                 SimEnvironmentConfig.DefaultLandingCatchAltitude,
                 false,
-                new InferenceSpawnDefaults(60f, 120f, 15f, -20f, -8f, 0f, 4f, 0f, 6f, 12f)),
+                new InferenceSpawnDefaults(250f, 500f, 50f, -70f, -25f, 0f, 12f, 0f, 8f, 20f)),
             new(
                 ScenarioType.Hover,
                 "Hover",

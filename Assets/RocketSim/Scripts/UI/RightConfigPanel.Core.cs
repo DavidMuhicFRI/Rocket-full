@@ -248,13 +248,6 @@ namespace RocketSim
             }
 
             launcher.resumeIfExists = canResumeLoadedRun;
-            if (TelemetryLogger.Instance != null)
-            {
-                if (trainingAreaManager.envConfig.behaviorType == BehaviorType.Training)
-                    TelemetryLogger.Instance.Initialize(trainingAreaManager.telemetryConfig, trainingAreaManager.envConfig.runId);
-                else
-                    TelemetryLogger.Instance.DisableLogging();
-            }
             _runActive = true;
             SetConfigurationLocked(true);
             ShowNotification(string.IsNullOrEmpty(warning) ? "Settings are locked until the run stops." : warning, false);
@@ -343,8 +336,26 @@ namespace RocketSim
                 return false;
             }
 
+            if (envConfig.scenario == ScenarioType.Landing)
+            {
+                float catchFrameY = partsConfig.bodyHeight - 1.2f;
+                float enginePlaneAltitudeAtCapture = envConfig.landingCatchAltitude - catchFrameY;
+                if (enginePlaneAltitudeAtCapture < 1f)
+                {
+                    error =
+                        $"Catch-frame height is too low for this vehicle: the engine plane would be " +
+                        $"{enginePlaneAltitudeAtCapture:F1} m above ground at capture.";
+                    return false;
+                }
+            }
+
             float mass = Mathf.Max(1f, partsConfig.baseDryMass + partsConfig.startFuelMass);
             float thrustToWeight = partsConfig.GetActiveEngineCount() * partsConfig.maxThrustPerEngine / (mass * 9.80665f);
+            if (envConfig.scenario == ScenarioType.Landing && thrustToWeight <= 1f)
+            {
+                error = $"Landing-burn thrust-to-weight ratio is only {thrustToWeight:F2}; the vehicle cannot decelerate upward.";
+                return false;
+            }
             if (envConfig.scenario == ScenarioType.Takeoff && thrustToWeight <= 1f)
                 warning = $"Warning: takeoff thrust-to-weight ratio is only {thrustToWeight:F2}.";
             return true;

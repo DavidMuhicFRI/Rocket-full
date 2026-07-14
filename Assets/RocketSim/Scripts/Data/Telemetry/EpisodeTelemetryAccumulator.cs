@@ -16,6 +16,8 @@ namespace RocketSim
         public readonly int Episode;
         public readonly RunningStats[] Stats;
         public int StepCount { get; private set; }
+        public float LoggedRewardSum { get; private set; }
+        public TelemetryEpisodeOutcome Outcome { get; set; }
 
         /// <summary>
         /// Allocates one running-stat bucket per enabled telemetry metric for a
@@ -38,6 +40,7 @@ namespace RocketSim
             for (int i = 0; i < metrics.Count && i < Stats.Length; i++)
                 Stats[i].Add(metrics[i].Read(row));
 
+            LoggedRewardSum += row.stepReward;
             StepCount++;
         }
     }

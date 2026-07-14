@@ -18,23 +18,30 @@ namespace RocketSim
         public readonly string StepFilePath;
         public readonly string EpisodeFilePath;
 
-        TelemetryRunContext(string directoryPath, string runId)
+        TelemetryRunContext(string directoryPath, string runId, string sessionSuffix)
         {
             DirectoryPath = directoryPath;
             RunId = runId;
-            EpisodeFilePath = Path.Combine(directoryPath, $"telemetry_{runId}_episodes.csv");
-            StepFilePath = Path.Combine(directoryPath, $"telemetry_{runId}_steps.csv");
+            string suffix = string.IsNullOrWhiteSpace(sessionSuffix)
+                ? string.Empty
+                : $"_{SanitizeRunId(sessionSuffix)}";
+            EpisodeFilePath = Path.Combine(directoryPath, $"telemetry_{runId}{suffix}_episodes.csv");
+            StepFilePath = Path.Combine(directoryPath, $"telemetry_{runId}{suffix}_steps.csv");
         }
 
         /// <summary>
         /// Creates the output directory and returns the sanitized run id plus
         /// concrete step and episode CSV file paths for that run.
         /// </summary>
-        public static TelemetryRunContext Create(string persistentDataPath, string outputFolder, string runId)
+        public static TelemetryRunContext Create(
+            string persistentDataPath,
+            string outputFolder,
+            string runId,
+            string sessionSuffix = null)
         {
             string directoryPath = Path.Combine(persistentDataPath, outputFolder);
             Directory.CreateDirectory(directoryPath);
-            return new TelemetryRunContext(directoryPath, SanitizeRunId(runId));
+            return new TelemetryRunContext(directoryPath, SanitizeRunId(runId), sessionSuffix);
         }
 
         /// <summary>

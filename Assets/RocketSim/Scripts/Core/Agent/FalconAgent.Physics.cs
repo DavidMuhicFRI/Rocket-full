@@ -8,7 +8,6 @@
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
-using Random = UnityEngine.Random;
 
 namespace RocketSim
 {
@@ -31,26 +30,34 @@ namespace RocketSim
             wind = Vector3.Lerp(wind, targetWind, windAlpha);
 
             float gustChance = 1f - Mathf.Exp(-Mathf.Max(0f, envConfig.gustFrequencyHz) * dt);
-            if (Random.value < gustChance)
+            if (_episodeRandom.Chance(gustChance))
             {
                 float g = envConfig.EffectiveGustAmp;
-                targetWind = RandomWind() + RandomPlanarVector(g);
+                targetWind = _episodePrevailingWind + RandomPlanarVector(g);
             }
         }
 
         /// <summary>
-        /// Generates a random horizontal wind vector up to the configured base speed.
+        /// Selects one prevailing horizontal wind vector for this episode. Gusts
+        /// perturb this cached vector without silently changing its mean direction.
         /// </summary>
-        Vector3 RandomWind()
+        void ResetWindForEpisode()
         {
             if (!envConfig.windEnabled || envConfig.windSpeed <= 0f)
-                return Vector3.zero;
+            {
+                _episodePrevailingWind = wind = targetWind = Vector3.zero;
+                return;
+            }
 
             float directionDeg = envConfig.randomizeWindDirectionEachEpisode
-                ? Random.Range(0f, 360f)
+                ? RandomRange(0f, 360f)
                 : envConfig.windDirectionDeg;
             float directionRad = directionDeg * Mathf.Deg2Rad;
-            return new Vector3(Mathf.Sin(directionRad), 0f, Mathf.Cos(directionRad)) * envConfig.windSpeed;
+            _episodePrevailingWind = new Vector3(
+                Mathf.Sin(directionRad),
+                0f,
+                Mathf.Cos(directionRad)) * envConfig.windSpeed;
+            wind = targetWind = _episodePrevailingWind;
         }
 
         /// <summary>
@@ -255,8 +262,9 @@ namespace RocketSim
             }
 
             if (!faults.allowDuringTraining) return;
-            var random = new System.Random(unchecked(faults.seed + _areaIndex * 100003 + _episode * 1009));
-            if (random.NextDouble() >= faults.faultyEpisodeProbability) return;
+            var random = new DeterministicRandom(
+                DeterministicRandom.EpisodeSeed(faults.seed, _areaIndex, _episode, stream: 17));
+            if (!random.Chance(faults.faultyEpisodeProbability)) return;
 
             var candidates = new RocketFaultType[5];
             int candidateCount = 0;
@@ -270,18 +278,18 @@ namespace RocketSim
             // Shuffle only the populated part of the small candidate array.
             for (int i = candidateCount - 1; i > 0; i--)
             {
-                int swapIndex = random.Next(i + 1);
+                int swapIndex = random.Range(0, i + 1);
                 (candidates[i], candidates[swapIndex]) = (candidates[swapIndex], candidates[i]);
             }
 
             int maximumCount = Mathf.Min(faults.maxSimultaneousFaults, candidateCount);
-            int count = random.Next(1, maximumCount + 1);
+            int count = random.Range(1, maximumCount + 1);
             for (int i = 0; i < count; i++)
             {
                 RocketFaultType type = candidates[i];
                 int targetCount = FaultTargetCount(type);
-                int target = targetCount > 0 ? random.Next(targetCount) : 0;
-                float severity = Mathf.Lerp(faults.trainingSeverityMin, faults.trainingSeverityMax, (float)random.NextDouble());
+                int target = targetCount > 0 ? random.Range(0, targetCount) : 0;
+                float severity = random.Range(faults.trainingSeverityMin, faults.trainingSeverityMax);
                 AddEpisodeFault(type, target, severity);
             }
         }

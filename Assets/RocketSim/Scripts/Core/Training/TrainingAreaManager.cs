@@ -46,6 +46,7 @@ namespace RocketSim
         readonly Dictionary<Rigidbody, PreviewRigidbodyPose> _dummyRigidbodyPoses = new();
 
         int _totalEpisodes;
+        bool _activeRunSpawned;
         HardwareTestController _hardwareTests;
 
         public IReadOnlyList<FalconAgent> Agents => _agents;
@@ -171,8 +172,12 @@ namespace RocketSim
                 go.SetActive(true);
             }
 
+            if (_assemblies.Count > 0 && _assemblies[0])
+                SimulatorPreflightValidator.ValidateAndLog(_assemblies[0].GetPhysicsConfig(), envConfig);
+
             var cam = FindAnyObjectByType<RocketCameraController>();
             if (cam) cam.OnAgentsReady(); // call RefreshLabel + snap to first rocket
+            _activeRunSpawned = _agents.Count > 0;
         }
 
         /// <summary>
@@ -219,9 +224,11 @@ namespace RocketSim
         public void StopActiveRunAndShowPreview()
         {
             StopHardwareTest();
+            PersistCurriculumState();
             TelemetryLogger.Instance?.DisableLogging();
             CommunicatorFactory.Enabled = false;
             ClearSpawnedAreas();
+            _activeRunSpawned = false;
             if (dummyAreaPrefab != null)
                 SpawnDummyAreas();
         }
@@ -357,12 +364,46 @@ namespace RocketSim
             if (envConfig.scenario == ScenarioType.HoverTracking)
             {
                 envConfig.RecordHoverTrackCurriculumEpisode(successfulEpisode, instanceCount);
+                PersistCurriculumStateIfBatchComplete();
                 return;
             }
 
             if (envConfig.scenario == ScenarioType.Landing)
+            {
                 envConfig.RecordLandingCurriculumEpisode(successfulEpisode, instanceCount);
+                PersistCurriculumStateIfBatchComplete();
+            }
         }
+
+        /// <summary>
+        /// Saves curriculum progress after roughly one parallel-area batch so
+        /// resume state stays current without writing once per physics episode.
+        /// </summary>
+        void PersistCurriculumStateIfBatchComplete()
+        {
+            if (_totalEpisodes % Mathf.Max(1, instanceCount) == 0)
+                PersistCurriculumState();
+        }
+
+        /// <summary>Saves the shared training environment when a run is active.</summary>
+        void PersistCurriculumState()
+        {
+            if (!_activeRunSpawned || envConfig == null || envConfig.behaviorType != BehaviorType.Training)
+                return;
+
+            try
+            {
+                TrainingRunRepository.SaveEnvironmentState(envConfig.runId, envConfig);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[TrainingAreaManager] Could not persist curriculum state: {ex.Message}");
+            }
+        }
+
+        void OnApplicationQuit() => PersistCurriculumState();
+
+        void OnDestroy() => PersistCurriculumState();
 
         /// <summary>
         /// Handles a notification that hover track target reached happened.

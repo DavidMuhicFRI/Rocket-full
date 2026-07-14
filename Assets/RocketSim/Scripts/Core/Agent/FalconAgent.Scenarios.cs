@@ -9,7 +9,6 @@ using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
-using Random = UnityEngine.Random;
 
 namespace RocketSim
 {
@@ -26,12 +25,11 @@ namespace RocketSim
                 return;
             }
 
-            float rx = Random.Range(-5f, 5f);
-            float rz = Random.Range(-5f, 5f);
+            float rx = RandomRange(-5f, 5f);
+            float rz = RandomRange(-5f, 5f);
             switch (envConfig.scenario)
             {
                 case ScenarioType.Landing:
-                    Vector2 landingOffset = Random.insideUnitCircle * envConfig.CurrentLandingSpawnRadius;
                     float landingTerminalAltitude = ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
                     float landingAltitudeMin = Mathf.Min(envConfig.CurrentLandingSpawnAltitudeMin, envConfig.CurrentLandingSpawnAltitudeMax);
                     float landingAltitudeMax = Mathf.Max(envConfig.CurrentLandingSpawnAltitudeMin, envConfig.CurrentLandingSpawnAltitudeMax);
@@ -39,48 +37,82 @@ namespace RocketSim
                     landingAltitudeMax = Mathf.Max(landingAltitudeMax, landingAltitudeMin + 10f);
                     float landingVerticalSpeedMin = Mathf.Min(envConfig.CurrentLandingVerticalSpeedMin, envConfig.CurrentLandingVerticalSpeedMax);
                     float landingVerticalSpeedMax = Mathf.Max(envConfig.CurrentLandingVerticalSpeedMin, envConfig.CurrentLandingVerticalSpeedMax);
-                    float landingAltitude = Random.Range(
+                    float landingAltitude = RandomRange(
                         landingAltitudeMin,
                         landingAltitudeMax);
-                    float landingVerticalSpeed = -Random.Range(
-                        landingVerticalSpeedMin,
-                        landingVerticalSpeedMax);
-                    Vector2 landingHorizontalVelocity = Random.insideUnitCircle * envConfig.CurrentLandingHorizontalSpeedMax;
+                    float availableAltitude = landingAltitude - landingTerminalAltitude;
+                    float vehicleMass = cfg.dryMass + fuel + rcsPropellant;
+                    float gravity = Mathf.Abs(Physics.gravity.y);
+                    float netUpwardAcceleration = LandingFeasibility.NetUpwardAcceleration(
+                        cfg.maxThrust,
+                        cfg.activeEngineCount,
+                        vehicleMass,
+                        gravity);
+                    float recoverableDownwardSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
+                        availableAltitude,
+                        netUpwardAcceleration,
+                        cfg.engineStartupDelay,
+                        gravity);
+                    float feasibleDownwardSpeedMin = Mathf.Min(
+                        Mathf.Max(0f, landingVerticalSpeedMin),
+                        recoverableDownwardSpeed);
+                    float feasibleDownwardSpeedMax = Mathf.Min(
+                        Mathf.Max(feasibleDownwardSpeedMin, landingVerticalSpeedMax),
+                        recoverableDownwardSpeed);
+                    float landingDownwardSpeed = RandomRange(
+                        feasibleDownwardSpeedMin,
+                        feasibleDownwardSpeedMax);
+
+                    LandingFeasibility.HorizontalEnvelope(
+                        availableAltitude,
+                        landingDownwardSpeed,
+                        cfg.maxThrust,
+                        cfg.activeEngineCount,
+                        vehicleMass,
+                        cfg.maxGimbal,
+                        cfg.engineStartupDelay,
+                        gravity,
+                        out float recoverableHorizontalSpeed,
+                        out float recoverableHorizontalOffset);
+                    float landingOffsetLimit = Mathf.Min(envConfig.CurrentLandingSpawnRadius, recoverableHorizontalOffset);
+                    float landingHorizontalSpeedLimit = Mathf.Min(
+                        envConfig.CurrentLandingHorizontalSpeedMax,
+                        recoverableHorizontalSpeed);
+                    Vector2 landingOffset = RandomInsideUnitCircle() * landingOffsetLimit;
+                    Vector2 landingHorizontalVelocity = RandomInsideUnitCircle() * landingHorizontalSpeedLimit;
                     float landingTiltRange = Mathf.Max(0f, envConfig.CurrentLandingSpawnTiltRangeDeg);
                     float landingAngularSpeedMax = Mathf.Max(0f, envConfig.CurrentLandingAngularSpeedMaxDegS);
 
-                    transform.localPosition = new Vector3(landingOffset.x, landingAltitude, landingOffset.y);
                     transform.localRotation = Quaternion.Euler(
-                        Random.Range(-landingTiltRange, landingTiltRange),
-                        envConfig.landingTargetYawDeg + Random.Range(
+                        RandomRange(-landingTiltRange, landingTiltRange),
+                        envConfig.landingTargetYawDeg + RandomRange(
                             -envConfig.CurrentLandingSpawnYawRangeDeg,
                             envConfig.CurrentLandingSpawnYawRangeDeg),
-                        Random.Range(-landingTiltRange, landingTiltRange));
+                        RandomRange(-landingTiltRange, landingTiltRange));
+                    PlaceLandingCatchFrameAtLocalPosition(new Vector3(landingOffset.x, landingAltitude, landingOffset.y));
                     rb.linearVelocity = new Vector3(
                         landingHorizontalVelocity.x,
-                        landingVerticalSpeed,
+                        -landingDownwardSpeed,
                         landingHorizontalVelocity.y);
                     if (landingAngularSpeedMax > 0f)
                     {
-                        Vector3 angularAxis = Random.insideUnitSphere.normalized;
-                        if (angularAxis.sqrMagnitude < 0.0001f)
-                            angularAxis = Vector3.up;
-                        rb.angularVelocity = angularAxis * Random.Range(0f, landingAngularSpeedMax) * Mathf.Deg2Rad;
+                        Vector3 angularAxis = RandomUnitVector3();
+                        rb.angularVelocity = angularAxis * RandomRange(0f, landingAngularSpeedMax) * Mathf.Deg2Rad;
                     }
                     break;
 
                 case ScenarioType.Hover:
                     transform.localPosition = new Vector3(rx, 30f, rz);
                     transform.localRotation = Quaternion.Euler(
-                        Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
+                        RandomRange(-1f, 1f), 0f, RandomRange(-1f, 1f));
                     rb.linearVelocity = new Vector3(
-                        Random.Range(-2f, 2f), 0f, Random.Range(-2f, 2f));
+                        RandomRange(-2f, 2f), 0f, RandomRange(-2f, 2f));
                     break;
 
                 case ScenarioType.HoverTracking:
                     transform.localPosition = new Vector3(rx, 30f, rz);
                     transform.localRotation = Quaternion.Euler(
-                        Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
+                        RandomRange(-1f, 1f), 0f, RandomRange(-1f, 1f));
                     break;
 
                 case ScenarioType.Takeoff:
@@ -92,8 +124,8 @@ namespace RocketSim
                 case ScenarioType.BellyFlop:
                     transform.localPosition = new Vector3(rx, 100f, rz);
                     transform.localRotation = Quaternion.Euler(
-                        85f + Random.Range(-5f, 5f), 0f, 0f);
-                    rb.linearVelocity = Vector3.down * Random.Range(8f, 18f);
+                        85f + RandomRange(-5f, 5f), 0f, 0f);
+                    rb.linearVelocity = Vector3.down * RandomRange(8f, 18f);
                     break;
             }
         }
@@ -106,50 +138,96 @@ namespace RocketSim
             InferenceSpawnProfile profile = envConfig.GetInferenceSpawnProfile(envConfig.scenario);
             profile.Clamp();
 
-            float altitude = profile.Sample(profile.altitudeMin, profile.altitudeMax);
+            float altitude = SampleProfile(profile, profile.altitudeMin, profile.altitudeMax);
             if (envConfig.scenario == ScenarioType.Takeoff && altitude <= 0f)
                 altitude = BaseGroundClearance;
             if (envConfig.scenario == ScenarioType.Landing)
                 altitude = Mathf.Max(altitude, ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig) + 15f);
 
             Vector2 offset = profile.randomizeEachEpisode
-                ? Random.insideUnitCircle * profile.horizontalOffsetMax
+                ? RandomInsideUnitCircle() * profile.horizontalOffsetMax
                 : Vector2.right * profile.horizontalOffsetMax;
 
-            float planarSpeed = profile.Sample(profile.horizontalSpeedMin, profile.horizontalSpeedMax);
+            float planarSpeed = SampleProfile(profile, profile.horizontalSpeedMin, profile.horizontalSpeedMax);
             Vector2 planarDirection = profile.randomizeEachEpisode
-                ? Random.insideUnitCircle.normalized
+                ? RandomInsideUnitCircle().normalized
                 : Vector2.right;
             if (planarDirection.sqrMagnitude < 0.0001f)
                 planarDirection = Vector2.right;
 
-            float yaw = profile.Sample(profile.yawMinDeg, profile.yawMaxDeg);
+            float yaw = SampleProfile(profile, profile.yawMinDeg, profile.yawMaxDeg);
             float tiltX = profile.baseTiltDeg;
             float tiltZ = 0f;
             if (profile.randomizeEachEpisode)
             {
-                Vector2 tiltVariation = Random.insideUnitCircle * profile.tiltVariationDeg;
+                Vector2 tiltVariation = RandomInsideUnitCircle() * profile.tiltVariationDeg;
                 tiltX += tiltVariation.x;
                 tiltZ = tiltVariation.y;
             }
 
-            transform.localPosition = new Vector3(offset.x, altitude, offset.y);
             transform.localRotation = Quaternion.Euler(tiltX, yaw, tiltZ);
+            float verticalSpeed = SampleProfile(profile, profile.verticalSpeedMin, profile.verticalSpeedMax);
+
+            if (envConfig.scenario == ScenarioType.Landing)
+            {
+                float terminalAltitude = ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
+                float availableAltitude = altitude - terminalAltitude;
+                float vehicleMass = cfg.dryMass + fuel + rcsPropellant;
+                float gravity = Mathf.Abs(Physics.gravity.y);
+                float netUpwardAcceleration = LandingFeasibility.NetUpwardAcceleration(
+                    cfg.maxThrust,
+                    cfg.activeEngineCount,
+                    vehicleMass,
+                    gravity);
+                float maxDownwardSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
+                    availableAltitude,
+                    netUpwardAcceleration,
+                    cfg.engineStartupDelay,
+                    gravity);
+                verticalSpeed = -Mathf.Min(Mathf.Max(0f, -verticalSpeed), maxDownwardSpeed);
+
+                LandingFeasibility.HorizontalEnvelope(
+                    availableAltitude,
+                    -verticalSpeed,
+                    cfg.maxThrust,
+                    cfg.activeEngineCount,
+                    vehicleMass,
+                    cfg.maxGimbal,
+                    cfg.engineStartupDelay,
+                    gravity,
+                    out float maxHorizontalSpeed,
+                    out float maxHorizontalOffset);
+                planarSpeed = Mathf.Min(planarSpeed, maxHorizontalSpeed);
+                offset = Vector2.ClampMagnitude(offset, maxHorizontalOffset);
+                PlaceLandingCatchFrameAtLocalPosition(new Vector3(offset.x, altitude, offset.y));
+            }
+            else
+            {
+                transform.localPosition = new Vector3(offset.x, altitude, offset.y);
+            }
+
             rb.linearVelocity = new Vector3(
                 planarDirection.x * planarSpeed,
-                profile.Sample(profile.verticalSpeedMin, profile.verticalSpeedMax),
+                verticalSpeed,
                 planarDirection.y * planarSpeed);
 
             if (profile.randomizeEachEpisode && profile.angularSpeedMaxDegS > 0f)
             {
-                Vector3 axis = Random.insideUnitSphere.normalized;
-                float speedDegS = Random.Range(0f, profile.angularSpeedMaxDegS);
+                Vector3 axis = RandomUnitVector3();
+                float speedDegS = RandomRange(0f, profile.angularSpeedMaxDegS);
                 rb.angularVelocity = axis * speedDegS * Mathf.Deg2Rad;
             }
             else
             {
                 rb.angularVelocity = Vector3.zero;
             }
+        }
+
+        float SampleProfile(InferenceSpawnProfile profile, float a, float b)
+        {
+            float min = Mathf.Min(a, b);
+            float max = Mathf.Max(a, b);
+            return profile.randomizeEachEpisode ? RandomRange(min, max) : (min + max) * 0.5f;
         }
 
         /// <summary>
@@ -269,7 +347,7 @@ namespace RocketSim
 
             for (int attempt = 0; attempt < 12; attempt++)
             {
-                Vector3 candidate = new Vector3(Random.Range(-r, r), targetPad.localPosition.y, Random.Range(-r, r));
+                Vector3 candidate = new Vector3(RandomRange(-r, r), targetPad.localPosition.y, RandomRange(-r, r));
                 Vector2 fromRocket = new Vector2(
                     candidate.x - transform.localPosition.x,
                     candidate.z - transform.localPosition.z);

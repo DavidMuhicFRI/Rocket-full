@@ -50,7 +50,13 @@ namespace RocketSim
         /// </summary>
         public string BuildEpisodeHeader()
         {
-            var cols = new List<string> { "WallTime", "AreaIndex", "Episode", "StepCount" };
+            var cols = new List<string>
+            {
+                "WallTime", "AreaIndex", "Episode", "StepCount", "Completed",
+                "Success", "TerminationReason", "EnvironmentSeed", "EpisodeSeed",
+                "CurriculumDifficulty01", "LoggedRewardSum", "DurationSeconds",
+                "FixedDeltaTimeSeconds", "DecisionPeriod"
+            };
             foreach (string metric in _metricNames)
             {
                 cols.Add($"{metric}_Mean");
@@ -90,6 +96,16 @@ namespace RocketSim
             Append(acc.AreaIndex);
             Append(acc.Episode);
             Append(acc.StepCount);
+            Append(acc.Outcome.completed ? 1 : 0);
+            Append(acc.Outcome.success ? 1 : 0);
+            Append(acc.Outcome.terminationReason.ToString());
+            Append(acc.Outcome.environmentSeed);
+            Append(acc.Outcome.episodeSeed);
+            Append(acc.Outcome.curriculumDifficulty01);
+            Append(acc.LoggedRewardSum);
+            Append(acc.Outcome.durationSeconds);
+            Append(acc.Outcome.fixedDeltaTimeSeconds);
+            Append(acc.Outcome.decisionPeriod);
 
             foreach (var stat in acc.Stats)
             {

@@ -18,11 +18,13 @@ namespace RocketSim
         readonly StreamWriter _writer;
         readonly int _flushInterval;
         int _rowCount;
+        public string FilePath { get; }
 
-        TelemetryCsvWriter(StreamWriter writer, int flushInterval)
+        TelemetryCsvWriter(StreamWriter writer, int flushInterval, string filePath)
         {
             _writer = writer;
             _flushInterval = flushInterval;
+            FilePath = filePath;
         }
 
         /// <summary>
@@ -39,15 +41,24 @@ namespace RocketSim
                 string existingHeader = reader.ReadLine();
                 if (existingHeader != header)
                 {
+                    string directory = Path.GetDirectoryName(path) ?? string.Empty;
+                    string fileName = Path.GetFileNameWithoutExtension(path);
+                    string extension = Path.GetExtension(path);
+                    string timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+                    string replacementPath = Path.Combine(
+                        directory,
+                        $"{fileName}_schema_{timestamp}{extension}");
                     Debug.LogWarning(
                         $"[TelemetryLogger] Existing CSV header differs from current telemetry config: {path}. " +
-                        "Appending anyway because this run_id already owns the file.");
+                        $"Writing a new schema-safe file instead: {replacementPath}.");
+                    path = replacementPath;
+                    writeHeader = true;
                 }
             }
 
             var writer = new StreamWriter(path, append: true, Encoding.UTF8);
             if (writeHeader) writer.WriteLine(header);
-            return new TelemetryCsvWriter(writer, flushInterval);
+            return new TelemetryCsvWriter(writer, flushInterval, path);
         }
 
         /// <summary>

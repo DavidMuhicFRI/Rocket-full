@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6690854722929554743}
   m_Layer: 0
-  m_Name: Top_Control_Point
+  m_Name: CatchFrame
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -410,7 +410,7 @@ MonoBehaviour:
   maxGimbalAngle: 5
   rb: {fileID: 3609761828162819993}
   thrustPoint: {fileID: 9164848284529757889}
-  topControlPoint: {fileID: 6690854722929554743}
+  catchFrame: {fileID: 6690854722929554743}
   landingPad: {fileID: 9170058263695440578}
 --- !u!114 &7450787763732300948
 MonoBehaviour:

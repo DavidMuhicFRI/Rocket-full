@@ -99,7 +99,7 @@ namespace RocketSim
         /// </summary>
         void BuildWeatherSelector(VisualElement root)
         {
-            root.Add(UIHelper.SectionLabel("Weather"));
+            root.Add(UIHelper.SectionLabel("Environment Presets"));
 
             var weatherRow = new VisualElement();
             weatherRow.AddToClassList("rs-btn-group");
@@ -120,7 +120,8 @@ namespace RocketSim
 
             root.Add(weatherRow);
             RefreshWeatherButtons(weatherRow);
-            root.Add(BuildGroupDetail("Presets fill the explicit controls above. You can adjust any value afterward."));
+            root.Add(BuildGroupDetail(
+                "These are convenient wind and aerodynamic-density presets, not a high-fidelity weather simulation."));
         }
 
         /// <summary>
@@ -130,11 +131,11 @@ namespace RocketSim
         {
             root.Add(UIHelper.SectionLabel("Derived"));
 
-            root.Add(UIHelper.Slider("Air Density", envConfig.airDensityMultiplier, 0.5f, 1.5f, value =>
+            root.Add(UIHelper.Slider("Aerodynamic Density Scale", envConfig.airDensityMultiplier, 0.5f, 1.5f, value =>
             {
                 envConfig.airDensityMultiplier = value;
                 RefreshEnvironmentReadouts(root);
-            }, "Multiplies aerodynamic drag and fin forces without changing gravity.", 2, "Ã—"));
+            }, "Domain-randomization scale for aerodynamic drag and fin forces; it is not a literal weather density model.", 2, "Ã—"));
 
             var densityRow = UIHelper.ReadOnly("Air Density Multiplier", envConfig.AirDensityMultiplier.ToString("F3"));
             densityRow.name = "label-air-density";

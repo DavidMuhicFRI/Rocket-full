@@ -9,7 +9,6 @@ using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
-using Random = UnityEngine.Random;
 
 namespace RocketSim
 {
@@ -20,14 +19,16 @@ namespace RocketSim
         /// </summary>
         RewardTerms MeasureRewardTerms(Vector3 goal)
         {
-            Vector3 error = transform.localPosition - goal;
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
+            Vector3 guidanceVelocity = ScenarioReferenceVelocity();
+            Vector3 error = guidancePosition - goal;
             Vector2 planarError = new Vector2(error.x, error.z);
-            Vector2 planarVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z);
+            Vector2 planarVelocity = new Vector2(guidanceVelocity.x, guidanceVelocity.z);
             Vector3 localAngularVelocity = transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
 
             float upDot = Vector3.Dot(transform.up, Vector3.up);
             float goalClosureRate = error.sqrMagnitude > 0.0001f
-                ? -Vector3.Dot(rb.linearVelocity, error.normalized)
+                ? -Vector3.Dot(guidanceVelocity, error.normalized)
                 : 0f;
             float horizontalClosureRate = planarError.sqrMagnitude > 0.0001f
                 ? -Vector2.Dot(planarVelocity, planarError.normalized)
@@ -38,9 +39,9 @@ namespace RocketSim
                 distance3D = error.magnitude,
                 planarDistance = planarError.magnitude,
                 verticalError = error.y,
-                speed = rb.linearVelocity.magnitude,
+                speed = guidanceVelocity.magnitude,
                 planarSpeed = planarVelocity.magnitude,
-                verticalSpeed = rb.linearVelocity.y,
+                verticalSpeed = guidanceVelocity.y,
                 goalClosureRate = goalClosureRate,
                 horizontalClosureRate = horizontalClosureRate,
                 upDot = upDot,
@@ -60,13 +61,14 @@ namespace RocketSim
         void LogTelemetry()
         {
             if (!TelemetryLogger.Instance) return;
-            if (envConfig.behaviorType != BehaviorType.Training) return;
 
             Vector3 effVel = rb.linearVelocity - wind;
             Vector3 targetPosition = GetAnalysisTargetPosition();
-            Vector3 error = transform.localPosition - targetPosition;
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
+            Vector3 guidanceVelocity = ScenarioReferenceVelocity();
+            Vector3 error = guidancePosition - targetPosition;
             Vector2 horizontalError = new Vector2(error.x, error.z);
-            Vector2 horizontalVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z);
+            Vector2 horizontalVelocity = new Vector2(guidanceVelocity.x, guidanceVelocity.z);
             Vector2 horizontalTargetDir = horizontalError.sqrMagnitude > 0.0001f ? -horizontalError.normalized : Vector2.zero;
             Vector2 horizontalVelocityDir = horizontalVelocity.sqrMagnitude > 0.0001f ? horizontalVelocity.normalized : Vector2.zero;
             Vector2 meanGimbal = MeanVector(gimbal);
@@ -81,7 +83,7 @@ namespace RocketSim
             float upDot = Vector3.Dot(transform.up, Vector3.up);
             float startFuel = Mathf.Max(cfg.startFuelMass, 1f);
             float goalClosureRate = error.sqrMagnitude > 0.0001f
-                ? -Vector3.Dot(rb.linearVelocity, error.normalized)
+                ? -Vector3.Dot(guidanceVelocity, error.normalized)
                 : 0f;
             bool isHoverTracking = envConfig.scenario == ScenarioType.HoverTracking;
             float hoverTrackSettleRadius = Mathf.Max(envConfig.hoverTrackSettleRadius, 0.5f);
@@ -103,7 +105,7 @@ namespace RocketSim
                 : 0f;
             float settleQuality01 = isHoverTracking
                 ? HoverTrackSettleQuality(horizontalError.magnitude, error.y, horizontalVelocity.magnitude,
-                    rb.linearVelocity.y, Vector3.Angle(transform.up, Vector3.up), localAngularVelocity.magnitude)
+                    guidanceVelocity.y, Vector3.Angle(transform.up, Vector3.up), localAngularVelocity.magnitude)
                 : 0f;
 
             var row = new TelemetryRow
@@ -112,12 +114,12 @@ namespace RocketSim
                 episode   = _episode,
                 step      = _step,
 
-                obs_relPos       = (targetPad.localPosition - transform.localPosition) / 100f,
-                obs_vel          = rb.linearVelocity / 50f,
+                obs_relPos       = (targetPosition - guidancePosition) / 100f,
+                obs_vel          = guidanceVelocity / 50f,
                 obs_angVel       = rb.angularVelocity / 10f,
                 obs_up           = transform.up,
                 obs_fuelFrac     = fuel / Mathf.Max(cfg.startFuelMass, 1f),
-                obs_altNorm      = transform.localPosition.y / 250f,
+                obs_altNorm      = guidancePosition.y / 250f,
                 obs_aoaDeg       = aoaDeg / 90f,
                 obs_dynPressNorm = Mathf.Clamp01(q / 5000f),
                 obs_windLocal    = transform.InverseTransformDirection(wind) /
@@ -132,7 +134,7 @@ namespace RocketSim
                 phys_speed       = effVel.magnitude,
                 phys_aoaDeg      = aoaDeg,
                 phys_dynPressure = q,
-                phys_altitude    = transform.localPosition.y,
+                phys_altitude    = guidancePosition.y,
                 phys_fuelKg      = fuel,
 
                 goal_distance3D       = error.magnitude,
@@ -156,7 +158,7 @@ namespace RocketSim
                 landing_platformStable01 = isLanding && _landingPlatformStable ? 1f : 0f,
                 landing_platformStableTime = isLanding ? _landingPlatformStableTime : 0f,
                 landing_platformHalfSize = isLanding ? envConfig.CurrentLandingPlatformHalfSize : 0f,
-                state_altitude        = transform.localPosition.y,
+                state_altitude        = guidancePosition.y,
                 nav_targetBearingDeg       = targetBearing,
                 nav_velocityBearingDeg     = velocityBearing,
                 nav_velocityTargetErrorDeg = SignedBearingError(velocityBearing, targetBearing),
@@ -172,9 +174,9 @@ namespace RocketSim
                 att_pitchRateDegS     = localAngularVelocity.x,
                 att_yawRateDegS       = localAngularVelocity.y,
                 att_rollRateDegS      = localAngularVelocity.z,
-                vel_speed3D           = rb.linearVelocity.magnitude,
+                vel_speed3D           = guidanceVelocity.magnitude,
                 vel_planarSpeed       = horizontalVelocity.magnitude,
-                vel_verticalSpeed     = rb.linearVelocity.y,
+                vel_verticalSpeed     = guidanceVelocity.y,
                 vel_goalClosureRate   = goalClosureRate,
                 vel_horizontalClosureRate = horizontalClosureRate,
                 ctrl_throttleMean     = Mean(throttle),

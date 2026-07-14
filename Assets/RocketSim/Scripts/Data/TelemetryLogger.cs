@@ -5,6 +5,7 @@
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -70,6 +71,20 @@ namespace RocketSim
         /// </summary>
         public void Initialize(TelemetryConfig cfg, string runId)
         {
+            InitializeSession(cfg, runId, null);
+        }
+
+        /// <summary>
+        /// Starts an evaluation session in files that are deliberately separate
+        /// from training telemetry for the same model/run id.
+        /// </summary>
+        public void InitializeEvaluation(TelemetryConfig cfg, string runId)
+        {
+            InitializeSession(cfg, runId, $"evaluation_{DateTime.UtcNow:yyyyMMdd_HHmmss}");
+        }
+
+        void InitializeSession(TelemetryConfig cfg, string runId, string sessionSuffix)
+        {
             CloseFiles();
 
             _loggingEnabled = true;
@@ -77,12 +92,18 @@ namespace RocketSim
             _metrics = TelemetryMetricCatalog.Build(_cfg);
             _formatter = new TelemetryRowFormatter(_metrics);
 
-            var context = TelemetryRunContext.Create(Application.persistentDataPath, outputFolder, runId);
+            var context = TelemetryRunContext.Create(
+                Application.persistentDataPath,
+                outputFolder,
+                runId,
+                sessionSuffix);
             _episodeFilePath = context.EpisodeFilePath;
             _stepFilePath = context.StepFilePath;
 
             _episodeWriter = TelemetryCsvWriter.Open(_episodeFilePath, _formatter.BuildEpisodeHeader(), flushInterval);
             _stepWriter = TelemetryCsvWriter.Open(_stepFilePath, _formatter.BuildStepHeader(), flushInterval);
+            _episodeFilePath = _episodeWriter.FilePath;
+            _stepFilePath = _stepWriter.FilePath;
 
             Debug.Log($"[TelemetryLogger] Episode telemetry: {_episodeFilePath}");
             Debug.Log($"[TelemetryLogger] Step telemetry: {_stepFilePath}");
@@ -118,13 +139,14 @@ namespace RocketSim
         /// Writes and removes the accumulated summary for one completed area
         /// episode. Mismatched or empty accumulators are ignored safely.
         /// </summary>
-        public void CompleteEpisode(int areaIndex, int episode)
+        public void CompleteEpisode(int areaIndex, int episode, TelemetryEpisodeOutcome outcome)
         {
             if (!_loggingEnabled) return;
             if (_cfg == null || _episodeWriter == null || _formatter == null) return;
             if (!_openEpisodes.TryGetValue(areaIndex, out var acc)) return;
             if (acc.Episode != episode || acc.StepCount == 0) return;
 
+            acc.Outcome = outcome;
             AppendEpisodeRow(acc);
             _openEpisodes.Remove(areaIndex);
         }
@@ -190,6 +212,23 @@ namespace RocketSim
         {
             _episodeWriter?.WriteLine(_formatter.FormatEpisodeRow(acc));
         }
+    }
+
+    /// <summary>
+    /// Evaluation-oriented metadata attached when an episode closes. Partial
+    /// episodes flushed during shutdown retain the default Completed=false value.
+    /// </summary>
+    public struct TelemetryEpisodeOutcome
+    {
+        public bool completed;
+        public bool success;
+        public EpisodeTerminationReason terminationReason;
+        public int environmentSeed;
+        public int episodeSeed;
+        public float curriculumDifficulty01;
+        public float durationSeconds;
+        public float fixedDeltaTimeSeconds;
+        public int decisionPeriod;
     }
 
     /// <summary>

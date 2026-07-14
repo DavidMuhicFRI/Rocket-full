@@ -525,9 +525,10 @@ MonoBehaviour:
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
     landingTargetYawDeg: 0
-    landingCatchAltitude: 30
-    runId: Falcon9DefaultRun
+    landingCatchAltitude: 60
+    runId: ReusableBoosterDefaultRun
     behaviorType: 0
+    environmentSeed: 1
   mlConfig:
     behaviorName: Rocket
     trainerType: 0
@@ -544,7 +545,7 @@ MonoBehaviour:
     numLayers: 3
     extrinsicGamma: 0.99
     extrinsicStrength: 1
-    curiosityEnabled: 1
+    curiosityEnabled: 0
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001
@@ -695,9 +696,10 @@ MonoBehaviour:
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
     landingTargetYawDeg: 0
-    landingCatchAltitude: 30
-    runId: Falcon9DefaultRun
+    landingCatchAltitude: 60
+    runId: ReusableBoosterDefaultRun
     behaviorType: 0
+    environmentSeed: 1
   mlConfig:
     behaviorName: Rocket
     trainerType: 0
@@ -714,7 +716,7 @@ MonoBehaviour:
     numLayers: 3
     extrinsicGamma: 0.99
     extrinsicStrength: 1
-    curiosityEnabled: 1
+    curiosityEnabled: 0
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001

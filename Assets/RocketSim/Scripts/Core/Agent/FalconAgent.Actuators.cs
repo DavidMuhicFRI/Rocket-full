@@ -24,10 +24,13 @@ namespace RocketSim
 
             var act = actions.ContinuousActions;
             var actionIndex = 0;
-            // Throttle: map [-1,+1] → [0,1] → [minThrottle, 1] or off
+            // Throttle: action <= 0 is off; action > 0 selects [minThrottle, 1].
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
-                float raw = (act[actionIndex++] + 1f) * 0.5f;
+                // Non-positive policy output is engine-off. Positive output
+                // selects the available throttle range without an engine-on
+                // command at the policy's zero-centred initial action.
+                float raw = Mathf.Clamp01(act[actionIndex++]);
                 bool engineLit = EngineIsIgnited(i);
                 float threshold = engineLit ? EngineShutdownThreshold : EngineIgnitionThreshold;
                 commandedThrottle[i] = raw > threshold ? Mathf.Lerp(cfg.minThrottle, 1f, raw) : 0f;
@@ -52,7 +55,10 @@ namespace RocketSim
             if (cfg.hasRCS)
             {
                 for (int i = 0; i < cfg.rcsJetCount; i++)
-                    rcsValveRequests[i] = actionIndex < act.Length && act[actionIndex++] > 0f ? 1f : 0f;
+                    rcsValveRequests[i] = actionIndex < act.Length &&
+                                          act[actionIndex++] > RcsValveActionThreshold
+                        ? 1f
+                        : 0f;
             }
             else
             {

@@ -9,7 +9,6 @@ using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
-using Random = UnityEngine.Random;
 
 namespace RocketSim
 {
@@ -53,8 +52,8 @@ namespace RocketSim
 
             RefreshConfig();
             EnsureActuatorBuffers(true);
-            
-            wind = targetWind = RandomWind();
+
+            wind = targetWind = Vector3.zero;
         }
 
         /// <summary>
@@ -66,8 +65,12 @@ namespace RocketSim
             {
                 if (!_currentEpisodeCompleted && _step > 0)
                 {
-                    LogLandingEpisodeEnd(EpisodeTerminationReason.LandingMaxStepOrExternalReset);
-                    TelemetryLogger.Instance?.CompleteEpisode(_areaIndex, _episode);
+                    _episodeTerminationReason = EpisodeTerminationReason.LandingMaxStepOrExternalReset;
+                    LogLandingEpisodeEnd(_episodeTerminationReason);
+                    TelemetryLogger.Instance?.CompleteEpisode(
+                        _areaIndex,
+                        _episode,
+                        BuildTelemetryEpisodeOutcome());
                     NotifyEpisodeCompleted();
                 }
 
@@ -88,10 +91,12 @@ namespace RocketSim
             _hoverTrackSegmentElapsedTime = 0f;
             _hoverTrackEpisodeCaptures = 0;
             _landingEpisodeSucceeded = false;
+            _episodeTerminationReason = EpisodeTerminationReason.None;
             ResetLandingPlatformState();
 
             RefreshConfig();
             EnsureActuatorBuffers(true);
+            ResetEpisodeRandom();
 
             if (_hardwareTestMode)
             {
@@ -116,7 +121,7 @@ namespace RocketSim
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
 
-            wind = targetWind = RandomWind();
+            ResetWindForEpisode();
             SpawnForScenario();
             RandomizeTarget();
             UpdateLandingPlatformGeometry();
@@ -129,11 +134,16 @@ namespace RocketSim
         /// </summary>
         public override void CollectObservations(VectorSensor sensor)
         {
-            // 1. Relative position to target pad (3)
-            sensor.AddObservation((targetPad.localPosition - transform.localPosition) / 100f);
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
+            Vector3 guidanceVelocity = ScenarioReferenceVelocity();
+            Vector3 goalPosition = ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig);
+
+            // 1. Relative position from the active guidance point to its target (3).
+            // Landing uses the grid-fin catch frame; other scenarios use the root/base frame.
+            sensor.AddObservation((goalPosition - guidancePosition) / 100f);
 
             // 2. Linear velocity (3)
-            sensor.AddObservation(rb.linearVelocity / 50f);
+            sensor.AddObservation(guidanceVelocity / 50f);
 
             // 3. Angular velocity (3)
             sensor.AddObservation(rb.angularVelocity / 10f);
@@ -151,7 +161,7 @@ namespace RocketSim
             sensor.AddObservation(fuel / Mathf.Max(cfg.startFuelMass, 1f));
 
             // 7. Normalized altitude (1)
-            sensor.AddObservation(transform.localPosition.y / 250f);
+            sensor.AddObservation(guidancePosition.y / 250f);
 
             // 8. Angle of attack (1)
             sensor.AddObservation(aoaDeg / 90f);
@@ -223,7 +233,8 @@ namespace RocketSim
             rb.angularVelocity = angularVelocity;
             Physics.SyncTransforms();
 
-            wind = targetWind = RandomWind();
+            ResetEpisodeRandom();
+            ResetWindForEpisode();
             q = 0f;
             aoaDeg = 0f;
             ClearRcsCommands();
@@ -314,7 +325,10 @@ namespace RocketSim
                 terms,
                 context,
                 envConfig.GetRewardFactors(envConfig.scenario));
-            AddReward(decision.shapingReward);
+            // Dense shaping terms describe a reward rate. Integrating that rate
+            // over simulated time keeps return magnitude independent of the
+            // FixedUpdate frequency while terminal/event rewards remain one-offs.
+            AddReward(decision.shapingReward * Time.fixedDeltaTime);
 
             if (decision.hasTerminalReward)
                 SetReward(decision.terminalReward);
@@ -324,6 +338,7 @@ namespace RocketSim
 
             if (decision.endEpisode)
             {
+                _episodeTerminationReason = decision.terminationReason;
                 LogLandingEpisodeEnd(decision.terminationReason, terms, context, decision.terminalReward);
                 EndEpisode();
             }
@@ -357,9 +372,15 @@ namespace RocketSim
         {
             if (_episodeEndedThisStep) return;
 
-            LogLandingEpisodeEnd(EpisodeTerminationReason.LandingExternalEndRequest);
+            if (_episodeTerminationReason == EpisodeTerminationReason.None)
+                _episodeTerminationReason = EpisodeTerminationReason.LandingExternalEndRequest;
+
+            LogLandingEpisodeEnd(_episodeTerminationReason);
             LogTelemetry();
-            TelemetryLogger.Instance?.CompleteEpisode(_areaIndex, _episode);
+            TelemetryLogger.Instance?.CompleteEpisode(
+                _areaIndex,
+                _episode,
+                BuildTelemetryEpisodeOutcome());
             _currentEpisodeCompleted = true;
             NotifyEpisodeCompleted();
             _telemetryLoggedThisStep = true;
@@ -371,6 +392,40 @@ namespace RocketSim
             // marked as logged even if OnEpisodeBegin has already run.
             _telemetryLoggedThisStep = true;
             _episodeEndedThisStep    = true;
+        }
+
+        /// <summary>
+        /// Captures stable episode outcome fields used by both training and
+        /// evaluation summaries before ML-Agents immediately resets the agent.
+        /// </summary>
+        TelemetryEpisodeOutcome BuildTelemetryEpisodeOutcome()
+        {
+            DecisionRequester decisionRequester = GetComponent<DecisionRequester>();
+            bool success = envConfig != null && envConfig.scenario switch
+            {
+                ScenarioType.HoverTracking => _hoverTrackEpisodeCaptures > 0,
+                ScenarioType.Landing => _landingEpisodeSucceeded,
+                _ => false
+            };
+            float difficulty = envConfig == null ? 0f : envConfig.scenario switch
+            {
+                ScenarioType.HoverTracking => envConfig.hoverTrackCurriculumProgress,
+                ScenarioType.Landing => envConfig.landingCurriculumProgress,
+                _ => 0f
+            };
+
+            return new TelemetryEpisodeOutcome
+            {
+                completed = true,
+                success = success,
+                terminationReason = _episodeTerminationReason,
+                environmentSeed = envConfig != null ? envConfig.environmentSeed : 0,
+                episodeSeed = _episodeSeed,
+                curriculumDifficulty01 = difficulty,
+                durationSeconds = _episodeElapsedSeconds,
+                fixedDeltaTimeSeconds = Time.fixedDeltaTime,
+                decisionPeriod = decisionRequester ? decisionRequester.DecisionPeriod : 1
+            };
         }
 
         /// <summary>
@@ -397,6 +452,7 @@ namespace RocketSim
         void RefreshConfig()
         {
             cfg = assembly ? assembly.GetPhysicsConfig() : RocketAssembly.Falcon9StaticFallback;
+            ConfigureCatchFrame();
         }
 
         /// <summary>
@@ -406,7 +462,7 @@ namespace RocketSim
         RewardRuntimeContext BuildRewardRuntimeContext()
         {
             return new RewardRuntimeContext(
-                transform.localPosition.y,
+                ScenarioReferenceLocalPosition().y,
                 ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
                 fuel,
                 envConfig.hoverTrackSettleRadius,

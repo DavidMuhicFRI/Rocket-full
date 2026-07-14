@@ -103,13 +103,13 @@ namespace RocketSim
         /// </summary>
         public void Clamp()
         {
-            altitudeMin = Mathf.Clamp(altitudeMin, 0f, 500f);
-            altitudeMax = Mathf.Clamp(altitudeMax, 0f, 500f);
-            horizontalOffsetMax = Mathf.Clamp(horizontalOffsetMax, 0f, 100f);
-            verticalSpeedMin = Mathf.Clamp(verticalSpeedMin, -100f, 100f);
-            verticalSpeedMax = Mathf.Clamp(verticalSpeedMax, -100f, 100f);
-            horizontalSpeedMin = Mathf.Clamp(horizontalSpeedMin, 0f, 30f);
-            horizontalSpeedMax = Mathf.Clamp(horizontalSpeedMax, 0f, 30f);
+            altitudeMin = Mathf.Clamp(altitudeMin, 0f, 1500f);
+            altitudeMax = Mathf.Clamp(altitudeMax, 0f, 1500f);
+            horizontalOffsetMax = Mathf.Clamp(horizontalOffsetMax, 0f, 200f);
+            verticalSpeedMin = Mathf.Clamp(verticalSpeedMin, -150f, 150f);
+            verticalSpeedMax = Mathf.Clamp(verticalSpeedMax, -150f, 150f);
+            horizontalSpeedMin = Mathf.Clamp(horizontalSpeedMin, 0f, 50f);
+            horizontalSpeedMax = Mathf.Clamp(horizontalSpeedMax, 0f, 50f);
             baseTiltDeg = Mathf.Clamp(baseTiltDeg, 0f, 180f);
             tiltVariationDeg = Mathf.Clamp(tiltVariationDeg, 0f, 45f);
             yawMinDeg = Mathf.Clamp(yawMinDeg, -180f, 180f);
@@ -117,16 +117,6 @@ namespace RocketSim
             angularSpeedMaxDegS = Mathf.Clamp(angularSpeedMaxDegS, 0f, 90f);
         }
 
-        /// <summary>
-        /// Samples within a configured range when randomization is enabled, or
-        /// returns the midpoint for deterministic inference starts.
-        /// </summary>
-        public float Sample(float a, float b)
-        {
-            float min = Mathf.Min(a, b);
-            float max = Mathf.Max(a, b);
-            return randomizeEachEpisode ? UnityEngine.Random.Range(min, max) : (min + max) * 0.5f;
-        }
     }
 
 }
