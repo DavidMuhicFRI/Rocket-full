@@ -57,7 +57,9 @@ namespace RocketSim
 
         public float extrinsicGamma = 0.99f;
         public float extrinsicStrength = 1.0f;
-        public bool curiosityEnabled = false;
+        // Kept on for PPO landing training to improve exploration. Curriculum
+        // experiments must hold these values constant across comparison groups.
+        public bool curiosityEnabled = true;
         public float curiosityGamma = 0.99f;
         public float curiosityStrength = 0.01f;
         public float curiosityLR = 1e-4f;
@@ -138,6 +140,8 @@ namespace RocketSim
         {
             config = new MLAgentsConfig();
             if (string.IsNullOrWhiteSpace(yaml)) return false;
+            // Parsing must reflect the saved file, so absence of a curiosity
+            // reward signal explicitly restores the disabled state.
             config.curiosityEnabled = false;
 
             string section = "";

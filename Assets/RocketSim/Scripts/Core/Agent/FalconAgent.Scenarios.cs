@@ -30,13 +30,14 @@ namespace RocketSim
             switch (envConfig.scenario)
             {
                 case ScenarioType.Landing:
+                    LandingCurriculumProfile landingProfile = ActiveLandingProfile;
                     float landingTerminalAltitude = ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
-                    float landingAltitudeMin = Mathf.Min(envConfig.CurrentLandingSpawnAltitudeMin, envConfig.CurrentLandingSpawnAltitudeMax);
-                    float landingAltitudeMax = Mathf.Max(envConfig.CurrentLandingSpawnAltitudeMin, envConfig.CurrentLandingSpawnAltitudeMax);
+                    float landingAltitudeMin = Mathf.Min(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
+                    float landingAltitudeMax = Mathf.Max(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
                     landingAltitudeMin = Mathf.Max(landingAltitudeMin, landingTerminalAltitude + 15f);
                     landingAltitudeMax = Mathf.Max(landingAltitudeMax, landingAltitudeMin + 10f);
-                    float landingVerticalSpeedMin = Mathf.Min(envConfig.CurrentLandingVerticalSpeedMin, envConfig.CurrentLandingVerticalSpeedMax);
-                    float landingVerticalSpeedMax = Mathf.Max(envConfig.CurrentLandingVerticalSpeedMin, envConfig.CurrentLandingVerticalSpeedMax);
+                    float landingVerticalSpeedMin = Mathf.Min(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
+                    float landingVerticalSpeedMax = Mathf.Max(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
                     float landingAltitude = RandomRange(
                         landingAltitudeMin,
                         landingAltitudeMax);
@@ -74,20 +75,20 @@ namespace RocketSim
                         gravity,
                         out float recoverableHorizontalSpeed,
                         out float recoverableHorizontalOffset);
-                    float landingOffsetLimit = Mathf.Min(envConfig.CurrentLandingSpawnRadius, recoverableHorizontalOffset);
+                    float landingOffsetLimit = Mathf.Min(landingProfile.spawnRadius, recoverableHorizontalOffset);
                     float landingHorizontalSpeedLimit = Mathf.Min(
-                        envConfig.CurrentLandingHorizontalSpeedMax,
+                        landingProfile.horizontalSpeedMax,
                         recoverableHorizontalSpeed);
                     Vector2 landingOffset = RandomInsideUnitCircle() * landingOffsetLimit;
                     Vector2 landingHorizontalVelocity = RandomInsideUnitCircle() * landingHorizontalSpeedLimit;
-                    float landingTiltRange = Mathf.Max(0f, envConfig.CurrentLandingSpawnTiltRangeDeg);
-                    float landingAngularSpeedMax = Mathf.Max(0f, envConfig.CurrentLandingAngularSpeedMaxDegS);
+                    float landingTiltRange = Mathf.Max(0f, landingProfile.spawnTiltRangeDeg);
+                    float landingAngularSpeedMax = Mathf.Max(0f, landingProfile.angularSpeedMaxDegS);
 
                     transform.localRotation = Quaternion.Euler(
                         RandomRange(-landingTiltRange, landingTiltRange),
                         envConfig.landingTargetYawDeg + RandomRange(
-                            -envConfig.CurrentLandingSpawnYawRangeDeg,
-                            envConfig.CurrentLandingSpawnYawRangeDeg),
+                            -landingProfile.spawnYawRangeDeg,
+                            landingProfile.spawnYawRangeDeg),
                         RandomRange(-landingTiltRange, landingTiltRange));
                     PlaceLandingCatchFrameAtLocalPosition(new Vector3(landingOffset.x, landingAltitude, landingOffset.y));
                     rb.linearVelocity = new Vector3(

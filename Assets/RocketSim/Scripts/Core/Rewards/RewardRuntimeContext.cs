@@ -27,7 +27,6 @@ namespace RocketSim
         public readonly float landingSuccessMaxAngularRateDegS;
         public readonly float landingSuccessMaxYawErrorDeg;
         public readonly bool landingPlatformRequired;
-        public readonly bool landingPlatformPhysicalActive;
         public readonly bool landingPlatformInsideCapture;
         public readonly bool landingPlatformStable;
         public readonly float landingPlatformStableTime;
@@ -49,7 +48,6 @@ namespace RocketSim
             float landingSuccessMaxAngularRateDegS,
             float landingSuccessMaxYawErrorDeg,
             bool landingPlatformRequired,
-            bool landingPlatformPhysicalActive,
             bool landingPlatformInsideCapture,
             bool landingPlatformStable,
             float landingPlatformStableTime,
@@ -69,7 +67,6 @@ namespace RocketSim
             this.landingSuccessMaxAngularRateDegS = landingSuccessMaxAngularRateDegS;
             this.landingSuccessMaxYawErrorDeg = landingSuccessMaxYawErrorDeg;
             this.landingPlatformRequired = landingPlatformRequired;
-            this.landingPlatformPhysicalActive = landingPlatformPhysicalActive;
             this.landingPlatformInsideCapture = landingPlatformInsideCapture;
             this.landingPlatformStable = landingPlatformStable;
             this.landingPlatformStableTime = landingPlatformStableTime;

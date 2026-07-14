@@ -1,12 +1,11 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Landing/LandingPlatformComponent.cs
 // Purpose: Builds and updates the runtime chopstick target, including its visible
-// arms, support geometry, capture trigger, and curriculum-controlled colliders.
+// non-colliding geometry and logical capture trigger.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace RocketSim
@@ -23,8 +22,6 @@ namespace RocketSim
         const float ArmThickness = 0.35f;
         const float IndicatorThickness = 0.05f;
 
-        readonly List<BoxCollider> _physicalColliders = new();
-
         Transform _captureIndicator;
         Transform _leftArm;
         Transform _rightArm;
@@ -40,25 +37,21 @@ namespace RocketSim
         float _halfSize = 3f;
 
         public bool TriggerActive { get; private set; }
-        public bool PhysicalActive { get; private set; }
         public float HalfSize => _halfSize;
 
         /// <summary>
-        /// Positions, scales, and activates the generated catch envelope and
-        /// physical chopstick geometry for the current landing curriculum state.
+        /// Positions, scales, and activates the generated catch envelope. The
+        /// visible tower geometry never receives collision surfaces.
         /// </summary>
         public void Configure(
             Vector3 localCenter,
             float yawDeg,
-            float halfSize,
-            bool triggerActive,
-            bool physicalActive)
+            float halfSize)
         {
             EnsureBuilt();
 
             _halfSize = Mathf.Max(0.5f, halfSize);
-            TriggerActive = triggerActive;
-            PhysicalActive = physicalActive;
+            TriggerActive = true;
 
             gameObject.SetActive(true);
             transform.localPosition = localCenter;
@@ -82,22 +75,17 @@ namespace RocketSim
             SetLocalBox(_rightPost, new Vector3(_halfSize, -postHeight * 0.5f, postZ),
                 new Vector3(ArmThickness, postHeight, ArmThickness));
 
-            _captureTrigger.enabled = triggerActive;
+            _captureTrigger.enabled = true;
             _captureTrigger.center = Vector3.zero;
             _captureTrigger.size = new Vector3(_halfSize * 2f, CaptureHalfHeight * 2f, _halfSize * 2f);
-
-            for (int i = 0; i < _physicalColliders.Count; i++)
-                if (_physicalColliders[i])
-                    _physicalColliders[i].enabled = physicalActive;
         }
 
         /// <summary>
-        /// Hides the generated platform and disables both capture and physical surfaces.
+        /// Hides the generated platform and disables its logical capture trigger.
         /// </summary>
         public void DisablePlatform()
         {
             TriggerActive = false;
-            PhysicalActive = false;
             gameObject.SetActive(false);
         }
 
@@ -129,9 +117,9 @@ namespace RocketSim
             _supportMaterial ??= CreateMaterial(new Color(0.45f, 0.48f, 0.52f, 1f));
 
             _captureIndicator = CreateVisualBox("CatchEnvelope_Visual", _captureMaterial);
-            _leftArm = CreatePhysicalBox("ChopstickArm_Left", _armMaterial);
-            _rightArm = CreatePhysicalBox("ChopstickArm_Right", _armMaterial);
-            _backBeam = CreatePhysicalBox("ChopstickBackBeam", _supportMaterial);
+            _leftArm = CreateVisualBox("ChopstickArm_Left", _armMaterial);
+            _rightArm = CreateVisualBox("ChopstickArm_Right", _armMaterial);
+            _backBeam = CreateVisualBox("ChopstickBackBeam", _supportMaterial);
             _leftPost = CreateVisualBox("ChopstickPost_Left", _supportMaterial);
             _rightPost = CreateVisualBox("ChopstickPost_Right", _supportMaterial);
 
@@ -169,31 +157,6 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Creates a platform cube child with a disabled BoxCollider that can be enabled later as a physical surface.
-        /// </summary>
-        Transform CreatePhysicalBox(string childName, Material material)
-        {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = childName;
-            go.transform.SetParent(transform, false);
-
-            if (go.TryGetComponent(out MeshRenderer renderer))
-                renderer.sharedMaterial = material;
-
-            var marker = go.AddComponent<LandingPlatformPart>();
-            marker.platform = this;
-            marker.physicalSurface = true;
-
-            if (go.TryGetComponent(out BoxCollider collider))
-            {
-                collider.enabled = false;
-                _physicalColliders.Add(collider);
-            }
-
-            return go.transform;
-        }
-
-        /// <summary>
         /// Applies local position, identity rotation, and scale to a generated box.
         /// </summary>
         static void SetLocalBox(Transform box, Vector3 localPosition, Vector3 localScale)
@@ -226,6 +189,5 @@ namespace RocketSim
     {
         public LandingPlatformComponent platform;
         public bool captureTrigger;
-        public bool physicalSurface;
     }
 }

@@ -355,7 +355,7 @@ namespace RocketSim
         /// Handles a notification that episode end happened and records the
         /// result for any active standardized curriculum.
         /// </summary>
-        public void NotifyEpisodeEnd(bool successfulEpisode)
+        public void NotifyEpisodeEnd(bool successfulEpisode, bool includeInCurriculumEstimate = true)
         {
             _totalEpisodes++;
 
@@ -370,7 +370,8 @@ namespace RocketSim
 
             if (envConfig.scenario == ScenarioType.Landing)
             {
-                envConfig.RecordLandingCurriculumEpisode(successfulEpisode, instanceCount);
+                if (includeInCurriculumEstimate)
+                    envConfig.RecordLandingCurriculumEpisode(successfulEpisode, instanceCount);
                 PersistCurriculumStateIfBatchComplete();
             }
         }

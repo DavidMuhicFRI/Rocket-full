@@ -97,6 +97,7 @@ namespace RocketSim
             RefreshConfig();
             EnsureActuatorBuffers(true);
             ResetEpisodeRandom();
+            PrepareLandingEpisodeProfile();
 
             if (_hardwareTestMode)
             {
@@ -331,7 +332,7 @@ namespace RocketSim
             AddReward(decision.shapingReward * Time.fixedDeltaTime);
 
             if (decision.hasTerminalReward)
-                SetReward(decision.terminalReward);
+                AddReward(decision.terminalReward);
 
             if (decision.successTerminal && envConfig.scenario == ScenarioType.Landing)
                 _landingEpisodeSucceeded = true;
@@ -352,16 +353,6 @@ namespace RocketSim
         {
             _stepReward += reward;
             base.AddReward(reward);
-        }
-
-        /// <summary>
-        /// Replaces the current ML-Agents reward and telemetry step reward,
-        /// used for terminal reward overrides.
-        /// </summary>
-        public new void SetReward(float reward)
-        {
-            _stepReward = reward;
-            base.SetReward(reward);
         }
 
         /// <summary>
@@ -407,12 +398,15 @@ namespace RocketSim
                 ScenarioType.Landing => _landingEpisodeSucceeded,
                 _ => false
             };
-            float difficulty = envConfig == null ? 0f : envConfig.scenario switch
+            float globalDifficulty = envConfig == null ? 0f : envConfig.scenario switch
             {
                 ScenarioType.HoverTracking => envConfig.hoverTrackCurriculumProgress,
                 ScenarioType.Landing => envConfig.landingCurriculumProgress,
                 _ => 0f
             };
+            float episodeDifficulty = envConfig != null && envConfig.scenario == ScenarioType.Landing
+                ? ActiveLandingProfile.difficulty01
+                : globalDifficulty;
 
             return new TelemetryEpisodeOutcome
             {
@@ -421,7 +415,11 @@ namespace RocketSim
                 terminationReason = _episodeTerminationReason,
                 environmentSeed = envConfig != null ? envConfig.environmentSeed : 0,
                 episodeSeed = _episodeSeed,
-                curriculumDifficulty01 = difficulty,
+                curriculumGlobalDifficulty01 = globalDifficulty,
+                curriculumDifficulty01 = episodeDifficulty,
+                curriculumReplay = envConfig != null &&
+                                   envConfig.scenario == ScenarioType.Landing &&
+                                   _landingEpisodeUsesEasierReplay,
                 durationSeconds = _episodeElapsedSeconds,
                 fixedDeltaTimeSeconds = Time.fixedDeltaTime,
                 decisionPeriod = decisionRequester ? decisionRequester.DecisionPeriod : 1
@@ -442,7 +440,11 @@ namespace RocketSim
                 ScenarioType.Landing => _landingEpisodeSucceeded,
                 _ => false
             };
-            assembly.GetComponentInParent<TrainingAreaManager>()?.NotifyEpisodeEnd(successfulEpisode);
+            bool includeInCurriculumEstimate =
+                envConfig.scenario != ScenarioType.Landing || !_landingEpisodeUsesEasierReplay;
+            assembly.GetComponentInParent<TrainingAreaManager>()?.NotifyEpisodeEnd(
+                successfulEpisode,
+                includeInCurriculumEstimate);
         }
 
         /// <summary>
@@ -461,26 +463,28 @@ namespace RocketSim
         /// </summary>
         RewardRuntimeContext BuildRewardRuntimeContext()
         {
+            LandingCurriculumProfile landing = ActiveLandingProfile;
             return new RewardRuntimeContext(
                 ScenarioReferenceLocalPosition().y,
                 ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
                 fuel,
                 envConfig.hoverTrackSettleRadius,
-                envConfig.ActiveLandingFailureAltitude,
-                envConfig.CurrentLandingSuccessRadius,
-                envConfig.CurrentLandingSuccessMaxSpeed,
-                envConfig.CurrentLandingSuccessMaxVerticalSpeed,
-                envConfig.CurrentLandingSuccessMaxHorizontalSpeed,
-                envConfig.CurrentLandingSuccessMaxTiltDeg,
-                envConfig.CurrentLandingSuccessMaxAngularRateDegS,
-                envConfig.CurrentLandingSuccessMaxYawErrorDeg,
+                envConfig.behaviorType == BehaviorType.Inference
+                    ? envConfig.ActiveLandingFailureAltitude
+                    : landing.failureAltitude,
+                landing.successRadius,
+                landing.successMaxSpeed,
+                landing.successMaxVerticalSpeed,
+                landing.successMaxHorizontalSpeed,
+                landing.successMaxTiltDeg,
+                landing.successMaxAngularRateDegS,
+                landing.successMaxYawErrorDeg,
                 envConfig.CurrentLandingPlatformRequired,
-                envConfig.CurrentLandingPlatformPhysicalActive,
                 _landingPlatformInsideCapture,
                 _landingPlatformStable,
                 _landingPlatformStableTime,
-                envConfig.CurrentLandingPlatformStableHoldTime,
-                envConfig.CurrentLandingPlatformHalfSize);
+                landing.platformStableHoldTime,
+                landing.platformHalfSize);
         }
 
         /// <summary>
@@ -536,11 +540,10 @@ namespace RocketSim
                 : string.Empty;
             string platformStatus =
                 $" platform=[enabled:{envConfig.landingPlatformEnabled}, " +
-                $"required:{context.landingPlatformRequired}, physical:{context.landingPlatformPhysicalActive}, " +
+                $"required:{context.landingPlatformRequired}, simulated:true, " +
                 $"inside:{context.landingPlatformInsideCapture}, stable:{context.landingPlatformStable}, " +
                 $"stableTime:{context.landingPlatformStableTime:F2}/{context.landingPlatformStableHoldTime:F2}s, " +
-                $"halfSize:{context.landingPlatformHalfSize:F2}m, " +
-                $"contacts:{_landingPlatformPhysicalContactCount}, lastContactSpeed:{_landingPlatformLastContactSpeed:F2}m/s]";
+                $"halfSize:{context.landingPlatformHalfSize:F2}m]";
 
             Debug.Log(
                 $"[LandingEpisodeEnd] area={_areaIndex} episode={_episode} step={_step} " +
@@ -553,7 +556,10 @@ namespace RocketSim
                 $"angularRate={terms.angularRateDegS:F2}deg/s yawError={terms.yawErrorDeg:F2}deg " +
                 $"fuel={context.fuelKg:F2}kg " +
                 $"terminalReward={terminalRewardText} curriculumEnabled={envConfig.landingCurriculumEnabled} " +
-                $"curriculum={envConfig.landingCurriculumProgress * 100f:F4}% " +
+                $"curriculumMode={envConfig.landingCurriculumMode} " +
+                $"globalCurriculum={envConfig.landingCurriculumProgress * 100f:F4}% " +
+                $"episodeDifficulty={ActiveLandingProfile.difficulty01 * 100f:F4}% " +
+                $"easierReplay={_landingEpisodeUsesEasierReplay} " +
                 $"curriculumEpisodes={envConfig.landingCurriculumEpisodeCount} " +
                 $"curriculumSuccesses={envConfig.landingCurriculumSuccessfulEpisodes} " +
                 $"recentSuccessRate={envConfig.LandingCurriculumSuccessRate * 100f:F1}% " +

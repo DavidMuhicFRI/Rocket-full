@@ -225,7 +225,9 @@ namespace RocketSim
         public EpisodeTerminationReason terminationReason;
         public int environmentSeed;
         public int episodeSeed;
+        public float curriculumGlobalDifficulty01;
         public float curriculumDifficulty01;
+        public bool curriculumReplay;
         public float durationSeconds;
         public float fixedDeltaTimeSeconds;
         public int decisionPeriod;
@@ -254,7 +256,7 @@ namespace RocketSim
         public float track_phaseHover01, track_hoverReady01, track_stableTime, track_targetReached01, track_settleRadius;
         public float track_curriculumProgress, track_segmentStartDistance, track_segmentElapsedTime;
         public float track_travelProgress01, track_travelProgressRate, track_directionEfficiency01, track_settleQuality01;
-        public float landing_platformRequired01, landing_platformPhysicalActive01, landing_platformInsideCapture01;
+        public float landing_platformRequired01, landing_platformInsideCapture01;
         public float landing_platformStable01, landing_platformStableTime, landing_platformHalfSize;
         public float nav_targetBearingDeg, nav_velocityBearingDeg, nav_velocityTargetErrorDeg;
         public float nav_goalAlignment, nav_gimbalBearingDeg, nav_gimbalTargetErrorDeg;

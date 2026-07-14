@@ -61,7 +61,6 @@ namespace RocketSim
             new("Track_DirectionAccuracy01", cfg => cfg.logGoalMetrics, r => r.track_directionEfficiency01),
             new("Track_StabilizationQuality01", cfg => cfg.logGoalMetrics, r => r.track_settleQuality01),
             new("Landing_PlatformRequired01", cfg => cfg.logGoalMetrics, r => r.landing_platformRequired01),
-            new("Landing_PlatformPhysicalActive01", cfg => cfg.logGoalMetrics, r => r.landing_platformPhysicalActive01),
             new("Landing_PlatformInsideCapture01", cfg => cfg.logGoalMetrics, r => r.landing_platformInsideCapture01),
             new("Landing_PlatformStable01", cfg => cfg.logGoalMetrics, r => r.landing_platformStable01),
             new("Landing_PlatformStableTime_s", cfg => cfg.logGoalMetrics, r => r.landing_platformStableTime),

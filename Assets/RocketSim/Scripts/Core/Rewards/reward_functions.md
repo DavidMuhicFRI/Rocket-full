@@ -12,9 +12,12 @@ controls, and terminate clearly when the flight is unrecoverable.
 
 ## How To Read The Formulas
 
-Each scenario receives a small shaping reward every physics timestep. If the
-episode ends, the current timestep reward is set to the terminal reward or
-penalty.
+Each scenario produces a shaping **rate** every physics timestep. The agent
+multiplies that rate by `Time.fixedDeltaTime` before adding it, so changing the
+physics frequency does not change the shaping return merely by creating more
+steps per simulated second. Terminal rewards and penalties are one-off signals
+added to the final timestep; they do not overwrite shaping accumulated since
+the previous ML-Agents decision.
 
 The helper `clamp01(value)` means:
 
@@ -88,7 +91,8 @@ slider marks that scenario reward model as custom.
 
 ## Landing
 
-Goal: descend to the pad upright, slow, and close to the target.
+Goal: guide the upper CatchFrame into the simulated chopstick envelope upright,
+slow, and aligned with the target yaw.
 
 ```text
 height_above_touchdown_m = max(0, altitude_m - ground_clearance_m)
@@ -125,10 +129,10 @@ reward =
 Terminal rules:
 
 ```text
-if upright_dot < 0.35 or goal_error_3d_m > 150 or fuel_kg <= 0:
+if upright_dot < 0.35 or horizontal_error_m > 150 or fuel_kg <= 0:
     reward = -35
 
-if altitude_m > max(140, curriculum_spawn_altitude_max_m + 60):
+if altitude_m > max(240, episode_spawn_altitude_max_m + 100):
     reward = -30
 
 if altitude_m <= ground_clearance_m:
@@ -176,44 +180,60 @@ Why these values:
 
 Landing curriculum:
 
-The landing curriculum advances only after successful touchdowns. It does not
-advance after crashes, flyaways, or ordinary episode ends. Completed episodes
-update a recent success-rate estimate. Once that rate is high enough, continuous
-progress advances at the standardized difficulty increase speed:
+Completed episodes update a 32-episode recent-success estimate. Curriculum
+movement happens once per parallel-area-sized batch, so increasing the number
+of training areas does not make difficulty change faster. The default Adaptive
+mode uses hysteresis:
 
 ```text
-recent_success_rate = smoothed_average(successful_episode)
-advance_pressure = inverse_lerp(0.55, 0.85, recent_success_rate)
-linear_progress += advance_pressure * difficulty_increase_speed / (base_batches_to_full * active_training_areas)
+if recent_success_rate > 0.80:
+    move difficulty forward
+else if recent_success_rate < 0.50:
+    move difficulty backward at half speed
+else:
+    hold difficulty
+
+maximum change per batch = 0.02
+lowest allowed retreat = best linear progress reached - 0.20
 curriculum_progress = smoothstep(0, 1, clamp01(linear_progress))
 ```
 
-The current difficulty is a single curve. As it rises, spawn range and spawn
-speed, initial tilt, and initial spin increase while touchdown success
-requirements tighten:
+Monotonic mode uses the same forward rule but disables retreat. Fixed Full
+Difficulty holds `curriculum_progress = 1` and acts as the no-curriculum
+comparison condition. Fifteen percent of curriculum episodes replay the full
+task profile from `0.20` lower difficulty. Replay episodes train the policy but
+do not update the mastery estimate. Each agent freezes its selected profile for
+the entire episode so shared updates from parallel agents cannot change a task
+halfway through.
+
+The current difficulty is one continuous curve. It changes the complete task
+profile rather than switching between named easy/hard stages:
 
 ```text
-spawn_altitude_m          = lerp(random 45..70,  random 120..300, progress)
-spawn_horizontal_offset_m = lerp(5,              50,              progress)
-spawn_down_speed_mps      = lerp(random 5..15,   random 12..60,   progress)
-spawn_horizontal_speed    = lerp(0.5,            15,              progress)
-spawn_pitch_roll_deg      = lerp(3,              18,              progress)
-spawn_angular_speed_deg_s = lerp(0,              55,              progress)
-spawn_yaw_range_deg        = lerp(30,             180,             progress)
+spawn_altitude_m          = lerp(random 120..220, random 300..1000, progress)
+spawn_horizontal_offset_m = lerp(8,               100,              progress)
+spawn_down_speed_mps      = lerp(random 5..20,    random 20..120,   progress)
+spawn_horizontal_speed    = lerp(1,               25,               progress)
+spawn_pitch_roll_deg      = lerp(3,               18,               progress)
+spawn_angular_speed_deg_s = lerp(0,               55,               progress)
+spawn_yaw_range_deg       = lerp(30,              180,              progress)
 
-success_radius_m          = lerp(8,              2,               progress)
-success_total_speed_mps   = lerp(7,              2.5,             progress)
-success_vertical_speed    = lerp(5,              2,               progress)
-success_horizontal_speed  = lerp(5,              1,               progress)
-success_tilt_deg          = lerp(20,             5,               progress)
-success_angular_rate_deg  = lerp(50,             25,              progress)
-success_yaw_error_deg     = lerp(30,             10,              progress)
+success_radius_m          = lerp(8,               2,                progress)
+success_total_speed_mps   = lerp(7,               2.5,              progress)
+success_vertical_speed    = lerp(5,               2,                progress)
+success_horizontal_speed  = lerp(5,               1,                progress)
+success_tilt_deg          = lerp(20,              5,                progress)
+success_angular_rate_deg  = lerp(50,              25,               progress)
+success_yaw_error_deg     = lerp(30,              10,               progress)
+capture_half_size_m       = lerp(8,               3,                progress)
+stable_hold_seconds       = lerp(0.15,            0.45,             progress)
 ```
 
-This means early training teaches basic touchdown from nearby starts. Sustained
-successful episodes nudge the same task harder: higher and farther spawns, more
-horizontal and vertical start speed, more initial rotation, a smaller accepted
-pad radius, lower touchdown speeds, and stricter attitude.
+The spawn sampler then clamps sampled motion to the Falcon 9-like booster's
+recoverable braking and lateral-control envelope. The platform is a visual and
+logical capture volume from the first curriculum episode. It has no collision
+surfaces: capture is simulated from CatchFrame position, velocity, attitude,
+yaw, and stable time inside the volume.
 
 ## Hover
 

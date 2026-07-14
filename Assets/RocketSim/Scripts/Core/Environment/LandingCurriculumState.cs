@@ -1,8 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/LandingCurriculumState.cs
-// Purpose: Tracks landing-training success and exposes the current interpolated
-// spawn ranges, capture limits, and chopstick-platform difficulty.
-// Beginner and full-difficulty constants live together here for easy comparison.
+// Purpose: Tracks landing-training performance and maps one continuous
+// difficulty value to spawn, capture, and success thresholds.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -12,30 +11,130 @@ using UnityEngine.Serialization;
 
 namespace RocketSim
 {
+    /// <summary>
+    /// Selects the curriculum policy used by landing training. Adaptive is the
+    /// default experiment condition; the other modes provide controlled
+    /// comparison groups without changing the task implementation.
+    /// </summary>
+    public enum LandingCurriculumMode
+    {
+        Adaptive,
+        Monotonic,
+        FixedFullDifficulty
+    }
+
+    /// <summary>
+    /// Immutable per-episode landing thresholds. A snapshot prevents one
+    /// parallel agent's episode from changing when another agent updates the
+    /// shared curriculum state.
+    /// </summary>
+    public readonly struct LandingCurriculumProfile
+    {
+        public readonly float difficulty01;
+        public readonly float spawnAltitudeMin;
+        public readonly float spawnAltitudeMax;
+        public readonly float spawnRadius;
+        public readonly float verticalSpeedMin;
+        public readonly float verticalSpeedMax;
+        public readonly float horizontalSpeedMax;
+        public readonly float spawnTiltRangeDeg;
+        public readonly float angularSpeedMaxDegS;
+        public readonly float spawnYawRangeDeg;
+        public readonly float failureAltitude;
+        public readonly float successRadius;
+        public readonly float successMaxSpeed;
+        public readonly float successMaxVerticalSpeed;
+        public readonly float successMaxHorizontalSpeed;
+        public readonly float successMaxTiltDeg;
+        public readonly float successMaxAngularRateDegS;
+        public readonly float successMaxYawErrorDeg;
+        public readonly float platformHalfSize;
+        public readonly float platformStableHoldTime;
+
+        public LandingCurriculumProfile(
+            float difficulty01,
+            float spawnAltitudeMin,
+            float spawnAltitudeMax,
+            float spawnRadius,
+            float verticalSpeedMin,
+            float verticalSpeedMax,
+            float horizontalSpeedMax,
+            float spawnTiltRangeDeg,
+            float angularSpeedMaxDegS,
+            float spawnYawRangeDeg,
+            float successRadius,
+            float successMaxSpeed,
+            float successMaxVerticalSpeed,
+            float successMaxHorizontalSpeed,
+            float successMaxTiltDeg,
+            float successMaxAngularRateDegS,
+            float successMaxYawErrorDeg,
+            float platformHalfSize,
+            float platformStableHoldTime)
+        {
+            this.difficulty01 = difficulty01;
+            this.spawnAltitudeMin = spawnAltitudeMin;
+            this.spawnAltitudeMax = spawnAltitudeMax;
+            this.spawnRadius = spawnRadius;
+            this.verticalSpeedMin = verticalSpeedMin;
+            this.verticalSpeedMax = verticalSpeedMax;
+            this.horizontalSpeedMax = horizontalSpeedMax;
+            this.spawnTiltRangeDeg = spawnTiltRangeDeg;
+            this.angularSpeedMaxDegS = angularSpeedMaxDegS;
+            this.spawnYawRangeDeg = spawnYawRangeDeg;
+            failureAltitude = Mathf.Max(240f, spawnAltitudeMax + 100f);
+            this.successRadius = successRadius;
+            this.successMaxSpeed = successMaxSpeed;
+            this.successMaxVerticalSpeed = successMaxVerticalSpeed;
+            this.successMaxHorizontalSpeed = successMaxHorizontalSpeed;
+            this.successMaxTiltDeg = successMaxTiltDeg;
+            this.successMaxAngularRateDegS = successMaxAngularRateDegS;
+            this.successMaxYawErrorDeg = successMaxYawErrorDeg;
+            this.platformHalfSize = platformHalfSize;
+            this.platformStableHoldTime = platformStableHoldTime;
+        }
+    }
+
     public partial class SimEnvironmentConfig
     {
         [Header("Landing Curriculum")]
+        [HideInInspector] public LandingCurriculumMode landingCurriculumMode = LandingCurriculumMode.Adaptive;
         [HideInInspector] public bool landingCurriculumEnabled = true;
         [HideInInspector] public int landingCurriculumSuccesses;
         [HideInInspector] public int landingCurriculumEpisodeCount;
         [HideInInspector] public int landingCurriculumSuccessfulEpisodes;
+        [HideInInspector] public int landingCurriculumBatchEpisodeCount;
         [HideInInspector] public float landingCurriculumRecentSuccessRate;
         [HideInInspector] public float landingCurriculumLinearProgress;
         [HideInInspector] public float landingCurriculumProgress;
+        [HideInInspector] public float landingCurriculumPeakLinearProgress;
         [FormerlySerializedAs("landingCurriculumSuccessesToMostlyHard")]
-        [HideInInspector] public float landingCurriculumSuccessesToFullDifficulty = LandingDefaultCurriculumSuccessesToFullDifficulty;
+        [FormerlySerializedAs("landingCurriculumSuccessesToFullDifficulty")]
+        [HideInInspector] public float landingCurriculumBatchesToFullDifficulty = LandingDefaultCurriculumBatchesToFullDifficulty;
+        [HideInInspector] public float landingCurriculumPromotionSuccessRate = LandingDefaultPromotionSuccessRate;
+        [HideInInspector] public float landingCurriculumRetreatSuccessRate = LandingDefaultRetreatSuccessRate;
+        [HideInInspector] public float landingCurriculumRetreatSpeedMultiplier = LandingDefaultRetreatSpeedMultiplier;
+        [HideInInspector] public float landingCurriculumMaximumRetreat = LandingDefaultMaximumRetreat;
+        [HideInInspector] public float landingCurriculumMaximumStepPerBatch = LandingDefaultMaximumStepPerBatch;
+        [HideInInspector] public float landingCurriculumEasierReplayProbability = LandingDefaultEasierReplayProbability;
+        [HideInInspector] public float landingCurriculumEasierReplayOffset = LandingDefaultEasierReplayOffset;
         [HideInInspector] public float landingTargetYawDeg;
         [HideInInspector] public float landingCatchAltitude = DefaultLandingCatchAltitude;
         [HideInInspector] public bool landingPlatformEnabled = true;
-        [HideInInspector] public float landingPlatformTriggerProgressStart = LandingDefaultPlatformTriggerProgressStart;
-        [HideInInspector] public float landingPlatformPhysicalProgressStart = LandingDefaultPlatformPhysicalProgressStart;
         [HideInInspector] public float landingPlatformHalfSizeInitial = LandingDefaultPlatformHalfSizeInitial;
         [HideInInspector] public float landingPlatformHalfSizeFull = LandingDefaultPlatformHalfSizeFull;
         [HideInInspector] public float landingPlatformStableHoldInitial = LandingDefaultPlatformStableHoldInitial;
         [HideInInspector] public float landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
 
         public const float DefaultLandingCatchAltitude = 60f;
-        public const float LandingDefaultCurriculumSuccessesToFullDifficulty = 360f;
+        public const float LandingDefaultCurriculumBatchesToFullDifficulty = 360f;
+        public const float LandingDefaultPromotionSuccessRate = 0.80f;
+        public const float LandingDefaultRetreatSuccessRate = 0.50f;
+        public const float LandingDefaultRetreatSpeedMultiplier = 0.50f;
+        public const float LandingDefaultMaximumRetreat = 0.20f;
+        public const float LandingDefaultMaximumStepPerBatch = 0.02f;
+        public const float LandingDefaultEasierReplayProbability = 0.15f;
+        public const float LandingDefaultEasierReplayOffset = 0.20f;
         // Landing altitudes describe the catch-frame height, not the engine plane.
         public const float LandingInitialSpawnAltitudeMin = 120f;
         public const float LandingInitialSpawnAltitudeMax = 220f;
@@ -69,8 +168,6 @@ namespace RocketSim
         public const float LandingFullSuccessMaxAngularRateDegS = 25f;
         public const float LandingInitialSuccessMaxYawErrorDeg = 30f;
         public const float LandingFullSuccessMaxYawErrorDeg = 10f;
-        public const float LandingDefaultPlatformTriggerProgressStart = 0.25f;
-        public const float LandingDefaultPlatformPhysicalProgressStart = 0.65f;
         public const float LandingDefaultPlatformHalfSizeInitial = 8f;
         public const float LandingDefaultPlatformHalfSizeFull = 3f;
         public const float LandingDefaultPlatformStableHoldInitial = 0.15f;
@@ -79,22 +176,22 @@ namespace RocketSim
         public float LandingCurriculumSuccessRate =>
             landingCurriculumEpisodeCount > 0 ? Mathf.Clamp01(landingCurriculumRecentSuccessRate) : 0f;
 
-        /// <summary>
-        /// Resets the landing curriculum state back to its episode/default values.
-        /// </summary>
+        /// <summary>Resets all landing curriculum progress and batch state.</summary>
         public void ResetLandingCurriculum()
         {
             landingCurriculumSuccesses = 0;
             landingCurriculumEpisodeCount = 0;
             landingCurriculumSuccessfulEpisodes = 0;
+            landingCurriculumBatchEpisodeCount = 0;
             landingCurriculumRecentSuccessRate = 0f;
             landingCurriculumLinearProgress = 0f;
+            landingCurriculumPeakLinearProgress = 0f;
             ApplyLandingCurriculum();
         }
 
         /// <summary>
-        /// Records one landing success for legacy callers. New curriculum
-        /// progress uses completed episode success rate.
+        /// Records one landing success for legacy callers. Completed episodes,
+        /// not this diagnostic counter, control curriculum difficulty.
         /// </summary>
         public void AdvanceLandingCurriculum(int activeAreaCount)
         {
@@ -103,16 +200,16 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Records one completed landing episode and advances continuous
-        /// difficulty from the recent average successful-episode rate.
+        /// Records one completed episode. Difficulty changes only after one
+        /// parallel-area-sized batch, so area count cannot change update speed.
         /// </summary>
         public void RecordLandingCurriculumEpisode(bool successfulEpisode, int activeAreaCount)
         {
             if (scenario != ScenarioType.Landing) return;
 
             EnsureLandingCurriculumDefaults();
-            landingCurriculumEnabled = true;
             landingCurriculumEpisodeCount++;
+            landingCurriculumBatchEpisodeCount++;
             if (successfulEpisode)
             {
                 landingCurriculumSuccesses++;
@@ -125,77 +222,97 @@ namespace RocketSim
                 landingCurriculumEpisodeCount,
                 successfulEpisode);
 
-            landingCurriculumLinearProgress = Mathf.Clamp01(
-                landingCurriculumLinearProgress +
-                CurriculumProgressDelta(
-                    landingCurriculumRecentSuccessRate,
-                    landingCurriculumSuccessesToFullDifficulty,
-                    activeAreaCount));
+            int batchSize = Mathf.Max(1, activeAreaCount);
+            if (landingCurriculumMode != LandingCurriculumMode.FixedFullDifficulty &&
+                landingCurriculumBatchEpisodeCount >= batchSize)
+            {
+                float delta = LandingCurriculumProgressDelta(landingCurriculumRecentSuccessRate);
+                if (landingCurriculumMode == LandingCurriculumMode.Monotonic)
+                    delta = Mathf.Max(0f, delta);
+
+                float retreatFloor = landingCurriculumMode == LandingCurriculumMode.Adaptive
+                    ? Mathf.Max(0f, landingCurriculumPeakLinearProgress - landingCurriculumMaximumRetreat)
+                    : landingCurriculumLinearProgress;
+                landingCurriculumLinearProgress = Mathf.Clamp(
+                    landingCurriculumLinearProgress + delta,
+                    retreatFloor,
+                    1f);
+                landingCurriculumPeakLinearProgress = Mathf.Max(
+                    landingCurriculumPeakLinearProgress,
+                    landingCurriculumLinearProgress);
+                landingCurriculumBatchEpisodeCount = 0;
+            }
 
             ApplyLandingCurriculum();
         }
 
         /// <summary>
-        /// Converts accumulated landing successes into a normalized difficulty
-        /// value used by spawn, success, and chopstick platform thresholds.
+        /// Applies the selected comparison condition. Curriculum modes use a
+        /// smooth continuous curve; the fixed baseline always uses d=1.
         /// </summary>
         public void ApplyLandingCurriculum()
         {
             if (scenario != ScenarioType.Landing) return;
 
             EnsureLandingCurriculumDefaults();
-            landingCurriculumEnabled = true;
-
-            landingCurriculumProgress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(landingCurriculumLinearProgress));
+            landingCurriculumEnabled = landingCurriculumMode != LandingCurriculumMode.FixedFullDifficulty;
+            landingCurriculumProgress = landingCurriculumEnabled
+                ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(landingCurriculumLinearProgress))
+                : 1f;
         }
 
         /// <summary>
-        /// Interpolates a landing threshold between its beginner and full
-        /// difficulty values using current curriculum progress.
+        /// Produces the complete landing task at one normalized difficulty.
+        /// Agents keep this snapshot for their whole episode.
         /// </summary>
-        float LandingDifficultyValue(float initialValue, float fullDifficultyValue) =>
-            Mathf.Lerp(initialValue, fullDifficultyValue, landingCurriculumProgress);
+        public LandingCurriculumProfile GetLandingCurriculumProfile(float difficulty01)
+        {
+            float d = Mathf.Clamp01(difficulty01);
+            float Value(float initialValue, float fullValue) => Mathf.Lerp(initialValue, fullValue, d);
+
+            return new LandingCurriculumProfile(
+                d,
+                Value(LandingInitialSpawnAltitudeMin, LandingFullSpawnAltitudeMin),
+                Value(LandingInitialSpawnAltitudeMax, LandingFullSpawnAltitudeMax),
+                Value(LandingInitialSpawnRadius, LandingFullSpawnRadius),
+                Value(LandingInitialVerticalSpeedMin, LandingFullVerticalSpeedMin),
+                Value(LandingInitialVerticalSpeedMax, LandingFullVerticalSpeedMax),
+                Value(LandingInitialHorizontalSpeedMax, LandingFullHorizontalSpeedMax),
+                Value(LandingInitialSpawnTiltRangeDeg, LandingFullSpawnTiltRangeDeg),
+                Value(LandingInitialAngularSpeedMaxDegS, LandingFullAngularSpeedMaxDegS),
+                Value(LandingInitialSpawnYawRangeDeg, LandingFullSpawnYawRangeDeg),
+                Value(LandingInitialSuccessRadius, LandingFullSuccessRadius),
+                Value(LandingInitialSuccessMaxSpeed, LandingFullSuccessMaxSpeed),
+                Value(LandingInitialSuccessMaxVerticalSpeed, LandingFullSuccessMaxVerticalSpeed),
+                Value(LandingInitialSuccessMaxHorizontalSpeed, LandingFullSuccessMaxHorizontalSpeed),
+                Value(LandingInitialSuccessMaxTiltDeg, LandingFullSuccessMaxTiltDeg),
+                Value(LandingInitialSuccessMaxAngularRateDegS, LandingFullSuccessMaxAngularRateDegS),
+                Value(LandingInitialSuccessMaxYawErrorDeg, LandingFullSuccessMaxYawErrorDeg),
+                Value(Mathf.Max(0.5f, landingPlatformHalfSizeInitial), Mathf.Max(0.5f, landingPlatformHalfSizeFull)),
+                Value(Mathf.Max(0f, landingPlatformStableHoldInitial), Mathf.Max(0f, landingPlatformStableHoldFull)));
+        }
 
         /// <summary>
-        /// Current minimum spawn altitude for landing episodes.
+        /// Chooses the episode's fixed task profile. A small fraction replays a
+        /// nearby easier profile to reduce forgetting without changing global d.
         /// </summary>
-        public float CurrentLandingSpawnAltitudeMin => LandingDifficultyValue(LandingInitialSpawnAltitudeMin, LandingFullSpawnAltitudeMin);
-        /// <summary>
-        /// Current maximum spawn altitude for landing episodes.
-        /// </summary>
-        public float CurrentLandingSpawnAltitudeMax => LandingDifficultyValue(LandingInitialSpawnAltitudeMax, LandingFullSpawnAltitudeMax);
-        /// <summary>
-        /// Current maximum horizontal spawn offset from the landing target.
-        /// </summary>
-        public float CurrentLandingSpawnRadius => LandingDifficultyValue(LandingInitialSpawnRadius, LandingFullSpawnRadius);
-        /// <summary>
-        /// Current minimum downward spawn speed for landing episodes.
-        /// </summary>
-        public float CurrentLandingVerticalSpeedMin => LandingDifficultyValue(LandingInitialVerticalSpeedMin, LandingFullVerticalSpeedMin);
-        /// <summary>
-        /// Current maximum downward spawn speed for landing episodes.
-        /// </summary>
-        public float CurrentLandingVerticalSpeedMax => LandingDifficultyValue(LandingInitialVerticalSpeedMax, LandingFullVerticalSpeedMax);
-        /// <summary>
-        /// Current maximum horizontal spawn speed for landing episodes.
-        /// </summary>
-        public float CurrentLandingHorizontalSpeedMax => LandingDifficultyValue(LandingInitialHorizontalSpeedMax, LandingFullHorizontalSpeedMax);
-        /// <summary>
-        /// Current random pitch/roll range applied when spawning landing episodes.
-        /// </summary>
-        public float CurrentLandingSpawnTiltRangeDeg => LandingDifficultyValue(LandingInitialSpawnTiltRangeDeg, LandingFullSpawnTiltRangeDeg);
-        /// <summary>
-        /// Current maximum initial angular speed for landing episodes.
-        /// </summary>
-        public float CurrentLandingAngularSpeedMaxDegS => LandingDifficultyValue(LandingInitialAngularSpeedMaxDegS, LandingFullAngularSpeedMaxDegS);
-        /// <summary>
-        /// Current random yaw range applied when spawning landing episodes.
-        /// </summary>
-        public float CurrentLandingSpawnYawRangeDeg => LandingDifficultyValue(LandingInitialSpawnYawRangeDeg, LandingFullSpawnYawRangeDeg);
-        /// <summary>
-        /// Current failure ceiling, kept above the active spawn altitude range.
-        /// </summary>
-        public float CurrentLandingFailureAltitude => Mathf.Max(240f, CurrentLandingSpawnAltitudeMax + 100f);
+        public float LandingEpisodeDifficulty(bool useEasierReplay)
+        {
+            if (!landingCurriculumEnabled || !useEasierReplay)
+                return landingCurriculumProgress;
+            return Mathf.Max(0f, landingCurriculumProgress - landingCurriculumEasierReplayOffset);
+        }
+
+        public float CurrentLandingSpawnAltitudeMin => GetLandingCurriculumProfile(landingCurriculumProgress).spawnAltitudeMin;
+        public float CurrentLandingSpawnAltitudeMax => GetLandingCurriculumProfile(landingCurriculumProgress).spawnAltitudeMax;
+        public float CurrentLandingSpawnRadius => GetLandingCurriculumProfile(landingCurriculumProgress).spawnRadius;
+        public float CurrentLandingVerticalSpeedMin => GetLandingCurriculumProfile(landingCurriculumProgress).verticalSpeedMin;
+        public float CurrentLandingVerticalSpeedMax => GetLandingCurriculumProfile(landingCurriculumProgress).verticalSpeedMax;
+        public float CurrentLandingHorizontalSpeedMax => GetLandingCurriculumProfile(landingCurriculumProgress).horizontalSpeedMax;
+        public float CurrentLandingSpawnTiltRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnTiltRangeDeg;
+        public float CurrentLandingAngularSpeedMaxDegS => GetLandingCurriculumProfile(landingCurriculumProgress).angularSpeedMaxDegS;
+        public float CurrentLandingSpawnYawRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnYawRangeDeg;
+        public float CurrentLandingFailureAltitude => GetLandingCurriculumProfile(landingCurriculumProgress).failureAltitude;
         public float ActiveLandingFailureAltitude
         {
             get
@@ -207,63 +324,81 @@ namespace RocketSim
                 return Mathf.Max(240f, Mathf.Max(profile.altitudeMin, profile.altitudeMax) + 100f);
             }
         }
-        /// <summary>
-        /// Current horizontal radius allowed for a successful landing capture.
-        /// </summary>
-        public float CurrentLandingSuccessRadius => LandingDifficultyValue(LandingInitialSuccessRadius, LandingFullSuccessRadius);
-        /// <summary>
-        /// Current total-speed limit allowed for landing success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxSpeed => LandingDifficultyValue(LandingInitialSuccessMaxSpeed, LandingFullSuccessMaxSpeed);
-        /// <summary>
-        /// Current vertical-speed limit allowed for landing success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxVerticalSpeed => LandingDifficultyValue(LandingInitialSuccessMaxVerticalSpeed, LandingFullSuccessMaxVerticalSpeed);
-        /// <summary>
-        /// Current horizontal-speed limit allowed for landing success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxHorizontalSpeed => LandingDifficultyValue(LandingInitialSuccessMaxHorizontalSpeed, LandingFullSuccessMaxHorizontalSpeed);
-        /// <summary>
-        /// Current tilt limit allowed for landing success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxTiltDeg => LandingDifficultyValue(LandingInitialSuccessMaxTiltDeg, LandingFullSuccessMaxTiltDeg);
-        /// <summary>
-        /// Current angular-rate limit allowed for landing success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxAngularRateDegS => LandingDifficultyValue(LandingInitialSuccessMaxAngularRateDegS, LandingFullSuccessMaxAngularRateDegS);
-        /// <summary>
-        /// Current yaw-alignment limit allowed for chopstick capture success.
-        /// </summary>
-        public float CurrentLandingSuccessMaxYawErrorDeg => LandingDifficultyValue(LandingInitialSuccessMaxYawErrorDeg, LandingFullSuccessMaxYawErrorDeg);
-        public float CurrentLandingPlatformHalfSize => LandingDifficultyValue(
-            Mathf.Max(0.5f, landingPlatformHalfSizeInitial),
-            Mathf.Max(0.5f, landingPlatformHalfSizeFull));
-        public float CurrentLandingPlatformStableHoldTime => LandingDifficultyValue(
-            Mathf.Max(0f, landingPlatformStableHoldInitial),
-            Mathf.Max(0f, landingPlatformStableHoldFull));
-        public bool CurrentLandingPlatformTriggerActive =>
-            landingPlatformEnabled &&
-            landingCurriculumProgress >= Mathf.Clamp01(landingPlatformTriggerProgressStart);
-        public bool CurrentLandingPlatformPhysicalActive =>
-            landingPlatformEnabled &&
-            landingCurriculumProgress >= Mathf.Clamp01(landingPlatformPhysicalProgressStart);
-        public bool CurrentLandingPlatformRequired => CurrentLandingPlatformTriggerActive;
+        public float CurrentLandingSuccessRadius => GetLandingCurriculumProfile(landingCurriculumProgress).successRadius;
+        public float CurrentLandingSuccessMaxSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxSpeed;
+        public float CurrentLandingSuccessMaxVerticalSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxVerticalSpeed;
+        public float CurrentLandingSuccessMaxHorizontalSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxHorizontalSpeed;
+        public float CurrentLandingSuccessMaxTiltDeg => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxTiltDeg;
+        public float CurrentLandingSuccessMaxAngularRateDegS => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxAngularRateDegS;
+        public float CurrentLandingSuccessMaxYawErrorDeg => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxYawErrorDeg;
+        public float CurrentLandingPlatformHalfSize => GetLandingCurriculumProfile(landingCurriculumProgress).platformHalfSize;
+        public float CurrentLandingPlatformStableHoldTime => GetLandingCurriculumProfile(landingCurriculumProgress).platformStableHoldTime;
+        // The capture envelope exists from d=0 onward and never becomes a
+        // collision surface. Only its size and required stable time change.
+        public bool CurrentLandingPlatformRequired => landingPlatformEnabled;
 
+        /// <summary>Returns one bounded hysteretic difficulty change per batch.</summary>
+        float LandingCurriculumProgressDelta(float successRate)
+        {
+            float baseStep = Mathf.Min(
+                landingCurriculumMaximumStepPerBatch,
+                Mathf.Clamp(
+                    curriculumDifficultyIncreaseSpeed,
+                    MinCurriculumDifficultyIncreaseSpeed,
+                    MaxCurriculumDifficultyIncreaseSpeed) /
+                Mathf.Max(1f, landingCurriculumBatchesToFullDifficulty));
 
-        /// <summary>
-        /// Backfills and clamps landing curriculum platform settings for older
-        /// serialized configs before derived thresholds are read.
-        /// </summary>
+            float rate = Mathf.Clamp01(successRate);
+            if (rate > landingCurriculumPromotionSuccessRate)
+            {
+                float pressure = Mathf.InverseLerp(landingCurriculumPromotionSuccessRate, 1f, rate);
+                return baseStep * pressure;
+            }
+
+            if (rate < landingCurriculumRetreatSuccessRate)
+            {
+                float pressure = (landingCurriculumRetreatSuccessRate - rate) /
+                                 Mathf.Max(0.01f, landingCurriculumRetreatSuccessRate);
+                return -baseStep * landingCurriculumRetreatSpeedMultiplier * Mathf.Clamp01(pressure);
+            }
+
+            return 0f;
+        }
+
+        /// <summary>Backfills and clamps settings loaded from older configs.</summary>
         void EnsureLandingCurriculumDefaults()
         {
-            if (landingCurriculumSuccessesToFullDifficulty <= 0f)
-                landingCurriculumSuccessesToFullDifficulty = LandingDefaultCurriculumSuccessesToFullDifficulty;
+            if (landingCurriculumBatchesToFullDifficulty <= 0f)
+                landingCurriculumBatchesToFullDifficulty = LandingDefaultCurriculumBatchesToFullDifficulty;
             if (landingCatchAltitude <= 0f)
                 landingCatchAltitude = DefaultLandingCatchAltitude;
             curriculumDifficultyIncreaseSpeed = Mathf.Clamp(
                 curriculumDifficultyIncreaseSpeed <= 0f ? DefaultCurriculumDifficultyIncreaseSpeed : curriculumDifficultyIncreaseSpeed,
                 MinCurriculumDifficultyIncreaseSpeed,
                 MaxCurriculumDifficultyIncreaseSpeed);
+
+            landingCurriculumPromotionSuccessRate = landingCurriculumPromotionSuccessRate <= 0f
+                ? LandingDefaultPromotionSuccessRate
+                : Mathf.Clamp(landingCurriculumPromotionSuccessRate, 0.51f, 0.99f);
+            landingCurriculumRetreatSuccessRate = landingCurriculumRetreatSuccessRate <= 0f
+                ? LandingDefaultRetreatSuccessRate
+                : Mathf.Clamp(landingCurriculumRetreatSuccessRate, 0.01f, landingCurriculumPromotionSuccessRate - 0.01f);
+            landingCurriculumRetreatSpeedMultiplier = landingCurriculumRetreatSpeedMultiplier <= 0f
+                ? LandingDefaultRetreatSpeedMultiplier
+                : Mathf.Clamp(landingCurriculumRetreatSpeedMultiplier, 0.05f, 1f);
+            landingCurriculumMaximumRetreat = landingCurriculumMaximumRetreat <= 0f
+                ? LandingDefaultMaximumRetreat
+                : Mathf.Clamp01(landingCurriculumMaximumRetreat);
+            landingCurriculumMaximumStepPerBatch = landingCurriculumMaximumStepPerBatch <= 0f
+                ? LandingDefaultMaximumStepPerBatch
+                : Mathf.Clamp(landingCurriculumMaximumStepPerBatch, 0.001f, 0.10f);
+            landingCurriculumEasierReplayProbability = landingCurriculumEasierReplayProbability <= 0f
+                ? LandingDefaultEasierReplayProbability
+                : Mathf.Clamp01(landingCurriculumEasierReplayProbability);
+            landingCurriculumEasierReplayOffset = landingCurriculumEasierReplayOffset <= 0f
+                ? LandingDefaultEasierReplayOffset
+                : Mathf.Clamp01(landingCurriculumEasierReplayOffset);
+
             if (landingCurriculumEpisodeCount <= 0 && landingCurriculumSuccesses > 0)
             {
                 landingCurriculumEpisodeCount = landingCurriculumSuccesses;
@@ -273,15 +408,16 @@ namespace RocketSim
 
             if (landingCurriculumLinearProgress <= 0f && landingCurriculumProgress > 0f)
                 landingCurriculumLinearProgress = landingCurriculumProgress;
-
             if (landingCurriculumLinearProgress <= 0f && landingCurriculumSuccesses > 0)
                 landingCurriculumLinearProgress = Mathf.Clamp01(
-                    landingCurriculumSuccesses / Mathf.Max(1f, landingCurriculumSuccessesToFullDifficulty));
+                    landingCurriculumSuccesses / Mathf.Max(1f, landingCurriculumBatchesToFullDifficulty));
 
             landingCurriculumLinearProgress = Mathf.Clamp01(landingCurriculumLinearProgress);
+            landingCurriculumPeakLinearProgress = Mathf.Max(
+                Mathf.Clamp01(landingCurriculumPeakLinearProgress),
+                landingCurriculumLinearProgress);
+            landingCurriculumBatchEpisodeCount = Mathf.Max(0, landingCurriculumBatchEpisodeCount);
 
-            landingPlatformTriggerProgressStart = Mathf.Clamp01(landingPlatformTriggerProgressStart);
-            landingPlatformPhysicalProgressStart = Mathf.Clamp01(landingPlatformPhysicalProgressStart);
             if (landingPlatformHalfSizeInitial <= 0f)
                 landingPlatformHalfSizeInitial = LandingDefaultPlatformHalfSizeInitial;
             if (landingPlatformHalfSizeFull <= 0f)
@@ -291,6 +427,5 @@ namespace RocketSim
             if (landingPlatformStableHoldFull < 0f)
                 landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
         }
-
     }
 }

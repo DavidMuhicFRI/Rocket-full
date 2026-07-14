@@ -545,7 +545,7 @@ MonoBehaviour:
     numLayers: 3
     extrinsicGamma: 0.99
     extrinsicStrength: 1
-    curiosityEnabled: 0
+    curiosityEnabled: 1
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001
@@ -716,7 +716,7 @@ MonoBehaviour:
     numLayers: 3
     extrinsicGamma: 0.99
     extrinsicStrength: 1
-    curiosityEnabled: 0
+    curiosityEnabled: 1
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001

@@ -346,6 +346,21 @@ namespace RocketSim
             ApplyActiveCurriculumFromUI();
 
             root.Add(UIHelper.SectionLabel("Curriculum"));
+            if (envConfig.scenario == ScenarioType.Landing)
+            {
+                var modeField = new EnumField("Landing Progression", envConfig.landingCurriculumMode);
+                modeField.RegisterValueChangedCallback(evt =>
+                {
+                    envConfig.landingCurriculumMode = (LandingCurriculumMode)evt.newValue;
+                    envConfig.ResetLandingCurriculum();
+                    Dirty();
+                    BuildCurriculumSection(root);
+                });
+                root.Add(modeField);
+                root.Add(BuildGroupDetail(
+                    "Adaptive can advance and retreat, Monotonic only advances, and Fixed Full Difficulty is the no-curriculum baseline."));
+            }
+
             root.Add(UIHelper.Slider(
                 "Difficulty Increase Speed",
                 envConfig.curriculumDifficultyIncreaseSpeed,
@@ -358,7 +373,21 @@ namespace RocketSim
                         SimEnvironmentConfig.MinCurriculumDifficultyIncreaseSpeed,
                         SimEnvironmentConfig.MaxCurriculumDifficultyIncreaseSpeed);
                     ApplyActiveCurriculumFromUI();
+                    Dirty();
                 }, "Scales how quickly difficulty rises after the recent success rate is high enough."));
+
+            if (envConfig.scenario == ScenarioType.Landing &&
+                envConfig.landingCurriculumMode == LandingCurriculumMode.Adaptive)
+            {
+                root.Add(UIHelper.ReadOnly(
+                    "Adaptive Rule",
+                    $"> {envConfig.landingCurriculumPromotionSuccessRate:P0} advance, " +
+                    $"< {envConfig.landingCurriculumRetreatSuccessRate:P0} retreat"));
+                root.Add(UIHelper.ReadOnly(
+                    "Easier Replay",
+                    $"{envConfig.landingCurriculumEasierReplayProbability:P0} of episodes, " +
+                    $"-{envConfig.landingCurriculumEasierReplayOffset:P0} difficulty"));
+            }
         }
 
         /// <summary>

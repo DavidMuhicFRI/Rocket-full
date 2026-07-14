@@ -65,7 +65,10 @@ namespace RocketSim
                     Terminal(-35f, f),
                     terminationReason: EpisodeTerminationReason.LandingUnsafeAttitude);
 
-            if (t.distance3D > 150f)
+            // High-altitude landing starts are intentionally far from the
+            // catch point vertically. Only horizontal flyaway is unrecoverable
+            // here; the independent failure-altitude guard handles upward escape.
+            if (t.planarDistance > 150f)
                 return RewardDecision.Terminate(
                     reward,
                     Terminal(-35f, f),

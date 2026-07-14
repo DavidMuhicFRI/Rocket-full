@@ -54,7 +54,8 @@ namespace RocketSim
             {
                 "WallTime", "AreaIndex", "Episode", "StepCount", "Completed",
                 "Success", "TerminationReason", "EnvironmentSeed", "EpisodeSeed",
-                "CurriculumDifficulty01", "LoggedRewardSum", "DurationSeconds",
+                "CurriculumGlobalDifficulty01", "CurriculumEpisodeDifficulty01",
+                "CurriculumReplay01", "LoggedRewardSum", "DurationSeconds",
                 "FixedDeltaTimeSeconds", "DecisionPeriod"
             };
             foreach (string metric in _metricNames)
@@ -101,7 +102,9 @@ namespace RocketSim
             Append(acc.Outcome.terminationReason.ToString());
             Append(acc.Outcome.environmentSeed);
             Append(acc.Outcome.episodeSeed);
+            Append(acc.Outcome.curriculumGlobalDifficulty01);
             Append(acc.Outcome.curriculumDifficulty01);
+            Append(acc.Outcome.curriculumReplay ? 1 : 0);
             Append(acc.LoggedRewardSum);
             Append(acc.Outcome.durationSeconds);
             Append(acc.Outcome.fixedDeltaTimeSeconds);

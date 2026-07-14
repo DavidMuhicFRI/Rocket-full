@@ -1,14 +1,13 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.LandingCapture.cs
-// Purpose: Tracks the generated chopstick landing platform, capture envelope, and platform contact diagnostics.
+// Purpose: Tracks the generated non-physical chopstick target, capture envelope,
+// and stable kinematic capture state.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
 using Unity.MLAgents;
-using Unity.MLAgents.Sensors;
-using Unity.MLAgents.Actuators;
 
 namespace RocketSim
 {
@@ -102,7 +101,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Reconfigures the generated landing platform geometry from current scenario and curriculum thresholds.
+        /// Reconfigures the generated visual platform and logical capture box
+        /// from the episode's frozen curriculum profile.
         /// </summary>
         void UpdateLandingPlatformGeometry()
         {
@@ -125,34 +125,26 @@ namespace RocketSim
             _landingPlatform.Configure(
                 localCenter,
                 envConfig.landingTargetYawDeg,
-                envConfig.CurrentLandingPlatformHalfSize,
-                envConfig.CurrentLandingPlatformTriggerActive,
-                envConfig.CurrentLandingPlatformPhysicalActive);
+                ActiveLandingProfile.platformHalfSize);
         }
 
-        /// <summary>
-        /// Clears per-episode capture, stability, and physical-contact diagnostics
-        /// for the generated landing platform.
-        /// </summary>
+        /// <summary>Clears per-episode capture and stability state.</summary>
         void ResetLandingPlatformState()
         {
             _landingPlatformInsideCapture = false;
             _landingPlatformStable = false;
             _landingPlatformStableTime = 0f;
-            _landingPlatformPhysicalContactCount = 0;
-            _landingPlatformLastContactSpeed = 0f;
         }
 
         /// <summary>
-        /// Updates capture-envelope membership and stable-hold time for the
-        /// landing platform using the current rocket kinematics.
+        /// Updates capture-envelope membership and stable-hold time using only
+        /// kinematics. The target never applies collision forces to the rocket.
         /// </summary>
         void UpdateLandingPlatformState(float dt)
         {
             if (envConfig == null ||
                 envConfig.scenario != ScenarioType.Landing ||
                 !envConfig.landingPlatformEnabled ||
-                !envConfig.CurrentLandingPlatformTriggerActive ||
                 !_landingPlatform)
             {
                 _landingPlatformInsideCapture = false;
@@ -170,12 +162,12 @@ namespace RocketSim
                 _landingPlatformStableTime = 0f;
 
             _landingPlatformStable = platformReady &&
-                _landingPlatformStableTime >= Mathf.Max(0f, envConfig.CurrentLandingPlatformStableHoldTime);
+                _landingPlatformStableTime >= Mathf.Max(0f, ActiveLandingProfile.platformStableHoldTime);
         }
 
         /// <summary>
         /// Returns whether the rocket currently satisfies all capture-platform
-        /// kinematic limits while inside the platform envelope.
+        /// kinematic limits while inside the logical platform envelope.
         /// </summary>
         bool LandingPlatformKinematicsReady()
         {
@@ -184,70 +176,21 @@ namespace RocketSim
 
             RewardTerms terms = MeasureRewardTerms(
                 ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
+            LandingCurriculumProfile landing = ActiveLandingProfile;
             float tiltLimitDeg = Mathf.Min(
-                envConfig.CurrentLandingSuccessMaxTiltDeg,
+                landing.successMaxTiltDeg,
                 Mathf.Acos(0.94f) * Mathf.Rad2Deg);
 
             return LandingCaptureEvaluator.IsKinematicallyReady(
                 terms,
                 Vector3.Angle(transform.up, Vector3.up),
                 tiltLimitDeg,
-                envConfig.CurrentLandingSuccessRadius,
-                envConfig.CurrentLandingSuccessMaxSpeed,
-                envConfig.CurrentLandingSuccessMaxVerticalSpeed,
-                envConfig.CurrentLandingSuccessMaxHorizontalSpeed,
-                envConfig.CurrentLandingSuccessMaxAngularRateDegS,
-                envConfig.CurrentLandingSuccessMaxYawErrorDeg);
+                landing.successRadius,
+                landing.successMaxSpeed,
+                landing.successMaxVerticalSpeed,
+                landing.successMaxHorizontalSpeed,
+                landing.successMaxAngularRateDegS,
+                landing.successMaxYawErrorDeg);
         }
-
-        /// <summary>
-        /// Records the start of a physical contact with the active landing
-        /// platform surface for landing diagnostics.
-        /// </summary>
-        void OnCollisionEnter(Collision collision)
-        {
-            if (!TryGetLandingPlatformPart(collision.collider, out var part) || !part.physicalSurface)
-                return;
-
-            _landingPlatformPhysicalContactCount++;
-            _landingPlatformLastContactSpeed = Mathf.Max(
-                _landingPlatformLastContactSpeed,
-                collision.relativeVelocity.magnitude);
-        }
-
-        /// <summary>
-        /// Records or handles an ongoing collision.
-        /// </summary>
-        void OnCollisionStay(Collision collision)
-        {
-            if (!TryGetLandingPlatformPart(collision.collider, out var part) || !part.physicalSurface)
-                return;
-
-            _landingPlatformLastContactSpeed = Mathf.Max(
-                _landingPlatformLastContactSpeed,
-                collision.relativeVelocity.magnitude);
-        }
-
-        /// <summary>
-        /// Records the end of a physical contact with the active landing
-        /// platform surface for landing diagnostics.
-        /// </summary>
-        void OnCollisionExit(Collision collision)
-        {
-            if (!TryGetLandingPlatformPart(collision.collider, out var part) || !part.physicalSurface)
-                return;
-
-            _landingPlatformPhysicalContactCount = Mathf.Max(0, _landingPlatformPhysicalContactCount - 1);
-        }
-
-        /// <summary>
-        /// Attempts to get landing platform part and reports whether it succeeded.
-        /// </summary>
-        bool TryGetLandingPlatformPart(Collider collider, out LandingPlatformPart part)
-        {
-            part = collider ? collider.GetComponentInParent<LandingPlatformPart>() : null;
-            return part && part.platform && part.platform == _landingPlatform;
-        }
-
     }
 }

@@ -112,8 +112,9 @@ namespace RocketSim
         bool _landingPlatformInsideCapture;
         bool _landingPlatformStable;
         float _landingPlatformStableTime;
-        int _landingPlatformPhysicalContactCount;
-        float _landingPlatformLastContactSpeed;
+        LandingCurriculumProfile _landingEpisodeProfile;
+        bool _landingEpisodeProfileInitialized;
+        bool _landingEpisodeUsesEasierReplay;
 
         const float Rho0 = 1.225f; // ISA sea-level density (kg/m³)
         const float HScale = 8500f; // ISA scale height (m)
@@ -162,6 +163,43 @@ namespace RocketSim
         Vector2 RandomInsideUnitCircle() => _episodeRandom.InsideUnitCircle();
 
         Vector3 RandomUnitVector3() => _episodeRandom.UnitVector3();
+
+        /// <summary>
+        /// Returns the landing thresholds frozen at episode start. Editor
+        /// previews fall back to the shared current profile before an episode exists.
+        /// </summary>
+        LandingCurriculumProfile ActiveLandingProfile =>
+            _landingEpisodeProfileInitialized
+                ? _landingEpisodeProfile
+                : envConfig.GetLandingCurriculumProfile(envConfig.landingCurriculumProgress);
+
+        /// <summary>
+        /// Freezes one task difficulty for the whole episode and independently
+        /// samples the controlled easier-task replay condition.
+        /// </summary>
+        void PrepareLandingEpisodeProfile()
+        {
+            _landingEpisodeProfileInitialized = false;
+            _landingEpisodeUsesEasierReplay = false;
+            if (envConfig == null || envConfig.scenario != ScenarioType.Landing)
+                return;
+
+            // Use a separate deterministic stream so enabling replay does not
+            // shift spawn, wind, or fault samples for the same experiment seed.
+            var curriculumRandom = new DeterministicRandom(DeterministicRandom.EpisodeSeed(
+                envConfig.environmentSeed,
+                _areaIndex,
+                _episode,
+                stream: 1));
+            _landingEpisodeUsesEasierReplay =
+                envConfig.behaviorType == BehaviorType.Training &&
+                envConfig.landingCurriculumEnabled &&
+                envConfig.landingCurriculumProgress > 0f &&
+                curriculumRandom.Chance(envConfig.landingCurriculumEasierReplayProbability);
+            float difficulty = envConfig.LandingEpisodeDifficulty(_landingEpisodeUsesEasierReplay);
+            _landingEpisodeProfile = envConfig.GetLandingCurriculumProfile(difficulty);
+            _landingEpisodeProfileInitialized = true;
+        }
 
         Vector3 RandomPlanarVector(float maxMagnitude)
         {
