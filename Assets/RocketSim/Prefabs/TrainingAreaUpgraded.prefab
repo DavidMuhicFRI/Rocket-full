@@ -109,7 +109,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -129,6 +129,7 @@ GameObject:
   - component: {fileID: 6886784285527595339}
   - component: {fileID: 5910595304372031533}
   - component: {fileID: 5862036025156595413}
+  - component: {fileID: 6623113834094540736}
   m_Layer: 0
   m_Name: Plume_Outboard
   m_TagString: Untagged
@@ -579,7 +580,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeY:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -632,7 +633,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeZ:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -5076,6 +5077,35 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
+--- !u!114 &6623113834094540736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 82672988223524507}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &160844665618855089
 GameObject:
   m_ObjectHideFlags: 0
@@ -5380,7 +5410,7 @@ GameObject:
   - component: {fileID: 135585410519809764}
   - component: {fileID: 7474282814388881406}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Neg
+  m_Name: Nozzle_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5678,7 +5708,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -10751,7 +10781,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -10770,7 +10800,7 @@ GameObject:
   - component: {fileID: 6764076224222820565}
   - component: {fileID: 8177760256392577211}
   m_Layer: 0
-  m_Name: Plume_Roll_Pos
+  m_Name: Plume_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -15731,7 +15761,7 @@ GameObject:
   - component: {fileID: 8711221473650837285}
   - component: {fileID: 2106043060869546573}
   m_Layer: 0
-  m_Name: Plume_Roll_Pos
+  m_Name: Plume_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -25656,7 +25686,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &389746286599242994
 Transform:
   m_ObjectHideFlags: 0
@@ -25867,7 +25897,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -25919,7 +25949,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4bee0e134834d989f8a14816535011f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.RcsComponent
-  thrustPerThruster: 6000
+  thrustPerThruster: 750
+  specificImpulse: 70
+  minimumPulseDuration: 0.1
+  propellantMass: 150
+  dryMass: 250
 --- !u!1 &1934748426697319136
 GameObject:
   m_ObjectHideFlags: 0
@@ -25969,12 +26003,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.FinComponent
   layout: 1
-  finWidthX: 1.73
-  finWidthZ: 1.73
-  finHeight: 0.3
+  finWidthX: 1.59
+  finWidthZ: 1.23
+  finThickness: 0.3
   maxFinAngle: 35
   finSlewRate: 50
-  liftScale: 1
+  liftScale: 0.5
 --- !u!1 &1959764380284114677
 GameObject:
   m_ObjectHideFlags: 0
@@ -26084,7 +26118,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -26198,7 +26232,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -26214,7 +26248,7 @@ GameObject:
   - component: {fileID: 945143404002047576}
   - component: {fileID: 6181091270261400219}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Neg
+  m_Name: Nozzle_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -26307,7 +26341,7 @@ GameObject:
   - component: {fileID: 8616033029113029878}
   - component: {fileID: 2829123081261662983}
   m_Layer: 0
-  m_Name: Plume_Roll_Neg
+  m_Name: Plume_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -31268,7 +31302,7 @@ GameObject:
   - component: {fileID: 7681817906673860829}
   - component: {fileID: 4688177897864921493}
   m_Layer: 0
-  m_Name: Plume_Roll_Pos
+  m_Name: Plume_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -36322,7 +36356,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -36428,7 +36462,7 @@ GameObject:
   - component: {fileID: 4900109999300375122}
   - component: {fileID: 183349216334881099}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Pos
+  m_Name: Nozzle_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -36608,7 +36642,7 @@ GameObject:
   - component: {fileID: 4069992682624304678}
   - component: {fileID: 6709039031886196120}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Neg
+  m_Name: Nozzle_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -36715,7 +36749,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.9032, y: 0, z: 0}
-  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8268164665464800702}
@@ -36819,7 +36853,7 @@ GameObject:
   - component: {fileID: 3953989109403825280}
   - component: {fileID: 4737518128995439821}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Pos
+  m_Name: Nozzle_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -37006,7 +37040,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -37027,7 +37061,7 @@ GameObject:
   - component: {fileID: 1401043790532486453}
   - component: {fileID: 6137013128435696607}
   m_Layer: 0
-  m_Name: Plume_Roll_Neg
+  m_Name: Plume_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -41988,7 +42022,7 @@ GameObject:
   - component: {fileID: 2910707859889182506}
   - component: {fileID: 2904007776623747585}
   m_Layer: 0
-  m_Name: Plume_Roll_Pos
+  m_Name: Plume_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -47126,7 +47160,7 @@ GameObject:
   - component: {fileID: 6881820054481581772}
   - component: {fileID: 6344801803835873435}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Neg
+  m_Name: Nozzle_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -47313,7 +47347,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -47331,7 +47365,7 @@ GameObject:
   - component: {fileID: 4413063490919829180}
   - component: {fileID: 6334798281591624381}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Pos
+  m_Name: Nozzle_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -47518,7 +47552,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -47579,13 +47613,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.ThrusterComponent
   layout: 2
   independentEngines: 1
+  octawebBurnGroup: 0
   maxThrustPerEngine: 845000
-  minThrottle: 0.39
+  minThrottle: 0.57
   engineSpacing: 0.8
   specificImpulse: 282
   throttleSpoolRate: 5
   gimbalSlewRate: 30
   maxGimbalAngle: 5
+  engineStartupDelay: 0.85
+  engineShutdownTransient: 0.25
+  engineMinimumRunTime: 2
+  engineRestartCooldown: 2
 --- !u!1 &5877592051874722911
 GameObject:
   m_ObjectHideFlags: 0
@@ -47986,7 +48025,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -48005,7 +48044,7 @@ GameObject:
   - component: {fileID: 1028721561453070956}
   - component: {fileID: 546541990660724618}
   m_Layer: 0
-  m_Name: Plume_Roll_Neg
+  m_Name: Plume_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -53059,7 +53098,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -53081,7 +53120,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2731128633160038452
 Transform:
   m_ObjectHideFlags: 0
@@ -53199,7 +53238,7 @@ GameObject:
   - component: {fileID: 3384703432311828266}
   - component: {fileID: 8509711029289634236}
   m_Layer: 0
-  m_Name: Plume_Roll_Neg
+  m_Name: Plume_Tangent_Neg
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -58254,7 +58293,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -58369,7 +58408,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -58483,7 +58522,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -58596,7 +58635,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -58710,7 +58749,7 @@ SphereCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
@@ -58823,7 +58862,7 @@ CapsuleCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_Radius: 0.5
   m_Height: 2
@@ -63914,7 +63953,7 @@ GameObject:
   - component: {fileID: 1720874302854436336}
   - component: {fileID: 1988265800901470369}
   m_Layer: 0
-  m_Name: Nozzle_Roll_Pos
+  m_Name: Nozzle_Tangent_Pos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -64021,7 +64060,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0.00000004371139}
   m_LocalPosition: {x: -1.9032, y: 0, z: -0.00000016638303}
-  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3797669562779518256}
@@ -64146,24 +64185,52 @@ PrefabInstance:
       value: 41.2
       objectReference: {fileID: 0}
     - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
-      propertyPath: m_BrainParameters.VectorActionSpaceType
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       propertyPath: m_BrainParameters.VectorObservationSize
-      value: 62
+      value: 36
       objectReference: {fileID: 0}
     - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       propertyPath: m_BrainParameters.VectorActionSize.Array.size
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
-      propertyPath: 'm_BrainParameters.VectorActionSize.Array.data[0]'
-      value: 43
+      propertyPath: m_BrainParameters.m_ActionSpec.BranchSizes.Array.size
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       propertyPath: m_BrainParameters.m_ActionSpec.m_NumContinuousActions
-      value: 43
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[0]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[1]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[2]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[3]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[4]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[5]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[6]'
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7332150045035473772, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: 'm_BrainParameters.m_ActionSpec.BranchSizes.Array.data[7]'
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 8205916232668272139, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       propertyPath: m_LocalPosition.x
@@ -64260,7 +64327,7 @@ MonoBehaviour:
   height: 41.2
   baseDryMass: 22200
   baseFuelMass: 400000
-  startFuelMass: 40000
+  startFuelMass: 32000
 --- !u!1 &2938874553081310782 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8776197568274017376, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}

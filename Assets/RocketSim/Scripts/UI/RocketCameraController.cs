@@ -1,390 +1,578 @@
-﻿using System.Collections.Generic;
+// -----------------------------------------------------------------------------
+// File: Assets/RocketSim/Scripts/UI/RocketCameraController.cs
+// Purpose: Follows a selected rocket, switches between overview/hardware views,
+// handles orbit and zoom input, and keeps the HUD tied to the watched agent.
+// Main flow: choose rocket/view -> build an ideal camera pose -> smooth toward it
+// in LateUpdate so physics has already moved the rocket for the current frame.
+// -----------------------------------------------------------------------------
+
 using RocketSim;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 namespace UI
 {
-    /// Attach to the main Camera.
-    /// Mouse wheel          → zoom (rocket stays centred)
-    /// Ctrl + scroll up     → previous rocket
-    /// Ctrl + scroll down   → next rocket
-    /// Left mouse drag      → orbit around current rocket
-    /// The HUD agent reference is updated automatically on switch.
-    [RequireComponent(typeof(Camera))]
-    public class RocketCameraController : MonoBehaviour
+    /// <summary>
+    /// Camera positions available while watching a rocket.  The numeric order is
+    /// also the order used by the number keys and by <see cref="CycleView"/>.
+    /// </summary>
+    public enum RocketCameraView
     {
-        // ── Inspector wiring ─────────────────────────────────────────────────
-        [Header("References")]
+        Orbit = 0,
+        Side = 1,
+        Top = 2,
+        Thrusters = 3,
+        Rcs = 4,
+        Fins = 5,
+        Nose = 6,
+        Chase = 7,
+        Wide = 8
+    }
+
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(Camera))]
+    public sealed class RocketCameraController : MonoBehaviour
+    {
+        [Header("Scene references")]
         public TrainingAreaManager trainingAreaManager;
-        public RocketHUD           hud;
-
-        [Header("Zoom")]
-        [Tooltip("Starting distance from rocket in metres")]
-        public float startDistance  = 40f;
-        public float minDistance    = 5f;
-        public float maxDistance    = 400f;
-        [Tooltip("Higher = more distance change per scroll tick")]
-        public float zoomSensitivity = 0.12f;
-        [Tooltip("Smooth damp speed — higher feels snappier")]
-        public float zoomSmoothing  = 12f;
-
-        [Header("Orbit (left-mouse drag)")]
-        public float orbitSensitivity = 0.4f;
-        [Range(-89f, 0f)]
-        public float minElevation   = -10f;
-        [Range(0f, 89f)]
-        public float maxElevation   = 80f;
-
-        [Header("Follow")]
-        [Tooltip("How quickly camera tracks a moving rocket")]
-        public float followSmoothing = 8f;
-        [Tooltip("Extra smoothing during rocket switch (lerp to new target)")]
-        public float switchSmoothing = 5f;
-
-        [Header("Selector Label")]
-        [Tooltip("Optional TMP label — e.g. 'ROCKET 03 / 16'  Leave null to skip.")]
+        public RocketHUD hud;
         public TextMeshProUGUI selectorLabel;
 
-        [Header("Camera Presets")]
-        public float sideViewDistance = 80f;
-        public float eagleViewDistance = 120f;
-        public float closeViewDistance = 24f;
+        [Header("Orbit and zoom")]
+        [Min(0.1f)] public float startDistance = 70f;
+        [Min(0.1f)] public float minDistance = 5f;
+        [Min(0.1f)] public float maxDistance = 400f;
+        [Min(0f)] public float zoomSensitivity = 0.12f;
+        [Min(0f)] public float zoomSmoothing = 12f;
+        [Min(0f)] public float orbitSensitivity = 0.4f;
+        [Range(-89f, 89f)] public float minElevation = -10f;
+        [Range(-89f, 89f)] public float maxElevation = 80f;
 
-        // ── Private state ────────────────────────────────────────────────────
-        int     _index;            // currently watched agent index
-        float   _azimuth   = 225f; // horizontal angle (degrees)
-        float   _elevation =  20f; // vertical angle (degrees)
-        float   _distance;         // current (smoothed) distance
-        float   _targetDist;       // desired distance
-        float   _distVelocity;     // used by SmoothDamp
+        [Header("Follow")]
+        [Min(0f)] public float followSmoothing = 8f;
+        [Min(0f)] public float switchSmoothing = 5f;
 
-        Vector3 _lookTarget;       // smoothed world position we orbit around
-        Vector3 _lookVelocity;     // used by SmoothDamp
+        [Header("View distances")]
+        [Min(0.1f)] public float sideViewDistance = 80f;
+        [Min(0.1f)] public float eagleViewDistance = 120f;
+        [Min(0.1f)] public float closeViewDistance = 24f;
 
-        bool    _switching;        // true while blending to a new rocket
-        Vector3 _switchOrigin;     // camera look-at point at moment of switch
-        string  _viewName = "ORBIT";
+        [Header("Initial view")]
+        [SerializeField] RocketCameraView initialView = RocketCameraView.Orbit;
+        [SerializeField] float initialOrbitYaw = 25f;
+        [SerializeField] float initialOrbitElevation = 15f;
 
-        // ── Convenience ──────────────────────────────────────────────────────
-        IReadOnlyList<FalconAgent> Agents =>
-            trainingAreaManager != null ? trainingAreaManager.Agents : null;
+        FalconAgent _selectedAgent;
+        RocketAssembly _selectedAssembly;
+        RocketCameraView _currentView;
+        Vector3 _smoothedFocus;
+        float _orbitYaw;
+        float _orbitElevation;
+        float _distance;
+        float _targetDistance;
+        bool _hasCameraPose;
+        bool _isOrbitDragging;
 
-        FalconAgent Current =>
-            Agents != null && Agents.Count > 0 && _index < Agents.Count
-                ? Agents[_index]
-                : null;
+        public FalconAgent SelectedAgent => _selectedAgent;
+        public RocketAssembly SelectedAssembly => _selectedAssembly;
+        public RocketCameraView CurrentView => _currentView;
 
-        // =====================================================================
+        /// <summary>Initializes view, orbit angles, and zoom from Inspector settings.</summary>
+        void Awake()
+        {
+            _currentView = initialView;
+            _orbitYaw = initialOrbitYaw;
+            _orbitElevation = Mathf.Clamp(initialOrbitElevation, minElevation, maxElevation);
+            _distance = _targetDistance = Mathf.Clamp(startDistance, minDistance, maxDistance);
+        }
+
+        /// <summary>Finds the area manager, creates/fetches the HUD, and selects a rocket.</summary>
         void Start()
         {
-            ResolveHud();
-            SetHudVisible(Current != null);
+            if (!trainingAreaManager)
+                trainingAreaManager = FindAnyObjectByType<TrainingAreaManager>();
 
-            _distance    = startDistance;
-            _targetDist  = startDistance;
-            _lookTarget  = Current != null ? Current.transform.position : Vector3.zero;
-
-            RefreshHUD();
-            RefreshLabel();
+            EnsureHud();
+            OnAgentsReady();
         }
 
-        // =====================================================================
-        void LateUpdate()
+        /// <summary>Ends an orbit drag if the component or scene becomes inactive.</summary>
+        void OnDisable()
         {
-            // Rebuild list each frame in case SpawnAreas was called after Start
-            if (Agents == null || Agents.Count == 0) return;
-            _index = Mathf.Clamp(_index, 0, Agents.Count - 1);
-
-            HandleInput();
-            SmoothFollowTarget();
-            PositionCamera();
+            _isOrbitDragging = false;
         }
 
-        // =====================================================================
-        //  Input
-        // =====================================================================
-        void HandleInput()
+        /// <summary>
+        /// Repairs Inspector values so distance and elevation ranges remain valid
+        /// before Play Mode begins.
+        /// </summary>
+        void OnValidate()
         {
-            HandlePresetKeys();
-
-            float scroll = Input.GetAxis("Mouse ScrollWheel");
-
-            if (scroll != 0f)
-            {
-                bool ctrl = Input.GetKey(KeyCode.LeftControl) ||
-                            Input.GetKey(KeyCode.RightControl);
-
-                if (ctrl)
-                {
-                    // ── Switch rocket ────────────────────────────────────────
-                    // Scroll UP (positive) = previous rocket (feels natural:
-                    // "scrolling up the list"). Scroll DOWN = next.
-                    int dir = scroll > 0f ? -1 : 1;
-                    SwitchTo((_index + dir + Agents.Count) % Agents.Count);
-                }
-                else
-                {
-                    // ── Zoom ─────────────────────────────────────────────────
-                    // Proportional zoom: same gesture zooms less when close,
-                    // more when far — feels consistent at any distance.
-                    _targetDist *= 1f - scroll * zoomSensitivity * 10f;
-                    _targetDist  = Mathf.Clamp(_targetDist, minDistance, maxDistance);
-                }
-            }
-
-            // ── Orbit (left-drag) ────────────────────────────────────────────
-            if (Input.GetMouseButton(0))
-            {
-                _azimuth   += Input.GetAxis("Mouse X") * orbitSensitivity * _distance * 0.05f;
-                _elevation -= Input.GetAxis("Mouse Y") * orbitSensitivity * _distance * 0.05f;
-                _elevation  = Mathf.Clamp(_elevation, minElevation, maxElevation);
-            }
+            minDistance = Mathf.Max(0.1f, minDistance);
+            maxDistance = Mathf.Max(minDistance, maxDistance);
+            startDistance = Mathf.Clamp(startDistance, minDistance, maxDistance);
+            maxElevation = Mathf.Max(minElevation, maxElevation);
+            sideViewDistance = Mathf.Max(0.1f, sideViewDistance);
+            eagleViewDistance = Mathf.Max(0.1f, eagleViewDistance);
+            closeViewDistance = Mathf.Max(0.1f, closeViewDistance);
         }
 
-        void HandlePresetKeys()
-        {
-            if (KeyPressed(KeyCode.Alpha1, KeyCode.Keypad1))
-                ApplyViewPreset("CHASE", 225f, 20f, startDistance);
-
-            if (KeyPressed(KeyCode.Alpha2, KeyCode.Keypad2))
-                ApplyViewPreset("X SIDE", 90f, 8f, sideViewDistance);
-
-            if (KeyPressed(KeyCode.Alpha3, KeyCode.Keypad3))
-                ApplyViewPreset("Z SIDE", 0f, 8f, sideViewDistance);
-
-            if (KeyPressed(KeyCode.Alpha4, KeyCode.Keypad4))
-                ApplyViewPreset("EAGLE", 0f, 82f, eagleViewDistance);
-
-            if (KeyPressed(KeyCode.Alpha5, KeyCode.Keypad5))
-                ApplyViewPreset("LOW ENGINE", 180f, -6f, closeViewDistance);
-
-            if (KeyPressed(KeyCode.Alpha6, KeyCode.Keypad6))
-                ApplyViewPreset("APPROACH", 135f, 32f, sideViewDistance);
-        }
-
-        static bool KeyPressed(KeyCode alpha, KeyCode keypad)
-        {
-            return Input.GetKeyDown(alpha) || Input.GetKeyDown(keypad);
-        }
-
-        void ApplyViewPreset(string viewName, float azimuth, float elevation, float distance)
-        {
-            _viewName = viewName;
-            _azimuth = azimuth;
-            _elevation = Mathf.Clamp(elevation, minElevation, maxElevation);
-            _targetDist = Mathf.Clamp(distance, minDistance, maxDistance);
-            RefreshLabel();
-        }
-
-        // =====================================================================
-        //  Rocket switching
-        // =====================================================================
-        void SwitchTo(int newIndex)
-        {
-            if (newIndex == _index) return;
-
-            _switchOrigin = _lookTarget;  // remember where we were looking
-            _switching    = true;
-            _index        = newIndex;
-
-            RefreshHUD();
-            RefreshLabel();
-        }
-
-        // =====================================================================
-        //  Follow logic
-        // =====================================================================
-        void SmoothFollowTarget()
-        {
-            if (Current == null) return;
-
-            Vector3 rocketPos = Current.transform.position;
-
-            if (_switching)
-            {
-                // Blend from old look target to new rocket quickly
-                _lookTarget = Vector3.SmoothDamp(
-                    _lookTarget, rocketPos,
-                    ref _lookVelocity,
-                    1f / switchSmoothing);
-
-                // Stop switching once we're close enough
-                if (Vector3.Distance(_lookTarget, rocketPos) < 0.5f)
-                    _switching = false;
-            }
-            else
-            {
-                // Normal per-frame follow
-                _lookTarget = Vector3.SmoothDamp(
-                    _lookTarget, rocketPos,
-                    ref _lookVelocity,
-                    1f / followSmoothing);
-            }
-        }
-
-        // =====================================================================
-        //  Camera positioning
-        // =====================================================================
-        void PositionCamera()
-        {
-            // Smooth zoom
-            _distance = Mathf.SmoothDamp(
-                _distance, _targetDist,
-                ref _distVelocity,
-                1f / zoomSmoothing);
-
-            // Spherical → Cartesian offset
-            float azRad = _azimuth   * Mathf.Deg2Rad;
-            float elRad = _elevation * Mathf.Deg2Rad;
-
-            Vector3 offset = new Vector3(
-                Mathf.Sin(azRad) * Mathf.Cos(elRad),
-                Mathf.Sin(elRad),
-                Mathf.Cos(azRad) * Mathf.Cos(elRad)
-            ) * _distance;
-
-            transform.position = _lookTarget + offset;
-            transform.LookAt(_lookTarget);
-        }
-
-        // =====================================================================
-        //  HUD + label
-        // =====================================================================
-        void RefreshHUD()
-        {
-            ResolveHud();
-            if (hud == null) return;
-
-            hud.SetAgent(Current);
-        }
-
-        void RefreshLabel()
-        {
-            if (selectorLabel == null) return;
-
-            int total = Agents?.Count ?? 0;
-            // e.g.  "ROCKET 03 / 16  [Ctrl+Scroll to switch]"
-            selectorLabel.text = total > 0
-                ? $"ROCKET <color=#FFD166>{(_index + 1):D2}</color> / {total:D2}" +
-                  $"  <size=60%><color=#888888>{_viewName}  |  1-6 VIEWS  |  CTRL+SCROLL SWITCH</color></size>"
-                : "NO AGENTS";
-        }
-        
+        /// <summary>
+        /// Refreshes the watched rocket after the manager has replaced or spawned
+        /// training areas. Called by <see cref="TrainingAreaManager"/>.
+        /// </summary>
         public void OnAgentsReady()
         {
-            ResolveHud();
-            _index      = 0;
-            _lookTarget = Current != null ? Current.transform.position : Vector3.zero;
-            _switching  = false;
-            SetHudVisible(Current != null);
-            RefreshHUD();
+            if (!trainingAreaManager)
+                trainingAreaManager = FindAnyObjectByType<TrainingAreaManager>();
+
+            FalconAgent nextAgent = null;
+            if (trainingAreaManager != null)
+            {
+                var agents = trainingAreaManager.Agents;
+                for (int i = 0; i < agents.Count; i++)
+                {
+                    if (!agents[i]) continue;
+                    if (agents[i] == _selectedAgent)
+                    {
+                        nextAgent = _selectedAgent;
+                        break;
+                    }
+
+                    if (!nextAgent) nextAgent = agents[i];
+                }
+            }
+
+            if (nextAgent)
+                SelectAgent(nextAgent, snap: true);
+            else
+                SelectAssembly(FindFallbackAssembly(), snap: true);
+        }
+
+        /// <summary>Selects an agent and points both camera and HUD at it.</summary>
+        public void SelectAgent(FalconAgent agent, bool snap = false)
+        {
+            _selectedAgent = agent;
+            _selectedAssembly = agent ? agent.assembly : null;
+            if (!_selectedAssembly && agent)
+                _selectedAssembly = agent.GetComponentInChildren<RocketAssembly>(true);
+
+            EnsureHud();
+            if (hud) hud.SetAgent(agent);
+            if (snap) SnapToCurrentView();
             RefreshLabel();
         }
 
-        void ResolveHud()
-        {
-            if (hud != null) return;
+        /// <summary>Selects the next spawned rocket, wrapping at the end.</summary>
+        public void NextAgent() => SelectRelativeAgent(1);
 
-            var huds = Resources.FindObjectsOfTypeAll<RocketHUD>();
-            for (int i = 0; i < huds.Length; i++)
+        /// <summary>Selects the previous spawned rocket, wrapping at the start.</summary>
+        public void PreviousAgent() => SelectRelativeAgent(-1);
+
+        /// <summary>Changes to a specific view. This method is suitable for UI buttons.</summary>
+        public void SetView(RocketCameraView view)
+        {
+            if (!System.Enum.IsDefined(typeof(RocketCameraView), view)) return;
+            _currentView = view;
+            _isOrbitDragging = false;
+            RefreshLabel();
+        }
+
+        /// <summary>Changes view using an enum integer, for Unity inspector events.</summary>
+        public void SetView(int view) => SetView((RocketCameraView)view);
+
+        /// <summary>Moves to the next camera view and wraps back to orbit.</summary>
+        public void CycleView()
+        {
+            int count = System.Enum.GetValues(typeof(RocketCameraView)).Length;
+            SetView((RocketCameraView)(((int)_currentView + 1) % count));
+        }
+
+        /// <summary>Immediately places the camera at the current view's desired pose.</summary>
+        public void SnapToCurrentView()
+        {
+            if (!_selectedAssembly) return;
+
+            _distance = _targetDistance;
+            CameraPose pose = BuildCameraPose();
+            transform.SetPositionAndRotation(pose.position, pose.rotation);
+            _smoothedFocus = pose.focus;
+            _hasCameraPose = true;
+        }
+
+        /// <summary>
+        /// Reads input, resolves a valid rocket, and smoothly approaches the ideal
+        /// pose after the current physics/render movement has completed.
+        /// </summary>
+        void LateUpdate()
+        {
+            ReadInput();
+
+            if (!_selectedAssembly)
             {
-                if (!huds[i] || !huds[i].gameObject.scene.IsValid()) continue;
-                hud = huds[i];
-                break;
+                if (_selectedAgent) _selectedAssembly = _selectedAgent.assembly;
+                if (!_selectedAssembly) SelectAssembly(FindFallbackAssembly(), snap: false);
+                if (!_selectedAssembly) return;
             }
 
-            if (hud == null)
-                hud = CreateRuntimeHud();
+            float dt = Time.unscaledDeltaTime;
+            float zoomT = DampFactor(zoomSmoothing, dt);
+            _distance = Mathf.Lerp(_distance, _targetDistance, zoomT);
+
+            CameraPose pose = BuildCameraPose();
+            if (!_hasCameraPose)
+            {
+                transform.SetPositionAndRotation(pose.position, pose.rotation);
+                _smoothedFocus = pose.focus;
+                _hasCameraPose = true;
+                return;
+            }
+
+            float smoothing = _currentView == RocketCameraView.Orbit ? followSmoothing : switchSmoothing;
+            float t = DampFactor(smoothing, dt);
+            _smoothedFocus = Vector3.Lerp(_smoothedFocus, pose.focus, t);
+
+            // Rebuild rotation toward the smoothed point so a fast rocket never
+            // drifts away from the centre of the shot during interpolation.
+            Vector3 position = Vector3.Lerp(transform.position, pose.position, t);
+            Quaternion lookRotation = SafeLookRotation(_smoothedFocus - position, pose.up, pose.rotation);
+            Quaternion rotation = Quaternion.Slerp(transform.rotation, lookRotation, t);
+            transform.SetPositionAndRotation(position, rotation);
         }
 
-        void SetHudVisible(bool visible)
+        /// <summary>
+        /// Handles view keys, rocket selection, reset, right-drag orbit, and wheel
+        /// zoom. Mouse camera input is ignored while the pointer is over UI.
+        /// </summary>
+        void ReadInput()
         {
-            if (hud != null && hud.gameObject.activeSelf != visible)
-                hud.gameObject.SetActive(visible);
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.digit1Key.wasPressedThisFrame) SetView(RocketCameraView.Orbit);
+                if (keyboard.digit2Key.wasPressedThisFrame) SetView(RocketCameraView.Side);
+                if (keyboard.digit3Key.wasPressedThisFrame) SetView(RocketCameraView.Top);
+                if (keyboard.digit4Key.wasPressedThisFrame) SetView(RocketCameraView.Thrusters);
+                if (keyboard.digit5Key.wasPressedThisFrame) SetView(RocketCameraView.Rcs);
+                if (keyboard.digit6Key.wasPressedThisFrame) SetView(RocketCameraView.Fins);
+                if (keyboard.digit7Key.wasPressedThisFrame) SetView(RocketCameraView.Nose);
+                if (keyboard.digit8Key.wasPressedThisFrame) SetView(RocketCameraView.Chase);
+                if (keyboard.digit9Key.wasPressedThisFrame) SetView(RocketCameraView.Wide);
+                if (keyboard.vKey.wasPressedThisFrame) CycleView();
+                if (keyboard.rightBracketKey.wasPressedThisFrame ||
+                    (keyboard.tabKey.wasPressedThisFrame && !keyboard.shiftKey.isPressed))
+                    NextAgent();
+                if (keyboard.leftBracketKey.wasPressedThisFrame ||
+                    (keyboard.tabKey.wasPressedThisFrame && keyboard.shiftKey.isPressed))
+                    PreviousAgent();
+                if (keyboard.fKey.wasPressedThisFrame)
+                {
+                    _targetDistance = Mathf.Clamp(startDistance, minDistance, maxDistance);
+                    SnapToCurrentView();
+                }
+            }
+
+            Mouse mouse = Mouse.current;
+            if (mouse == null) return;
+
+            bool pointerOverUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            if (mouse.rightButton.wasPressedThisFrame && !pointerOverUi)
+                _isOrbitDragging = true;
+            if (mouse.rightButton.wasReleasedThisFrame)
+                _isOrbitDragging = false;
+
+            if (_isOrbitDragging && mouse.rightButton.isPressed)
+            {
+                if (_currentView != RocketCameraView.Orbit)
+                {
+                    SetView(RocketCameraView.Orbit);
+                    _isOrbitDragging = true;
+                }
+                Vector2 delta = mouse.delta.ReadValue();
+                _orbitYaw += delta.x * orbitSensitivity;
+                _orbitElevation = Mathf.Clamp(
+                    _orbitElevation - delta.y * orbitSensitivity,
+                    minElevation,
+                    maxElevation);
+            }
+
+            if (!pointerOverUi)
+            {
+                float scroll = mouse.scroll.ReadValue().y;
+                if (Mathf.Abs(scroll) > 0.01f)
+                {
+                    // Input System wheel steps are normally +/-120. Exponential
+                    // scaling feels consistent at both close and wide distances.
+                    _targetDistance *= Mathf.Exp(-scroll * zoomSensitivity * 0.01f);
+                    _targetDistance = Mathf.Clamp(_targetDistance, minDistance, maxDistance);
+                }
+            }
         }
 
-        RocketHUD CreateRuntimeHud()
+        /// <summary>
+        /// Calculates the unsmoothed position, focus, and up direction for the
+        /// active view. Close hardware views focus on their component; overview
+        /// views use the body center. Zoom scales every view consistently.
+        /// </summary>
+        CameraPose BuildCameraPose()
         {
-            var canvasGo = new GameObject("RocketHUD_RuntimeCanvas");
-            var canvas = canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 100;
-            var scaler = canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            canvasGo.AddComponent<GraphicRaycaster>();
+            Transform frame = _selectedAssembly.transform;
+            float height = BodyHeight;
+            float radius = BodyRadius;
+            float viewScale = _distance / Mathf.Max(0.1f, startDistance);
+            Vector3 bodyCentre = frame.TransformPoint(Vector3.up * (height * 0.5f));
 
-            var panel = new GameObject("HUD_Panel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(canvasGo.transform, false);
-            var panelRect = panel.GetComponent<RectTransform>();
-            panelRect.anchorMin = new Vector2(0f, 1f);
-            panelRect.anchorMax = new Vector2(0f, 1f);
-            panelRect.pivot = new Vector2(0f, 1f);
-            panelRect.anchoredPosition = new Vector2(18f, -18f);
-            panelRect.sizeDelta = new Vector2(430f, 250f);
-            panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
+            switch (_currentView)
+            {
+                case RocketCameraView.Side:
+                    return LookAtPose(
+                        bodyCentre + frame.right * sideViewDistance * viewScale,
+                        bodyCentre,
+                        frame.up);
 
-            var runtimeHud = canvasGo.AddComponent<RocketHUD>();
-            runtimeHud.altText = CreateHudText(panelRect, "ALT", 16f, -18f);
-            runtimeHud.vVelText = CreateHudText(panelRect, "V-VEL", 16f, -48f);
-            runtimeHud.hVelText = CreateHudText(panelRect, "H-VEL", 16f, -78f);
-            runtimeHud.thrustText = CreateHudText(panelRect, "THRUST", 16f, -108f);
-            runtimeHud.currentFuelText = CreateHudText(panelRect, "FUEL", 16f, -138f);
-            runtimeHud.gimbalText = CreateHudText(panelRect, "GIMBAL", 16f, -168f);
-            selectorLabel ??= CreateHudText(panelRect, "ROCKET_LABEL", 16f, -202f);
+                case RocketCameraView.Top:
+                    return LookAtPose(
+                        bodyCentre + frame.up * eagleViewDistance * viewScale,
+                        bodyCentre,
+                        frame.forward);
 
-            var gimbalFrame = new GameObject("Gimbal_Frame", typeof(RectTransform), typeof(Image));
-            gimbalFrame.transform.SetParent(panelRect, false);
-            var frameRect = gimbalFrame.GetComponent<RectTransform>();
-            frameRect.anchorMin = new Vector2(1f, 1f);
-            frameRect.anchorMax = new Vector2(1f, 1f);
-            frameRect.pivot = new Vector2(0.5f, 0.5f);
-            frameRect.anchoredPosition = new Vector2(-72f, -82f);
-            frameRect.sizeDelta = new Vector2(110f, 110f);
-            gimbalFrame.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
+                case RocketCameraView.Thrusters:
+                {
+                    Vector3 focus = ComponentPosition(_selectedAssembly.thrusters, frame.position);
+                    Vector3 position = focus - frame.up * Mathf.Max(radius * 3f, closeViewDistance * 0.45f * viewScale)
+                                             - frame.forward * Mathf.Max(radius * 2f, closeViewDistance * 0.25f * viewScale);
+                    return LookAtPose(position, focus + frame.up * radius, frame.up);
+                }
 
-            var dot = new GameObject("Gimbal_Dot", typeof(RectTransform), typeof(Image));
-            dot.transform.SetParent(frameRect, false);
-            var dotRect = dot.GetComponent<RectTransform>();
-            dotRect.anchorMin = new Vector2(0.5f, 0.5f);
-            dotRect.anchorMax = new Vector2(0.5f, 0.5f);
-            dotRect.pivot = new Vector2(0.5f, 0.5f);
-            dotRect.sizeDelta = new Vector2(12f, 12f);
-            dot.GetComponent<Image>().color = new Color(0.2f, 0.85f, 1f, 1f);
-            runtimeHud.gimbalDot = dotRect;
-            runtimeHud.uiMovementScale = 6f;
+                case RocketCameraView.Rcs:
+                {
+                    Vector3 focus = ComponentPosition(
+                        _selectedAssembly.rcs,
+                        frame.TransformPoint(Vector3.up * (height - 0.2f)));
+                    Vector3 position = focus + frame.right * closeViewDistance * 0.75f * viewScale
+                                             - frame.forward * closeViewDistance * 0.35f * viewScale
+                                             + frame.up * radius;
+                    return LookAtPose(position, focus, frame.up);
+                }
 
-            canvasGo.SetActive(false);
-            return runtimeHud;
+                case RocketCameraView.Fins:
+                {
+                    Vector3 focus = ComponentPosition(
+                        _selectedAssembly.fins,
+                        frame.TransformPoint(Vector3.up * (height - 1.2f)));
+                    Vector3 position = focus + frame.right * closeViewDistance * 0.75f * viewScale
+                                             - frame.forward * closeViewDistance * 0.35f * viewScale
+                                             + frame.up * radius;
+                    return LookAtPose(position, focus, frame.up);
+                }
+
+                case RocketCameraView.Nose:
+                {
+                    Vector3 focus = frame.TransformPoint(Vector3.up * height);
+                    Vector3 position = focus + frame.forward * closeViewDistance * 0.7f * viewScale
+                                             + frame.up * closeViewDistance * 0.35f * viewScale;
+                    return LookAtPose(position, focus - frame.up * radius, frame.up);
+                }
+
+                case RocketCameraView.Chase:
+                {
+                    Vector3 focus = frame.TransformPoint(Vector3.up * (height * 0.55f));
+                    Vector3 position = frame.position - frame.forward * closeViewDistance * viewScale
+                                                     + frame.up * Mathf.Max(height * 0.22f, radius * 3f);
+                    return LookAtPose(position, focus, frame.up);
+                }
+
+                case RocketCameraView.Wide:
+                {
+                    float distance = Mathf.Max(sideViewDistance * 1.75f, height * 3f) * viewScale;
+                    Vector3 direction = (frame.right - frame.forward * 0.65f + frame.up * 0.25f).normalized;
+                    return LookAtPose(bodyCentre + direction * distance, bodyCentre, Vector3.up);
+                }
+
+                case RocketCameraView.Orbit:
+                default:
+                {
+                    Quaternion orbit = Quaternion.Euler(_orbitElevation, _orbitYaw, 0f);
+                    Vector3 position = bodyCentre + orbit * Vector3.back * _distance;
+                    return LookAtPose(position, bodyCentre, Vector3.up);
+                }
+            }
         }
 
-        static TextMeshProUGUI CreateHudText(RectTransform parent, string name, float x, float y)
+        /// <summary>
+        /// Selects the next existing agent in either direction and wraps around
+        /// the list, skipping destroyed entries.
+        /// </summary>
+        void SelectRelativeAgent(int direction)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
-            go.transform.SetParent(parent, false);
+            if (!trainingAreaManager || trainingAreaManager.Agents.Count == 0) return;
 
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(x, y);
-            rect.sizeDelta = new Vector2(300f, 28f);
+            var agents = trainingAreaManager.Agents;
+            int current = direction > 0 ? -1 : 0;
+            for (int i = 0; i < agents.Count; i++)
+                if (agents[i] == _selectedAgent) current = i;
 
-            var text = go.GetComponent<TextMeshProUGUI>();
-            text.text = name;
-            text.fontSize = 20f;
-            text.color = Color.white;
-            text.raycastTarget = false;
-            return text;
+            for (int step = 1; step <= agents.Count; step++)
+            {
+                int index = Mod(current + direction * step, agents.Count);
+                if (!agents[index]) continue;
+                SelectAgent(agents[index]);
+                return;
+            }
         }
 
-        // =====================================================================
-        //  Public helpers (optional — call from UI buttons if you want them)
-        // =====================================================================
-        public void NextRocket()     => SwitchTo((_index + 1) % Mathf.Max(Agents?.Count ?? 1, 1));
-        public void PreviousRocket() => SwitchTo((_index - 1 + Mathf.Max(Agents?.Count ?? 1, 1))
-                                                  % Mathf.Max(Agents?.Count ?? 1, 1));
+        /// <summary>
+        /// Selects an assembly directly, which also supports the preview rocket
+        /// because it has no active FalconAgent.
+        /// </summary>
+        void SelectAssembly(RocketAssembly assembly, bool snap)
+        {
+            _selectedAgent = assembly ? assembly.GetComponentInParent<FalconAgent>() : null;
+            _selectedAssembly = assembly;
+            EnsureHud();
+            if (hud) hud.SetAgent(_selectedAgent);
+            if (snap) SnapToCurrentView();
+            RefreshLabel();
+        }
+
+        /// <summary>
+        /// Returns the first manager-owned assembly, or any scene assembly as a
+        /// final fallback while only the preview exists.
+        /// </summary>
+        RocketAssembly FindFallbackAssembly()
+        {
+            if (trainingAreaManager != null)
+            {
+                var assemblies = trainingAreaManager.Assemblies;
+                for (int i = 0; i < assemblies.Count; i++)
+                    if (assemblies[i]) return assemblies[i];
+            }
+
+            return FindAnyObjectByType<RocketAssembly>();
+        }
+
+        /// <summary>
+        /// Reuses an assigned HUD or creates the lightweight runtime HUD. It also
+        /// locates the selector label when only the HUD reference was assigned.
+        /// </summary>
+        void EnsureHud()
+        {
+            if (hud)
+            {
+                if (!selectorLabel)
+                {
+                    var labels = hud.GetComponentsInChildren<TextMeshProUGUI>(true);
+                    for (int i = 0; i < labels.Length; i++)
+                    {
+                        if (labels[i].name != "ROCKET_LABEL") continue;
+                        selectorLabel = labels[i];
+                        break;
+                    }
+                }
+                return;
+            }
+            hud = RocketHudFactory.CreateRuntimeHud(out TextMeshProUGUI generatedLabel);
+            if (!selectorLabel) selectorLabel = generatedLabel;
+        }
+
+        /// <summary>Updates the watched rocket number, view name, and control hint.</summary>
+        void RefreshLabel()
+        {
+            if (!selectorLabel) return;
+
+            int index = -1;
+            int count = 0;
+            if (trainingAreaManager != null)
+            {
+                var agents = trainingAreaManager.Agents;
+                count = agents.Count;
+                for (int i = 0; i < agents.Count; i++)
+                    if (agents[i] == _selectedAgent) index = i;
+            }
+
+            string rocket = index >= 0 ? $"ROCKET {index + 1}/{count}" : "ROCKET PREVIEW";
+            selectorLabel.text = $"{rocket}  |  {ViewDisplayName(_currentView)}  |  1-9 views, V cycle, [ ] rocket";
+        }
+
+        float BodyHeight => _selectedAssembly && _selectedAssembly.body
+            ? Mathf.Max(0.1f, _selectedAssembly.body.height)
+            : RocketPartsConfig.ReferenceBodyHeightM;
+
+        float BodyRadius => _selectedAssembly && _selectedAssembly.body
+            ? Mathf.Max(0.1f, _selectedAssembly.body.radius)
+            : RocketPartsConfig.ReferenceBodyRadiusM;
+
+        /// <summary>Returns a component position, or a safe fallback when hardware is absent.</summary>
+        static Vector3 ComponentPosition(Component component, Vector3 fallback) =>
+            component ? component.transform.position : fallback;
+
+        /// <summary>Creates a complete camera pose looking from position toward focus.</summary>
+        static CameraPose LookAtPose(Vector3 position, Vector3 focus, Vector3 up)
+        {
+            Quaternion rotation = SafeLookRotation(focus - position, up, Quaternion.identity);
+            return new CameraPose(position, focus, up, rotation);
+        }
+
+        /// <summary>
+        /// Builds a look rotation while handling zero-length directions and the
+        /// case where forward and up are almost parallel.
+        /// </summary>
+        static Quaternion SafeLookRotation(Vector3 forward, Vector3 up, Quaternion fallback)
+        {
+            if (forward.sqrMagnitude < 0.000001f) return fallback;
+            forward.Normalize();
+            if (up.sqrMagnitude < 0.000001f) up = Vector3.up;
+            up.Normalize();
+            if (Mathf.Abs(Vector3.Dot(forward, up)) > 0.999f)
+                up = Mathf.Abs(Vector3.Dot(forward, Vector3.forward)) < 0.999f
+                    ? Vector3.forward
+                    : Vector3.right;
+            return Quaternion.LookRotation(forward, up);
+        }
+
+        /// <summary>Converts smoothing strength into a frame-rate-independent interpolation factor.</summary>
+        static float DampFactor(float smoothing, float deltaTime) =>
+            smoothing <= 0f ? 1f : 1f - Mathf.Exp(-smoothing * deltaTime);
+
+        /// <summary>Positive modulo used when cycling backward past the first rocket.</summary>
+        static int Mod(int value, int modulus) => (value % modulus + modulus) % modulus;
+
+        /// <summary>Returns the short uppercase view name shown in the HUD.</summary>
+        static string ViewDisplayName(RocketCameraView view) => view switch
+        {
+            RocketCameraView.Orbit => "ORBIT",
+            RocketCameraView.Side => "SIDE",
+            RocketCameraView.Top => "TOP",
+            RocketCameraView.Thrusters => "THRUSTERS",
+            RocketCameraView.Rcs => "RCS",
+            RocketCameraView.Fins => "FINS",
+            RocketCameraView.Nose => "NOSE",
+            RocketCameraView.Chase => "CHASE",
+            RocketCameraView.Wide => "WIDE",
+            _ => view.ToString().ToUpperInvariant()
+        };
+
+        /// <summary>
+        /// Immutable desired camera state. Keeping focus/up beside position and
+        /// rotation lets LateUpdate smooth the shot without recalculating intent.
+        /// </summary>
+        readonly struct CameraPose
+        {
+            public readonly Vector3 position;
+            public readonly Vector3 focus;
+            public readonly Vector3 up;
+            public readonly Quaternion rotation;
+
+            /// <summary>Stores one complete desired camera state.</summary>
+            public CameraPose(Vector3 position, Vector3 focus, Vector3 up, Quaternion rotation)
+            {
+                this.position = position;
+                this.focus = focus;
+                this.up = up;
+                this.rotation = rotation;
+            }
+        }
     }
 }

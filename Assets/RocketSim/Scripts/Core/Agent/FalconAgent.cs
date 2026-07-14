@@ -1,0 +1,155 @@
+// -----------------------------------------------------------------------------
+// File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.cs
+// Purpose: Defines the shared state, references, constants, and public read-only accessors for the FalconAgent partial class.
+// Documentation: Comments in this file use plain language to describe intent,
+// so the simulator architecture is easier to understand and maintain.
+// -----------------------------------------------------------------------------
+
+using UnityEngine;
+using Unity.MLAgents;
+using Random = UnityEngine.Random;
+
+namespace RocketSim
+{
+    // ============================================================================
+    //  FalconAgent — Falcon 9 landing simulation (ML-Agents)
+    //
+    //  Physics constants come from RocketAssembly.GetPhysicsConfig()
+    //
+    //  envConfig is a SHARED reference set by TrainingAreaManager at spawn time.
+    //  The right-side panel writes to the same object — all agents see changes.
+    //
+    // ============================================================================
+    public partial class FalconAgent : Agent
+    {
+        [Header("References — wire inside prefab")]
+        public Rigidbody rb;
+
+        public RocketAssembly assembly;
+        public Transform targetPad;
+
+        [Header("Configs — assigned by TrainingAreaManager via ConfigBridge")]
+        public SimEnvironmentConfig envConfig = new();
+        
+        // Sensors
+        RocketSensorPackage _sensors = new();
+        
+        // Telemetry identity
+        int _areaIndex;   // set by TrainingAreaManager after spawn
+        int _episode;
+        int _step;
+        float _stepReward;   // accumulator so we can log reward per step
+        bool _hasEpisodeStarted;
+        bool _currentEpisodeCompleted;
+        bool _telemetryLoggedThisStep;
+        bool _episodeEndedThisStep;
+        bool _landingEpisodeEndLogged;
+        bool _hoverTrackTargetReachedThisStep;
+        bool _landingEpisodeSucceeded;
+        int _hoverTrackEpisodeCaptures;
+        
+
+
+        [Header("Flame Visual")] public float minFlameWidth = 1.5f;
+        public float maxFlameWidth = 4f;
+        public float minFlameLength = 2f;
+        public float maxFlameLength = 20f;
+
+        // ── Physics config ───────────────────────────
+        RocketPhysicsConfig cfg;
+        
+        // ── Engine ─────────────────────────────────────────────────
+        Vector2[] targetGimbal, gimbal;
+        float[] commandedThrottle, targetThrottle, throttle;
+        private float fuel;
+        private float rcsPropellant;
+
+        EngineRunState[] engineStates;
+        float[] engineStateTimers;
+        float[] engineRunTimes;
+        float[] engineOffTimes;
+
+        // Fins 
+        float[] finAngles;
+        float[] targetFinAngles;
+
+        // RCS
+        float[] rcsValveRequests;
+        float[] rcsValveStates;
+        float[] rcsPulseTimeRemaining;
+
+        // ── Wind ──────────────────────────────────────────────────────────────
+        Vector3 wind, targetWind;
+
+        // Up to three simple actuator faults can be active in one episode.
+        // Fixed arrays avoid allocations inside the physics loop.
+        readonly RocketFaultType[] _episodeFaultTypes = new RocketFaultType[3];
+        readonly int[] _episodeFaultTargets = new int[3];
+        readonly float[] _episodeFaultSeverities = new float[3];
+        int _episodeFaultCount;
+        float _episodeElapsedSeconds;
+        bool _hardwareTestMode;
+        bool _manualControlActive;
+        float[] _manualThrottle;
+        Vector2[] _manualGimbal;
+        float[] _manualFinAngles;
+        float[] _manualRcsValveRequests;
+
+        // ── Cached for observations / debug ───────────────────────────────────
+        float q; // dynamic pressure
+        float aoaDeg; // angle of attack
+        float _hoverTrackStableTime;
+        float _hoverTrackSegmentStartDistance;
+        float _hoverTrackSegmentElapsedTime;
+        LandingPlatformComponent _landingPlatform;
+        bool _landingPlatformInsideCapture;
+        bool _landingPlatformStable;
+        float _landingPlatformStableTime;
+        int _landingPlatformPhysicalContactCount;
+        float _landingPlatformLastContactSpeed;
+
+        const float Rho0 = 1.225f; // ISA sea-level density (kg/m³)
+        const float HScale = 8500f; // ISA scale height (m)
+        const float G0 = 9.80665f;
+        const float BaseGroundClearance = 0.5f;
+        const float HoverTrackCycleCompleteReward = 4.0f;
+        const float EngineIgnitionThreshold = 0.08f;
+        const float EngineShutdownThreshold = 0.03f;
+        const float VacuumThrustMultiplier = 1.08f;
+        const float VacuumIspMultiplier = 1.10f;
+        const float EngineCommandEpsilon = 0.01f;
+
+        //public getters for HUD
+        public int GetEngineCount => throttle?.Length ?? 0;
+        /// <summary>
+        /// Reads one bounded engine throttle channel after spool smoothing so HUD and hardware tests can show actuator state safely.
+        /// </summary>
+        public float GetCurrentThrottle(int index) =>
+            throttle != null && index >= 0 && index < throttle.Length ? throttle[index] : 0f;
+        public float GetFuel => fuel;
+        /// <summary>
+        /// Reads one bounded engine gimbal X channel in degrees for HUD and hardware-test displays.
+        /// </summary>
+        public float GetGimbalX(int index) =>
+            gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].x : 0f;
+        /// <summary>
+        /// Reads one bounded engine gimbal Z channel in degrees for HUD and hardware-test displays.
+        /// </summary>
+        public float GetGimbalZ(int index) =>
+            gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].y : 0f;
+        public RocketPhysicsConfig CurrentPhysicsConfig => cfg;
+        public float DynamicPressure => q;
+        public float AngleOfAttackDeg => aoaDeg;
+        public bool HardwareTestMode => _hardwareTestMode;
+        
+        static Vector3 RandomPlanarVector(float maxMagnitude)
+        {
+            if (maxMagnitude <= 0f) return Vector3.zero;
+
+            float angle = Random.Range(0f, Mathf.PI * 2f);
+            float magnitude = Random.Range(0f, maxMagnitude);
+            return new Vector3(Mathf.Cos(angle) * magnitude, 0f, Mathf.Sin(angle) * magnitude);
+        }
+        static string PassFail(bool passed) => passed ? "PASS" : "FAIL";
+    }
+}

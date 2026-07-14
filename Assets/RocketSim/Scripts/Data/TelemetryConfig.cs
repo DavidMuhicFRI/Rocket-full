@@ -1,9 +1,21 @@
-﻿using System;
+// -----------------------------------------------------------------------------
+// File: Assets/RocketSim/Scripts/Data/TelemetryConfig.cs
+// Purpose: Stores which families of telemetry columns are enabled and how many
+// engine/fin slots the current rocket needs in its run-specific CSV schema.
+// Documentation: Comments in this file use plain language to describe intent,
+// so the simulator architecture is easier to understand and maintain.
+// -----------------------------------------------------------------------------
+
+using System;
 using UnityEngine;
 
 namespace RocketSim
 {
     [Serializable]
+    /// <summary>
+    /// Shared by the panel, manager, metric catalog, and logger. Identity columns
+    /// are always written; the toggles control optional measurement groups.
+    /// </summary>
     public class TelemetryConfig
     {
         // ── Log groups ────────────────────────────────────────────────────────
@@ -25,6 +37,10 @@ namespace RocketSim
         public const int MaxEngines = 9;
         public const int MaxFins    = 4;
 
+        /// <summary>
+        /// Number of engine columns needed. Shared control logs one channel;
+        /// independent control logs each active engine.
+        /// </summary>
         public int LoggedEngineSlots => independentEngines ? activeEngineCount : 1;
     }
 }

@@ -1,4 +1,12 @@
-﻿using UnityEngine;
+// -----------------------------------------------------------------------------
+// File: Assets/RocketSim/Scripts/Data/RocketSensorPackage.cs
+// Purpose: Derives IMU-like acceleration, rotation, heating, and simplified
+// structural-load measurements from the Rigidbody after each physics step.
+// Documentation: Comments in this file use plain language to describe intent,
+// so the simulator architecture is easier to understand and maintain.
+// -----------------------------------------------------------------------------
+
+using UnityEngine;
 
 namespace RocketSim
 {
@@ -50,6 +58,11 @@ namespace RocketSim
         const float k_stanton = 1.83e-4f; // empirical aero-heating constant
 
         // ── Called every FixedUpdate from FalconAgent ─────────────────────
+        /// <summary>
+        /// Updates every sensor output from the latest rigidbody motion and
+        /// aerodynamic loads. Previous velocities are retained so acceleration
+        /// can be calculated without storing a complete time history.
+        /// </summary>
         public void Tick(
             Rigidbody rb,
             Transform  t,

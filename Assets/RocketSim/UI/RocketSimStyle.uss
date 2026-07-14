@@ -9,7 +9,7 @@
     position: absolute;
     top: 14px;
     bottom: 14px;
-    width: 320px;
+    width: 460px;
     background-color: rgba(9, 12, 20, 0.96);
     border-top-left-radius: 14px;
     border-bottom-left-radius: 14px;
@@ -18,6 +18,7 @@
     border-bottom-width: 1px;
     border-color: rgba(70, 130, 255, 0.28);
     flex-direction: column;
+    overflow: hidden;
 }
 
 /* ── Slide tab ───────────────────────────────────────────────────────────── */
@@ -40,21 +41,56 @@
     padding: 0;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
 }
 .rs-right-tab:hover { background-color: rgba(30, 55, 140, 0.65); }
+
+.rs-panel-resize-handle {
+    position: absolute;
+    left: -4px;
+    top: 0;
+    bottom: 0;
+    width: 11px;
+}
+
+.rs-footer-mode-btn {
+    width: 76px;
+    height: 30px;
+    margin-right: 3px;
+    background-color: rgba(28, 38, 58, 0.8);
+    border-width: 1px;
+    border-color: rgba(90, 120, 165, 0.3);
+    color: rgb(145, 165, 195);
+    font-size: 10px;
+}
+.rs-mode-btn-active { background-color: rgba(28, 86, 190, 0.65); border-color: rgba(75, 145, 255, 0.7); color: rgb(220, 235, 255); }
+
+.rs-panel-footer {
+    padding: 7px 9px 8px;
+    border-top-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+}
+.rs-panel-notification { color: rgb(145, 190, 235); font-size: 10px; white-space: normal; margin-bottom: 5px; }
+.rs-panel-notification-error { color: rgb(255, 125, 105); }
+.rs-footer-actions { flex-direction: row; }
+.rs-footer-actions .rs-action-btn { flex-grow: 1; margin: 0; }
+.rs-footer-actions .rs-danger-btn { flex-grow: 1; height: 30px; margin: 0; }
 
 /* ══ TAB BAR ════════════════════════════════════════════════════════════════ */
 .rs-tab-bar {
     flex-direction: row;
-    padding: 5px 5px 0;
+    flex-wrap: nowrap;
+    height: 34px;
+    min-height: 34px;
+    padding: 4px 4px 3px;
     border-bottom-width: 1px;
     border-color: rgba(70, 130, 255, 0.14);
 }
 
 .rs-tab-btn {
-    flex-grow: 1;
-    height: 25px;
+    width: 12.5%;
+    flex-grow: 0;
+    flex-shrink: 1;
+    height: 26px;
     background-color: transparent;
     border-width: 0;
     border-radius: 5px;
@@ -72,10 +108,13 @@
 .rs-theme-env.rs-tab-btn-active        { background-color: rgba(15, 120, 80,  0.50); color: rgb(70,  210, 155); -unity-font-style: bold; }
 .rs-theme-scenario.rs-tab-btn-active   { background-color: rgba(160, 100, 10, 0.50); color: rgb(255, 190, 70);  -unity-font-style: bold; }
 .rs-theme-ml.rs-tab-btn-active         { background-color: rgba(165, 15, 75,  0.50); color: rgb(255, 110, 165); -unity-font-style: bold; }
+.rs-theme-rewards.rs-tab-btn-active    { background-color: rgba(125, 55, 10, 0.55); color: rgb(255, 170, 85); -unity-font-style: bold; }
+.rs-theme-run.rs-tab-btn-active        { background-color: rgba(35, 80, 145, 0.55); color: rgb(120, 195, 255); -unity-font-style: bold; }
+.rs-theme-faults.rs-tab-btn-active     { background-color: rgba(155, 45, 25, 0.55); color: rgb(255, 135, 105); -unity-font-style: bold; }
 
 /* ══ CONTENT AREA ═══════════════════════════════════════════════════════════ */
 .rs-panel-content {
-    padding: 8px 10px 12px;
+    padding: 5px 10px 12px;
     flex-direction: column;
 }
 
@@ -99,27 +138,52 @@
 .rs-theme-env        .rs-section-label { color: rgba(60, 205, 145, 0.90);  border-color: rgba(45, 180, 120, 0.18); }
 .rs-theme-scenario   .rs-section-label { color: rgba(255, 185, 60, 0.90);  border-color: rgba(220, 155, 40, 0.18); }
 .rs-theme-ml         .rs-section-label { color: rgba(255, 100, 155, 0.90); border-color: rgba(220, 75,  130, 0.18); }
+.rs-theme-rewards    .rs-section-label { color: rgba(255, 165, 75, 0.90); border-color: rgba(220, 120, 45, 0.18); }
+.rs-theme-run        .rs-section-label { color: rgba(105, 190, 255, 0.90); border-color: rgba(65, 145, 220, 0.18); }
+.rs-theme-faults     .rs-section-label { color: rgba(255, 125, 95, 0.90); border-color: rgba(225, 80, 55, 0.18); }
+
+.rs-foldout { margin-top: 4px; margin-bottom: 4px; }
+.rs-foldout .unity-foldout__toggle,
+.rs-foldout .unity-foldout__toggle:checked,
+.rs-foldout .unity-foldout__text,
+.rs-foldout .unity-toggle__label {
+    color: rgb(170, 200, 235);
+}
+.rs-foldout-hardware-disabled .unity-foldout__toggle,
+.rs-foldout-hardware-disabled .unity-foldout__text,
+.rs-foldout-hardware-disabled .unity-toggle__label {
+    color: rgb(82, 102, 128);
+}
 
 /* ── Field rows ──────────────────────────────────────────────────────────── */
 .rs-field-row {
     flex-direction: row;
     align-items: center;
     margin-bottom: 6px;
-    min-height: 20px;
+    min-height: 22px;
 }
 .rs-field-label {
     color: rgb(155, 180, 210);
-    font-size: 11px;
-    width: 118px;
+    font-size: 9px;
+    width: 150px;
     flex-shrink: 0;
-    overflow: hidden;
-    -unity-text-overflow-position: end;
-    white-space: nowrap;
+    overflow: visible;
+    white-space: normal;
 }
 .rs-slider         { flex-grow: 1; margin-left: 4px; margin-right: 4px; }
-.rs-field-value    { color: rgb(80, 200, 120); font-size: 11px; width: 44px; -unity-text-align: upper-right; flex-shrink: 0; }
-.rs-field-readonly { color: rgb(130, 175, 130); font-size: 11px; flex-grow: 1; -unity-text-align: upper-right; overflow: hidden; white-space: nowrap; }
+.rs-field-value    { color: rgb(80, 200, 120); font-size: 10px; width: 62px; -unity-text-align: middle-right; flex-shrink: 0; }
+.rs-field-readonly { color: rgb(130, 175, 130); font-size: 10px; flex-grow: 1; -unity-text-align: middle-right; overflow: hidden; white-space: normal; }
 .rs-toggle         { margin-left: auto; flex-shrink: 0; }
+.rs-described-control { margin-bottom: 3px; }
+.rs-described-control > .rs-field-row { margin-bottom: 1px; }
+.rs-control-description {
+    color: rgb(107, 128, 158);
+    font-size: 9px;
+    margin-left: 154px;
+    margin-right: 62px;
+    margin-bottom: 3px;
+    white-space: normal;
+}
 
 /* ── Section description (path display, etc.) ────────────────────────────── */
 .rs-section-desc {
@@ -467,45 +531,65 @@
     white-space: nowrap;
 }
 
-/* ══ MODE SELECTOR (Training / Inference) ═══════════════════════════════════ */
-.rs-mode-row {
-    flex-direction: row;
+/* ══ HARDWARE PRESETS / BURN GROUPS ════════════════════════════════════════ */
+.rs-preset-list {
     margin-top: 4px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
-.rs-mode-card {
-    flex-grow: 1;
-    flex-basis: 0;
-    margin: 0 3px;
-    padding: 8px 5px;
+.rs-preset-btn {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 6px;
+    margin-bottom: 5px;
     background-color: rgba(18, 24, 42, 0.72);
     border-width: 1px;
     border-color: rgba(70, 130, 255, 0.20);
     border-radius: 8px;
-    align-items: center;
-    cursor: default;
-    overflow: hidden;
-}
-.rs-mode-card:hover { border-color: rgba(90, 150, 255, 0.45); }
-.rs-mode-card-active {
-    background-color: rgba(22, 55, 155, 0.52);
-    border-color: rgba(90, 155, 255, 0.80);
-}
-.rs-mode-title {
-    color: rgb(185, 210, 255);
-    font-size: 12px;
-    -unity-font-style: bold;
-    -unity-text-align: middle-center;
-    margin-bottom: 2px;
-    overflow: hidden;
-    white-space: nowrap;
-}
-.rs-mode-desc {
-    color: rgb(100, 130, 168);
-    font-size: 10px;
-    -unity-text-align: middle-center;
     white-space: normal;
-    overflow: hidden;
+}
+.rs-preset-btn:hover {
+    border-color: rgba(90, 150, 255, 0.50);
+}
+.rs-preset-btn-active {
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(90, 155, 255, 0.82);
+}
+.rs-preset-title {
+    color: rgb(190, 215, 255);
+    font-size: 11px;
+    -unity-font-style: bold;
+}
+.rs-preset-desc {
+    color: rgb(128, 155, 190);
+    font-size: 10px;
+    white-space: normal;
+    margin-top: 2px;
+}
+.rs-burn-group-list {
+    margin-bottom: 8px;
+}
+.rs-burn-group-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+.rs-burn-group-btn {
+    min-width: 88px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+    padding: 4px;
+    font-size: 10px;
+    color: rgb(245, 248, 255);
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 7px;
+}
+.rs-burn-group-btn-active {
+    color: rgb(255, 255, 255);
+    background-color: rgba(22, 55, 155, 0.52);
+    border-color: rgba(90, 155, 255, 0.82);
 }
 
 /* ══ SCENARIO GRID ══════════════════════════════════════════════════════════ */
@@ -543,6 +627,36 @@
     font-size: 10px;
     white-space: normal;
     overflow: hidden;
+}
+
+/* == REWARD PRESETS ======================================================== */
+.rs-reward-preset-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    margin-bottom: 5px;
+}
+.rs-reward-preset-btn {
+    min-width: 82px;
+    height: 23px;
+    margin: 2px;
+    padding-left: 6px;
+    padding-right: 6px;
+    background-color: rgba(18, 24, 42, 0.72);
+    border-width: 1px;
+    border-color: rgba(70, 130, 255, 0.20);
+    border-radius: 5px;
+    color: rgb(130, 160, 205);
+    font-size: 10px;
+    overflow: hidden;
+}
+.rs-reward-preset-btn:hover {
+    border-color: rgba(90, 150, 255, 0.45);
+}
+.rs-reward-preset-btn-active {
+    background-color: rgba(120, 80, 20, 0.55);
+    border-color: rgba(255, 185, 60, 0.75);
+    color: rgb(255, 205, 120);
 }
 
 /* ══ WEATHER BUTTONS ════════════════════════════════════════════════════════ */

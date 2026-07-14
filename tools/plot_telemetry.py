@@ -23,7 +23,7 @@ import pandas as pd
 
 
 # Change this to your CSV path. Command-line argument overrides it.
-TELEMETRY_CSV = r"C:\Users\dadii\AppData\LocalLow\DefaultCompany\Falcon9\Telemetry\telemetry_Hover_Track2_episodes.csv"
+TELEMETRY_CSV = r"C:\Users\dadii\AppData\LocalLow\DefaultCompany\Falcon9\Telemetry\telemetry_HoverTargetPrecision_episodes.csv"
 
 # Plots are saved next to the CSV by default.
 OUTPUT_DIR = ""

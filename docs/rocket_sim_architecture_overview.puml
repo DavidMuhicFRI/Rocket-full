@@ -1,0 +1,159 @@
+@startuml
+!pragma layout smetana
+skinparam backgroundColor #0B1020
+skinparam shadowing false
+skinparam roundcorner 18
+skinparam defaultFontName Segoe UI
+skinparam defaultFontColor #E6EDF3
+skinparam componentStyle rectangle
+skinparam ArrowColor #A9C1DA
+skinparam ArrowThickness 1.8
+skinparam component {
+  BackgroundColor #172033
+  BorderColor #6E8BB7
+  FontColor #E6EDF3
+}
+skinparam package {
+  BackgroundColor #101827
+  BorderColor #44546A
+  FontColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #1F2937
+  BorderColor #7C8AA5
+  FontColor #E6EDF3
+}
+
+title RocketSim readable architecture overview
+
+[Unity Scene / Prefabs] as Scene
+
+package "User interface" {
+  [RightConfigPanel\nall UI partials] as Panel
+  [RocketCameraController] as Camera
+  [RocketHUD + RocketHudFactory] as HUD
+  [UI catalogs\nHardwarePresetUiCatalog\nRewardPanelCatalog] as UICatalogs
+}
+
+package "Shared configuration" {
+  [SimEnvironmentConfig\nscenario/weather/curriculum] as EnvConfig
+  [RocketPartsConfig\nhardware preset + dimensions] as PartsConfig
+  [MLAgentsConfig\ntrainer YAML settings] as MLConfig
+  [TelemetryConfig\nlogged metric families] as TelemetryConfig
+  [Preset/default helpers\nFalcon9Reference\nScenarioProfile\nPresetFactory\nFuelCatalog\nValidator] as ConfigHelpers
+}
+
+package "Runtime orchestration" {
+  [ConfigBridge] as Bridge
+  [TrainingAreaManager\nshared configs + area spawn] as Manager
+  [TrainingLauncher\ntraining/inference entry] as Launcher
+  [Repositories\nTrainingRunRepository\nModelRepository] as Repos
+  [RocketAgentSchema\nML-Agents behavior/action schema] as Schema
+}
+
+package "Rocket construction" {
+  [RocketAssembly\nconfig -> hardware + physics] as Assembly
+  [Hardware components\nRocketBody\nThrusterComponent\nFinComponent\nRcsComponent] as Hardware
+  [RCS helpers\nLayout / Geometry / Visuals / ForceMapper] as RcsHelpers
+  [RocketPhysicsConfig\nruntime physics constants] as PhysicsConfig
+}
+
+package "Simulation agent" {
+  [FalconAgent.Core\nlifecycle + FixedUpdate] as AgentCore
+  [FalconAgent.Actuators\nthrottle/gimbal/fins/RCS] as Actuators
+  [FalconAgent.Physics\nforces + mass properties] as Physics
+  [FalconAgent.Scenarios\nspawn/targets] as Scenarios
+  [FalconAgent.LandingCapture\nchopstick capture state] as Landing
+  [FalconAgent.Telemetry\nmeasured terms/log rows] as AgentTelemetry
+  [Pure helpers\nEngineStateMachine\nRcsValveBank\nAtmosphereModel\nFinAerodynamicsModel\nRocketMassProperties\nLandingCaptureEvaluator] as AgentHelpers
+}
+
+package "Learning feedback" {
+  [RocketRewardModel\ndispatcher] as RewardDispatcher
+  [Scenario reward models\nLanding / Hover / Takeoff / BellyFlop] as RewardModels
+  [Reward data\nRewardRuntimeContext\nRewardTerms\nRewardDecision] as RewardData
+}
+
+package "Telemetry output" {
+  [TelemetryLogger\nsingleton facade] as Logger
+  [Telemetry pipeline\nMetricCatalog\nRowFormatter\nCsvWriter\nAccumulator\nRunningStats] as TelemetryPipeline
+  [CSV files\nstep telemetry\nepisode summaries] as CsvFiles
+}
+
+package "Hardware diagnostics" {
+  [HardwareTestController\norchestrator] as TestController
+  [IRocketHardwareTest\ncommon test contract] as TestContract
+  [Test cases\nfin/aero/takeoff/landing/RCS/thruster] as TestCases
+}
+
+Scene --> Bridge : serialized UI/manager references
+Scene --> Manager : owns spawned area root
+Scene --> Panel : UI document/component
+Scene --> Camera : main camera component
+Scene --> Launcher : optional training launcher
+
+Bridge --> Panel : injects manager/config references
+Panel --> Manager : applies shared config changes
+Panel --> PartsConfig : edits hardware values
+Panel --> EnvConfig : edits scenario/weather/curriculum
+Panel --> MLConfig : edits trainer settings
+Panel --> TelemetryConfig : edits logged metrics
+Panel --> UICatalogs : renders preset/slider metadata
+Panel --> Launcher : start training/inference
+Panel --> TestController : start/stop diagnostics through manager
+
+PartsConfig --> ConfigHelpers : presets, fuel defaults, validation
+EnvConfig --> ConfigHelpers : scenario goals/curriculum defaults
+
+Launcher --> Repos : save/load run configs
+Launcher --> Manager : spawn after trainer ready
+Manager --> Repos : load inference model
+Manager --> Schema : configure ML-Agents behavior
+Manager --> Assembly : instantiate/apply hardware
+Manager --> AgentCore : inject env/model/area index
+
+Assembly --> PartsConfig : reads hardware config
+Assembly --> Hardware : creates/sizes/positions parts
+Assembly --> RcsHelpers : builds RCS layout/visuals
+Assembly --> PhysicsConfig : derives mass/area/thrust constants
+
+AgentCore --> Scenarios : reset spawn + targets
+AgentCore --> Actuators : step commands
+AgentCore --> Physics : apply forces
+AgentCore --> Landing : update platform/capture state
+AgentCore --> RewardDispatcher : compute reward/termination
+AgentCore --> AgentTelemetry : measure/log step
+
+Actuators --> AgentHelpers : engine/RCS state machines
+Actuators --> Hardware : fin deflection + engine/RCS visuals
+Physics --> AgentHelpers : atmosphere/aero/mass calculations
+Physics --> Hardware : force application points
+Physics --> PhysicsConfig : runtime constants
+Scenarios --> EnvConfig : scenario/inference spawn settings
+Landing --> EnvConfig : chopstick curriculum/envelope settings
+
+RewardDispatcher --> RewardModels : scenario-specific reward
+RewardModels --> RewardData : terms/context/decision
+RewardModels --> EnvConfig : reward factors + success limits
+
+AgentTelemetry --> TelemetryConfig : metric families
+AgentTelemetry --> Logger : sends TelemetryRow
+Logger --> TelemetryPipeline : format/aggregate/write
+TelemetryPipeline --> CsvFiles : append rows
+
+Camera --> Manager : active agent list
+Camera --> HUD : watched agent target
+HUD --> AgentCore : read-only flight getters
+
+TestController --> TestContract : active test lifecycle
+TestContract --> TestCases : implementations
+TestCases --> Actuators : manual commands
+TestCases --> Physics : diagnostics/observed response
+
+note bottom
+  Read this graph left-to-right:
+  UI edits shared configs -> Manager spawns/configures rocket -> Assembly builds hardware/physics ->
+  FalconAgent runs actuator/physics/reward/telemetry loop -> outputs rewards, CSV telemetry, HUD, and diagnostics.
+end note
+
+@enduml

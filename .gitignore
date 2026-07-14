@@ -9,6 +9,8 @@
 RunFolder/
 results/
 UIElementsSchema/
+Assets/_Recovery/
+Assets/ML-Agents/Timers/
 .vs/
 .idea/
 .vscode/

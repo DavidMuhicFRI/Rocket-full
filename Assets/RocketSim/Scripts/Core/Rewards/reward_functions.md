@@ -50,6 +50,7 @@ horizontal_closure_rate_mps = positive when moving horizontally toward target
 upright_dot              = dot(rocket_up, world_up), where 1 is upright
 upright_score            = clamp01((upright_dot + 1) / 2)
 angular_rate_deg_s       = total body angular speed
+yaw_error_deg            = shortest heading error to the configured chopstick yaw
 control_effort           = mean(throttle)
                          + 0.05 * mean_abs(gimbal_degrees)
                          + 0.02 * mean_abs(fin_degrees)
@@ -71,56 +72,148 @@ hover_track_radius_m     = current hover-tracking settle radius from curriculum
 In simple terms, reward terms describe what the rocket is doing, while runtime
 context describes the current scenario limits needed to judge that behavior.
 
+## Configurable Reward Factors
+
+The formulas below show the built-in baseline weights. At runtime, the Scenario
+tab exposes scenario-specific reward factors that multiply the relevant baseline
+terms. A factor of `1.0` keeps the baseline behavior, values above `1.0` make
+that objective stronger, and values below `1.0` make it weaker.
+
+The exposed factors are grouped by intent rather than by every individual
+coefficient: target precision, altitude hold, uprightness, speed discipline,
+vertical profile, vertical calm, attitude calm, control efficiency, ascent
+drive, approach drive, settle precision, belly attitude, and terminal signal.
+Presets in the UI set these factors to useful starting points, and moving any
+slider marks that scenario reward model as custom.
+
 ## Landing
 
 Goal: descend to the pad upright, slow, and close to the target.
 
 ```text
-landing_zone = clamp01(1 - abs(vertical_error_m) / 30)
+height_above_touchdown_m = max(0, altitude_m - ground_clearance_m)
+touchdown_speed_scale = sqrt(gravity * ground_clearance_m)
+desired_descent_speed_mps = 0.30 * sqrt(2 * gravity * height_above_touchdown_m)
+desired_vertical_speed_mps = -desired_descent_speed_mps
+speed_tolerance = max(touchdown_speed_scale, 0.45 * desired_descent_speed_mps)
+
+vertical_profile_score =
+    2 * closeness(vertical_speed_mps - desired_vertical_speed_mps, speed_tolerance) - 1
+
+closure_scale = max(touchdown_speed_scale, desired_descent_speed_mps + speed_tolerance)
+goal_closure_score = clamp01(goal_closure_rate_mps / closure_scale)
+wrong_way_score = clamp01(max(0, -goal_closure_rate_mps) / closure_scale)
+near_ground_score = 1 - clamp01(height_above_touchdown_m / 50)
+center_precision_score = closeness(horizontal_error_m, max(0.5, success_radius_m * 0.5))
+heading_precision_score = closeness(yaw_error_deg, max(1, success_yaw_error_deg))
 
 reward =
   0.10 * closeness(horizontal_error_m, 12)
++ 0.10 * near_ground_score * center_precision_score
 + 0.06 * upright_score
 + 0.04 * closeness(angular_rate_deg_s, 60)
-+ 0.04 * closeness(speed_mps, 30)
-+ 0.08 * landing_zone * closeness(speed_mps, 5)
-+ 0.08 * landing_zone * closeness(vertical_speed_mps, 3)
++ 0.06 * near_ground_score * heading_precision_score * upright_score
++ 0.16 * vertical_profile_score
++ 0.05 * goal_closure_score
+- 0.05 * wrong_way_score
 - 0.0020 * horizontal_error_m
-- 0.0015 * speed_mps
 - 0.0007 * angular_rate_deg_s
 - 0.0030 * control_effort
+- 0.0060
 ```
 
 Terminal rules:
 
 ```text
 if upright_dot < 0.35 or goal_error_3d_m > 150 or fuel_kg <= 0:
-    reward = -10
+    reward = -35
+
+if altitude_m > max(140, curriculum_spawn_altitude_max_m + 60):
+    reward = -30
 
 if altitude_m <= ground_clearance_m:
+    touchdown_speed_limit = curriculum_total_touchdown_speed_mps
+    touchdown_vertical_speed_limit = curriculum_vertical_touchdown_speed_mps
+    touchdown_horizontal_speed_limit = curriculum_horizontal_touchdown_speed_mps
+
     good_landing =
         upright_dot > 0.94
-        and horizontal_error_m < 5
-        and speed_mps < 4
-        and abs(vertical_speed_mps) < 3
-        and angular_rate_deg_s < 35
+        and upright_dot > cos(curriculum_tilt_deg)
+        and horizontal_error_m < curriculum_success_radius_m
+        and speed_mps < touchdown_speed_limit
+        and abs(vertical_speed_mps) < touchdown_vertical_speed_limit
+        and horizontal_speed_mps < touchdown_horizontal_speed_limit
+        and angular_rate_deg_s < curriculum_angular_rate_deg_s
+        and yaw_error_deg < curriculum_yaw_error_deg
 
-    reward = 12 if good_landing else -6
+    precision_bonus = 12 * center_precision_score + 8 * heading_precision_score
+    reward = 35 + precision_bonus if good_landing else -25
 ```
 
 Why these values:
 
 - `horizontal_error_m` uses a 12 m closeness scale because early landing needs a
-  broad attraction basin. The hard terminal success threshold is 5 m, so the
+  broad attraction basin. The hard terminal success threshold is 2 m, so the
   shaping reward guides the agent before it is precise enough to land.
-- The strict speed rewards are multiplied by `landing_zone`, so slow flight is
-  rewarded mainly near touchdown. Without this, the agent could learn to hover
-  slowly high above the pad instead of landing.
-- `upright_dot > 0.94` is a strict final landing posture, while `upright_dot <
-  0.35` is treated as unrecoverable. The gap gives the agent room to correct
+- The landing reward now uses one altitude-derived vertical-speed profile. The
+  desired downward speed is based on current height and gravity, so it naturally
+  becomes slower near touchdown.
+- Upward flight is not a separate special case in shaping. It is penalized
+  because positive vertical speed is far away from the desired downward speed.
+- A small per-step cost makes delaying touchdown less profitable than completing
+  the landing.
+- `upright_dot > 0.94` is the broad final landing posture gate, then the
+  curriculum tilt limit tightens it from 20 degrees to 5 degrees. `upright_dot
+  < 0.35` is treated as unrecoverable. The gap gives the agent room to correct
   during descent.
-- Success is `+12` and a bad touchdown is `-6` so a good landing clearly beats
-  ordinary shaping, but a failed touchdown is not as punishing as a total loss.
+- A successful touchdown is worth `35` plus up to `12` for exact pad centering
+  and up to `8` for exact chopstick heading. Landing at the edge of the allowed
+  radius therefore succeeds but earns less than landing in the center.
+- Heading is represented by sine and cosine of the signed yaw error in the v2
+  observation schema. Saved v1 models keep their original input size and skip
+  heading reward and the heading success gate; they must be retrained to learn
+  chopstick alignment.
+
+Landing curriculum:
+
+The landing curriculum advances only after successful touchdowns. It does not
+advance after crashes, flyaways, or ordinary episode ends. Completed episodes
+update a recent success-rate estimate. Once that rate is high enough, continuous
+progress advances at the standardized difficulty increase speed:
+
+```text
+recent_success_rate = smoothed_average(successful_episode)
+advance_pressure = inverse_lerp(0.55, 0.85, recent_success_rate)
+linear_progress += advance_pressure * difficulty_increase_speed / (base_batches_to_full * active_training_areas)
+curriculum_progress = smoothstep(0, 1, clamp01(linear_progress))
+```
+
+The current difficulty is a single curve. As it rises, spawn range and spawn
+speed, initial tilt, and initial spin increase while touchdown success
+requirements tighten:
+
+```text
+spawn_altitude_m          = lerp(random 45..70,  random 120..300, progress)
+spawn_horizontal_offset_m = lerp(5,              50,              progress)
+spawn_down_speed_mps      = lerp(random 5..15,   random 12..60,   progress)
+spawn_horizontal_speed    = lerp(0.5,            15,              progress)
+spawn_pitch_roll_deg      = lerp(3,              18,              progress)
+spawn_angular_speed_deg_s = lerp(0,              55,              progress)
+spawn_yaw_range_deg        = lerp(30,             180,             progress)
+
+success_radius_m          = lerp(8,              2,               progress)
+success_total_speed_mps   = lerp(7,              2.5,             progress)
+success_vertical_speed    = lerp(5,              2,               progress)
+success_horizontal_speed  = lerp(5,              1,               progress)
+success_tilt_deg          = lerp(20,             5,               progress)
+success_angular_rate_deg  = lerp(50,             25,              progress)
+success_yaw_error_deg     = lerp(30,             10,              progress)
+```
+
+This means early training teaches basic touchdown from nearby starts. Sustained
+successful episodes nudge the same task harder: higher and farther spawns, more
+horizontal and vertical start speed, more initial rotation, a smaller accepted
+pad radius, lower touchdown speeds, and stricter attitude.
 
 ## Hover
 
@@ -257,18 +350,21 @@ if hover_ready stays true for max(0, success_hold_seconds):
 Automatic curriculum:
 
 This part is handled by `SimEnvironmentConfig.cs`. It changes the hover-tracking
-task difficulty after successful pad captures.
+task difficulty from completed episode outcomes. The Scenario tab exposes only
+the difficulty increase speed; movement, settling, hold, speed, and tilt ranges
+are standardized.
 
 ```text
-batch_successes = total_successful_pad_captures / max(1, active_training_areas)
-raw_progress = 1 - exp(-batch_successes / 120)
-curriculum_progress = smoothstep(0, 1, clamp01(raw_progress))
+recent_success_rate = smoothed_average(episode_captured_any_pad)
+advance_pressure = inverse_lerp(0.55, 0.85, recent_success_rate)
+linear_progress += advance_pressure * difficulty_increase_speed / (base_batches_to_full * active_training_areas)
+curriculum_progress = smoothstep(0, 1, clamp01(linear_progress))
 
-pad_move_radius_m       = lerp(16,   40, curriculum_progress)
-hover_phase_radius_m    = lerp(10,    3, curriculum_progress)
-success_hold_seconds    = lerp(0.5,  1.5, curriculum_progress)
-success_max_speed_mps   = lerp(3.0,  1.0, curriculum_progress)
-success_max_tilt_deg    = lerp(15,     6, curriculum_progress)
+pad_move_radius_m       = lerp(16, 50,  curriculum_progress)
+hover_phase_radius_m    = lerp(10, 2.5, curriculum_progress)
+success_hold_seconds    = lerp(0.5, 2,  curriculum_progress)
+success_max_speed_mps   = lerp(3, 0.8,  curriculum_progress)
+success_max_tilt_deg    = lerp(15, 5,   curriculum_progress)
 ```
 
 Why these values:
@@ -276,8 +372,9 @@ Why these values:
 - `hover_phase_radius_m` is the split point. Outside it, the reward cares most
   about moving toward the pad. Inside it, the reward changes personality and
   cares most about settling.
-- The curriculum advances after successful pad captures, not on a timer. This
-  means the task gets harder only when the policy has demonstrated the skill.
+- The curriculum advances from recent successful-episode rate, not from a timer
+  or individual pad captures. This keeps target changes frequent without letting
+  one good episode spike difficulty.
 - Difficulty increases in two directions at once: the pad can move farther away,
   and the definition of a successful hover becomes tighter.
 - Hover-track starts from the same reward as the fixed hover task. This keeps

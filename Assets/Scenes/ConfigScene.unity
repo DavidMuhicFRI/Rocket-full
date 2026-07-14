@@ -460,30 +460,40 @@ MonoBehaviour:
   instanceCount: 16
   spacing: 500
   partsConfig:
+    hardwarePreset: 0
     bodyRadius: 1.83
     bodyHeight: 41.2
     baseDryMass: 22200
     baseFuelMass: 400000
-    startFuelMass: 40000
+    startFuelMass: 32000
     engineLayout: 2
     independentEngines: 1
+    octawebBurnGroup: 0
     maxThrustPerEngine: 845000
-    minThrottle: 0.39
+    minThrottle: 0.57
     engineSpacing: 0.8
     specificImpulse: 282
     throttleSpoolRate: 5
     gimbalSlewRate: 30
-    maxGimbalAngle: 7
+    maxGimbalAngle: 5
+    engineStartupDelay: 0.85
+    engineShutdownTransient: 0.25
+    engineMinimumRunTime: 2
+    engineRestartCooldown: 2
     finsEnabled: 1
     finLayout: 1
-    finWidthX: 1.73
-    finWidthZ: 1.73
-    finHeight: 0.3
+    finWidthX: 1.59
+    finWidthZ: 1.23
+    finThickness: 0.3
     maxFinAngle: 35
     finSlewRate: 50
-    liftScale: 1
+    liftScale: 0.5
     rcsEnabled: 1
-    rcsThrust: 6000
+    rcsThrust: 750
+    rcsSpecificImpulse: 70
+    rcsMinimumPulseDuration: 0.1
+    rcsPropellantMass: 150
+    rcsDryMass: 250
   telemetryConfig:
     logGoalMetrics: 1
     logAttitudeMetrics: 1
@@ -492,7 +502,7 @@ MonoBehaviour:
     logAeroLoadMetrics: 1
     logEnvironmentMetrics: 0
     logRewardMetrics: 1
-    activeEngineCount: 9
+    activeEngineCount: 1
     independentEngines: 1
     activeFinCount: 4
   envConfig:
@@ -514,6 +524,8 @@ MonoBehaviour:
     hoverTrackSuccessMaxTiltDeg: 8
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
+    landingTargetYawDeg: 0
+    landingCatchAltitude: 30
     runId: Falcon9DefaultRun
     behaviorType: 0
   mlConfig:
@@ -618,30 +630,40 @@ MonoBehaviour:
   finImg2: {fileID: 2800000, guid: 421c8ca9227171e45b9ba12918650afe, type: 3}
   finImg3: {fileID: 2800000, guid: bcc411797acdc5746a338ebce6c1807d, type: 3}
   partsConfig:
+    hardwarePreset: 0
     bodyRadius: 1.83
     bodyHeight: 41.2
     baseDryMass: 22200
     baseFuelMass: 400000
-    startFuelMass: 40000
+    startFuelMass: 32000
     engineLayout: 2
     independentEngines: 1
+    octawebBurnGroup: 0
     maxThrustPerEngine: 845000
-    minThrottle: 0.39
-    engineSpacing: 0.9
+    minThrottle: 0.57
+    engineSpacing: 0.8
     specificImpulse: 282
     throttleSpoolRate: 5
     gimbalSlewRate: 30
     maxGimbalAngle: 5
+    engineStartupDelay: 0.85
+    engineShutdownTransient: 0.25
+    engineMinimumRunTime: 2
+    engineRestartCooldown: 2
     finsEnabled: 1
     finLayout: 1
-    finWidthX: 1.73
-    finWidthZ: 1.73
-    finHeight: 1.7
+    finWidthX: 1.59
+    finWidthZ: 1.23
+    finThickness: 0.3
     maxFinAngle: 35
     finSlewRate: 50
-    liftScale: 1
+    liftScale: 0.5
     rcsEnabled: 1
-    rcsThrust: 6000
+    rcsThrust: 750
+    rcsSpecificImpulse: 70
+    rcsMinimumPulseDuration: 0.1
+    rcsPropellantMass: 150
+    rcsDryMass: 250
   telemetryConfig:
     logGoalMetrics: 1
     logAttitudeMetrics: 1
@@ -650,7 +672,7 @@ MonoBehaviour:
     logAeroLoadMetrics: 1
     logEnvironmentMetrics: 0
     logRewardMetrics: 1
-    activeEngineCount: 9
+    activeEngineCount: 1
     independentEngines: 1
     activeFinCount: 4
   envConfig:
@@ -672,6 +694,8 @@ MonoBehaviour:
     hoverTrackSuccessMaxTiltDeg: 8
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
+    landingTargetYawDeg: 0
+    landingCatchAltitude: 30
     runId: Falcon9DefaultRun
     behaviorType: 0
   mlConfig:
@@ -869,7 +893,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UI.RocketCameraController
   trainingAreaManager: {fileID: 1529266046}
   hud: {fileID: 0}
-  startDistance: 40
+  startDistance: 70
   minDistance: 5
   maxDistance: 400
   zoomSensitivity: 0.12

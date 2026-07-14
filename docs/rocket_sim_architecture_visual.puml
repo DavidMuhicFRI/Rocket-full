@@ -1,0 +1,353 @@
+@startuml
+!pragma layout smetana
+skinparam backgroundColor #0B1020
+skinparam shadowing false
+skinparam roundcorner 18
+skinparam defaultFontName Segoe UI
+skinparam defaultFontColor #E6EDF3
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #9FB3C8
+skinparam ArrowThickness 1.4
+skinparam component {
+  BackgroundColor #172033
+  BorderColor #6E8BB7
+  FontColor #E6EDF3
+}
+skinparam package {
+  BackgroundColor #101827
+  BorderColor #44546A
+  FontColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #1F2937
+  BorderColor #7C8AA5
+  FontColor #E6EDF3
+}
+
+title RocketSim architecture — file connection graph
+
+package "Unity Scene / Prefabs" as ScenePkg {
+  [ConfigScene.unity\nTrainingArea prefabs] as Scene
+}
+
+package "UI layer" as UIPkg {
+  [RightConfigPanel.cs\nanchor] as RCP
+  [RightConfigPanel.Core.cs] as RCPCore
+  [RightConfigPanel.Vehicle.cs] as RCPVehicle
+  [RightConfigPanel.Task.cs] as RCPTask
+  [RightConfigPanel.Environment.cs] as RCPEnv
+  [RightConfigPanel.Rewards.cs] as RCPRewards
+  [RightConfigPanel.Run.cs] as RCPRun
+  [RightConfigPanel.ML.cs] as RCPML
+  [RightConfigPanel.Faults.cs] as RCPFaults
+  [RightConfigPanel.Telemetry.cs] as RCPTelemetry
+  [RightConfigPanel.HardwareTests.cs] as RCPTests
+  [UIHelper.cs] as UIHelper
+  [HardwarePresetUiCatalog.cs] as HardwarePresetUi
+  [RocketCameraController.cs] as Camera
+  [RocketHudFactory.cs] as HudFactory
+  [RocketHUD.cs] as HUD
+}
+
+package "Manager / launch / repositories" as ManagerPkg {
+  [ConfigBridge.cs] as Bridge
+  [TrainingAreaManager.cs] as Manager
+  [TrainingLauncher.cs] as Launcher
+  [TrainingRunRepository.cs] as TrainingRunRepo
+  [TrainingProcessLauncher.cs] as ProcessLauncher
+  [TrainingLaunchRequest.cs] as LaunchRequest
+  [ModelRepository.cs] as ModelRepo
+  [RocketAgentSchema.cs] as AgentSchema
+}
+
+package "Configuration domain" as ConfigPkg {
+  [SimEnvironmentConfig.cs] as EnvConfig
+  [ScenarioType.cs] as ScenarioTypes
+  [ScenarioProfile.cs] as ScenarioProfile
+  [InferenceScenarioConfig.cs] as InferenceConfig
+  [LandingCurriculumState.cs] as LandingCurriculum
+  [HoverTrackCurriculumConfig.cs] as HoverCurriculum
+  [MLAgentsConfig.cs] as MLConfig
+  [RewardModelConfig.cs] as RewardConfig
+
+  [RocketPartsConfig.cs] as PartsConfig
+  [RocketPhysicsConfig.cs] as PhysicsConfig
+  [RocketHardwareTypes.cs] as HardwareTypes
+  [Falcon9Reference.cs] as F9Ref
+  [RocketHardwarePresetFactory.cs] as PresetFactory
+  [ScenarioFuelProfileCatalog.cs] as FuelCatalog
+  [EngineBurnGroupFactory.cs] as BurnGroupFactory
+  [RocketPartsConfigValidator.cs] as PartsValidator
+}
+
+package "Rocket assembly + hardware components" as HardwarePkg {
+  [RocketAssembly.cs] as Assembly
+  [RocketBody.cs] as Body
+  [ThrusterComponent.cs] as Thrusters
+  [FinComponent.cs] as Fins
+  [RcsComponent.cs] as RCS
+
+  [RcsJetLayout.cs] as RcsLayoutData
+  [RcsLayoutBuilder.cs] as RcsLayoutBuilder
+  [RcsGeometryBuilder.cs] as RcsGeometry
+  [RcsVisualController.cs] as RcsVisuals
+  [RcsForceMapper.cs] as RcsForce
+}
+
+package "FalconAgent runtime" as AgentPkg {
+  [FalconAgent.cs\nanchor/state/getters] as AgentAnchor
+  [FalconAgent.Core.cs\nlifecycle + FixedUpdate] as AgentCore
+  [FalconAgent.Actuators.cs\nactions/manual control] as AgentAct
+  [FalconAgent.Physics.cs\nforces + mass update] as AgentPhys
+  [FalconAgent.Scenarios.cs\nspawn/targets] as AgentScen
+  [FalconAgent.LandingCapture.cs\nchopstick platform state] as AgentLanding
+  [FalconAgent.Telemetry.cs\nmeasure/log terms] as AgentTelem
+
+  [EngineStateMachine.cs] as EngineSM
+  [EngineTimingConfig.cs] as EngineTiming
+  [EngineRunState.cs] as EngineRunState
+  [RcsValveBank.cs] as RcsValveBank
+  [AtmosphereModel.cs] as Atmosphere
+  [FinAerodynamicsModel.cs] as FinAero
+  [RocketMassProperties.cs] as MassProps
+  [LandingPlatformFactory.cs] as LandingFactory
+  [LandingCaptureEvaluator.cs] as LandingEval
+  [LandingPlatformComponent.cs] as LandingPlatform
+}
+
+package "Reward system" as RewardPkg {
+  [RocketRewardModel.cs\ndispatcher] as RewardDispatcher
+  [LandingRewardModel.cs] as LandingReward
+  [HoverRewardModel.cs] as HoverReward
+  [TakeoffRewardModel.cs] as TakeoffReward
+  [BellyFlopRewardModel.cs] as BellyReward
+  [RewardRuntimeContext.cs] as RewardContext
+  [RewardTerms.cs] as RewardTerms
+  [RewardDecision.cs] as RewardDecision
+}
+
+package "Telemetry system" as TelemetryPkg {
+  [TelemetryConfig.cs] as TelemetryConfig
+  [RocketSensorPackage.cs] as SensorPackage
+  [TelemetryLogger.cs] as TelemetryLogger
+  [TelemetryRow\ninside TelemetryLogger.cs] as TelemetryRow
+  [TelemetryRunContext.cs] as TelemetryRunContext
+  [TelemetryCsvWriter.cs] as TelemetryCsvWriter
+  [TelemetryRowFormatter.cs] as TelemetryFormatter
+  [TelemetryMetricCatalog.cs] as TelemetryMetricCatalog
+  [TelemetryMetricDescriptor.cs] as TelemetryMetricDescriptor
+  [EpisodeTelemetryAccumulator.cs] as TelemetryAccumulator
+  [RunningStats.cs] as RunningStats
+}
+
+package "Hardware tests" as TestsPkg {
+  [HardwareTestController.cs\nanchor/status] as HardwareTestController
+  [RocketHardwareTestController.cs\norchestrator/base] as HardwareTestOrchestrator
+  [IRocketHardwareTest.cs] as HardwareTestInterface
+  [FinAxisHardwareTest.cs] as FinAxisTest
+  [AerodynamicsHardwareTest.cs] as AeroTest
+  [TakeoffHardwareTest.cs] as TakeoffTest
+  [LandingHardwareTest.cs] as LandingTest
+  [RcsVacuumHardwareTest.cs] as RcsVacTest
+  [RcsSeparationHardwareTest.cs] as RcsSepTest
+  [ThrusterHardwareTest.cs] as ThrusterTest
+  [TopStabilizerHardwareTest.cs] as TopStabTest
+}
+
+' Scene wiring
+Scene --> Bridge : serialized references
+Scene --> Manager : prefab root component
+Scene --> Launcher : optional launch component
+Scene --> RCP : UI document/panel component
+Scene --> Camera : main camera component
+
+' UI partial composition
+RCP --> RCPCore : partial class / shared fields
+RCP --> RCPVehicle : partial class / Vehicle tab
+RCP --> RCPTask : partial class / Task tab
+RCP --> RCPEnv : partial class / environment UI
+RCP --> RCPRewards : partial class / rewards UI
+RCP --> RCPRun : partial class / Run tab
+RCP --> RCPML : partial class / ML tab
+RCP --> RCPFaults : partial class / Faults tab
+RCP --> RCPTelemetry : partial class / Data tab
+RCP --> RCPTests : partial class / hardware tests UI
+RCPCore --> UIHelper : creates common widgets
+RCPVehicle --> UIHelper : creates vehicle controls
+RCPTask --> UIHelper : creates task/spawn controls
+RCPEnv --> UIHelper : creates weather controls
+RCPRewards --> UIHelper : creates reward sliders
+RCPRun --> UIHelper : creates run/curriculum controls
+RCPML --> UIHelper : creates ML controls
+RCPFaults --> UIHelper : creates fault controls
+RCPTelemetry --> UIHelper : creates logging controls
+RCPVehicle --> HardwarePresetUi : renders preset labels/descriptions
+RCPRun --> TrainingRunRepo : scans/loads saved runs
+RCPRun --> ModelRepo : checks ONNX existence
+
+' Bridge and shared configs
+Bridge --> RCP : injects manager/config references
+RCP --> Manager : writes shared configs + apply changes
+RCPVehicle --> PartsConfig : mutates hardware config
+RCPTask --> EnvConfig : mutates scenario/spawn settings
+RCPEnv --> EnvConfig : mutates weather/wind
+RCPRewards --> RewardConfig : mutates reward factors
+RCPRun --> LandingCurriculum : displays/updates landing curriculum
+RCPRun --> HoverCurriculum : displays/updates hover curriculum
+RCPML --> MLConfig : mutates trainer settings
+RCPFaults --> EnvConfig : mutates fault settings
+RCPTelemetry --> TelemetryConfig : mutates logging groups
+RCPCore --> Launcher : starts training/inference
+RCPTests --> Manager : starts hardware tests
+
+' Config domain
+PartsConfig --> PresetFactory : ApplyPreset
+PartsConfig --> FuelCatalog : ApplyScenarioDefaults
+PartsConfig --> HardwareTypes : engine/fin/RCS counts
+PresetFactory --> F9Ref : reference constants
+PresetFactory --> PartsValidator : clamp generated preset
+FuelCatalog --> ScenarioProfile : start fuel/terminal profile
+FuelCatalog --> BurnGroupFactory : scenario burn-group defaults
+BurnGroupFactory --> HardwareTypes : octaweb burn group
+EnvConfig --> ScenarioTypes : scenario/weather/behavior enums
+EnvConfig --> InferenceConfig : inference spawn profile
+EnvConfig --> LandingCurriculum : landing progression fields
+EnvConfig --> HoverCurriculum : hover progression fields
+EnvConfig --> RewardConfig : scenario reward factors
+
+' Training/inference repositories
+Launcher --> TrainingRunRepo : writes YAML/JSON run config
+Launcher --> LaunchRequest : packages trainer args
+Launcher --> ProcessLauncher : launches mlagents-learn
+Launcher --> Manager : spawns areas after trainer ready
+Manager --> ModelRepo : loads inference ONNX
+Launcher --> MLConfig : serializes trainer YAML
+Manager --> AgentSchema : configures ML-Agents behavior
+AgentSchema --> PartsConfig : action-space channels
+
+' Area spawning / assembly
+Manager --> Assembly : instantiate + ApplyPartsConfig
+Manager --> AgentAnchor : configure env/model/area index
+Assembly --> PartsConfig : reads user hardware config
+Assembly --> PhysicsConfig : derives physics values
+Assembly --> Body : size body
+Assembly --> Thrusters : create/position engines
+Assembly --> Fins : create/position fins
+Assembly --> RCS : create/position RCS
+
+' RCS internals
+RCS --> RcsLayoutBuilder : Reposition pods
+RCS --> RcsForce : jet world position/force direction
+RCS --> RcsVisuals : ShowCommands/ClearVisuals
+RcsLayoutBuilder --> RcsLayoutData : pod names/angles
+RcsLayoutBuilder --> RcsGeometry : build procedural visuals
+RcsGeometry --> RcsVisuals : plume lights/particles
+RcsForce --> RcsLayoutData : nozzle directions/names
+RcsVisuals --> RcsLayoutData : command-to-plume mapping
+
+' FalconAgent partials
+AgentAnchor --> AgentCore : partial class
+AgentAnchor --> AgentAct : partial class
+AgentAnchor --> AgentPhys : partial class
+AgentAnchor --> AgentScen : partial class
+AgentAnchor --> AgentLanding : partial class
+AgentAnchor --> AgentTelem : partial class
+AgentCore --> AgentScen : OnEpisodeBegin spawn/reset
+AgentCore --> AgentAct : FixedUpdate actuator stepping
+AgentCore --> AgentPhys : FixedUpdate force application
+AgentCore --> AgentLanding : platform geometry/state
+AgentCore --> RewardDispatcher : reward + terminal decision
+AgentCore --> AgentTelem : log measured row
+AgentAnchor --> EnvConfig : shared runtime environment config
+AgentAnchor --> Assembly : rocket hardware references
+AgentAnchor --> PhysicsConfig : current physics config
+
+' Actuators
+AgentAct --> EngineSM : anti-PWM engine lifecycle
+AgentAct --> EngineTiming : timing DTO/clamps
+EngineSM --> EngineRunState : state enum
+AgentAct --> RcsValveBank : minimum pulse stepping
+AgentAct --> HardwareTypes : active engine inclusion
+AgentAct --> Fins : ApplyDeflections
+AgentAct --> RCS : ShowCommands
+
+' Physics
+AgentPhys --> Atmosphere : pressure/density/thrust scale
+AgentPhys --> FinAero : per-fin force
+AgentPhys --> MassProps : CoM/inertia tensor
+AgentPhys --> Thrusters : force application points
+AgentPhys --> RCS : RCS force application points
+AgentPhys --> Fins : fin transforms
+
+' Scenarios/landing
+AgentScen --> ScenarioProfile : spawn/goal/terminal altitude
+AgentScen --> InferenceConfig : inference spawn profile
+AgentLanding --> LandingFactory : find/create platform
+AgentLanding --> LandingPlatform : configure/query contacts
+AgentLanding --> LandingEval : capture envelope check
+
+' Rewards
+RewardDispatcher --> LandingReward : landing scenario
+RewardDispatcher --> HoverReward : hover/hover-tracking
+RewardDispatcher --> TakeoffReward : takeoff
+RewardDispatcher --> BellyReward : belly-flop
+LandingReward --> RewardContext : reads context
+HoverReward --> RewardContext : reads context
+TakeoffReward --> RewardContext : reads context
+BellyReward --> RewardContext : reads context
+RewardContext --> RewardTerms : measured state terms
+LandingReward --> RewardDecision : returns reward/termination
+HoverReward --> RewardDecision : returns reward/termination
+TakeoffReward --> RewardDecision : returns reward/termination
+BellyReward --> RewardDecision : returns reward/termination
+
+' Telemetry
+AgentTelem --> SensorPackage : samples sensor/load data
+AgentTelem --> TelemetryRow : builds per-step row
+AgentTelem --> TelemetryLogger : logs step/episode
+TelemetryLogger --> TelemetryConfig : chooses enabled families
+TelemetryLogger --> TelemetryRunContext : output paths/run id
+TelemetryLogger --> TelemetryMetricCatalog : metric list/order
+TelemetryMetricCatalog --> TelemetryMetricDescriptor : name + row extractor
+TelemetryLogger --> TelemetryFormatter : CSV headers/rows
+TelemetryLogger --> TelemetryAccumulator : episode summaries
+TelemetryAccumulator --> RunningStats : online mean/stddev
+TelemetryFormatter --> TelemetryCsvWriter : CSV strings
+TelemetryCsvWriter --> TelemetryRunContext : file path target
+
+' Hardware tests
+Manager --> HardwareTestController : ensure/start controller
+HardwareTestController --> HardwareTestOrchestrator : active test orchestration
+HardwareTestOrchestrator --> HardwareTestInterface : lifecycle contract
+HardwareTestInterface --> FinAxisTest : implementation
+HardwareTestInterface --> AeroTest : implementation
+HardwareTestInterface --> TakeoffTest : implementation
+HardwareTestInterface --> LandingTest : implementation
+HardwareTestInterface --> RcsVacTest : implementation
+HardwareTestInterface --> RcsSepTest : implementation
+HardwareTestInterface --> ThrusterTest : implementation
+HardwareTestInterface --> TopStabTest : implementation
+FinAxisTest --> AgentAct : manual fin commands
+AeroTest --> AgentPhys : observes aero response
+TakeoffTest --> AgentAct : manual throttle commands
+LandingTest --> AgentCore : landing scenario diagnostics
+RcsVacTest --> AgentAct : manual RCS commands
+RcsSepTest --> AgentAct : manual RCS commands
+ThrusterTest --> AgentAct : manual engine/gimbal commands
+
+' Camera/HUD
+Camera --> Manager : reads active agent list
+Camera --> HudFactory : creates fallback HUD
+HudFactory --> HUD : runtime canvas/widgets
+Camera --> HUD : sets watched agent
+HUD --> AgentAnchor : reads public flight getters
+
+note bottom
+  Main ownership rule:
+  UI mutates shared config objects on TrainingAreaManager.
+  RocketAssembly converts RocketPartsConfig into hardware + RocketPhysicsConfig.
+  FalconAgent owns per-episode runtime state and calls actuators, physics, rewards, landing capture, and telemetry.
+end note
+
+@enduml

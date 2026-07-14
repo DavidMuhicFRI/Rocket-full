@@ -136,7 +136,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2795494460573968390, guid: 1d752838420037c42a78c975568c393b, type: 3}
       propertyPath: fuelMass
-      value: 40000
+      value: 32000
       objectReference: {fileID: 0}
     - target: {fileID: 2795494460573968390, guid: 1d752838420037c42a78c975568c393b, type: 3}
       propertyPath: maxScale
@@ -156,7 +156,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2795494460573968390, guid: 1d752838420037c42a78c975568c393b, type: 3}
       propertyPath: maxGimbal
-      value: 7
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 2795494460573968390, guid: 1d752838420037c42a78c975568c393b, type: 3}
       propertyPath: targetPad

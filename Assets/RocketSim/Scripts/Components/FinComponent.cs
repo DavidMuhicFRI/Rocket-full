@@ -1,31 +1,30 @@
-﻿using System.Diagnostics;
+// -----------------------------------------------------------------------------
+// File: Assets/RocketSim/Scripts/Components/FinComponent.cs
+// Purpose: Positions grid-fin objects around the body, stores their physical
+// dimensions and limits, and applies the deflection angles produced by the agent.
+// Documentation: Comments in this file use plain language to describe intent,
+// so the simulator architecture is easier to understand and maintain.
+// -----------------------------------------------------------------------------
+
 using UnityEngine;
 
 namespace RocketSim
 {
-    // Defines the actual physical arrangement of the fins
-    public enum FinLayout
-    {
-        ThreeFins_120,   // 3 fins, 120 degrees apart
-        FourFins_Plus,   // 4 fins, 90 degrees apart (+ shape)
-        FourFins_X       // 4 fins, 90 degrees apart, rotated 45 degrees (X shape)
-    }
-
     public class FinComponent : MonoBehaviour
     {
         [Header("Geometry — written by RocketAssembly.ApplyPartsConfig")]
         public FinLayout layout = FinLayout.FourFins_Plus;
         
-        [Range(0.2f, 4f)]  public float finWidthX  = 1.73f;
-        [Range(0.2f, 4f)]  public float finWidthZ  = 1.73f;
-        [Range(0.2f, 1f)]  public float finHeight  = 0.3f;
+        [Range(0.2f, 4f)]  public float finWidthX = RocketPartsConfig.DefaultFinRadialLengthM;
+        [Range(0.2f, 4f)]  public float finWidthZ = RocketPartsConfig.DefaultFinTangentialWidthM;
+        [Range(0.1f, 1f)]  public float finThickness = RocketPartsConfig.DefaultFinThicknessM;
 
         [Header("Actuator Limits")]
         [Range(5f,  60f)]  public float maxFinAngle = 35f;
         [Range(10f, 200f)] public float finSlewRate = 50f;
 
         [Header("Aero")]
-        [Range(0.5f, 3f)]  public float liftScale = 1.0f;
+        [Range(0.1f, 3f)]  public float liftScale = RocketPartsConfig.DefaultGridFinLiftScale;
         
         public float A_fin => finWidthX * finWidthZ;
         public int FinCount => layout switch
@@ -36,7 +35,11 @@ namespace RocketSim
 
         Quaternion[] _neutralRotations = new Quaternion[0];
         
-        // Scale every child mesh and position them based on the selected layout
+        /// <summary>
+        /// Enables the fin children required by the selected layout, scales and
+        /// positions them around the body, and remembers their neutral rotations
+        /// for later deflection commands.
+        /// </summary>
         public void ApplyLayout(float bodyRadius = 1.83f)
         {
             // Define the angles for the fins based on the layout
@@ -66,7 +69,7 @@ namespace RocketSim
                 if (i < angles.Length)
                 {
                     fin.gameObject.SetActive(true);
-                    fin.localScale = new Vector3(finWidthX, finHeight, finWidthZ);
+                    fin.localScale = new Vector3(finWidthX, finThickness, finWidthZ);
 
                     float angleRad = angles[i] * Mathf.Deg2Rad;
 
@@ -90,6 +93,10 @@ namespace RocketSim
             }
         }
 
+        /// <summary>
+        /// Rotates each active fin away from its cached neutral orientation,
+        /// clamping the requested angles to the configured actuator limit.
+        /// </summary>
         public void ApplyDeflections(float[] deflectionsDeg)
         {
             if (deflectionsDeg == null) return;
@@ -109,6 +116,9 @@ namespace RocketSim
             }
         }
 
+        /// <summary>
+        /// Applies serialized fin layout and dimensions when the component enters the scene.
+        /// </summary>
         void Awake() => ApplyLayout();
     }
 }

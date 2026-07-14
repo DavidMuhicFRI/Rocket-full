@@ -403,11 +403,11 @@ MonoBehaviour:
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
   dryMass: 25600
-  fuelMass: 40000
+  fuelMass: 32000
   maxThrust: 845000
-  minThrottle: 0.39
+  minThrottle: 0.57
   burnRate: 250
-  maxGimbalAngle: 7
+  maxGimbalAngle: 5
   rb: {fileID: 3609761828162819993}
   thrustPoint: {fileID: 9164848284529757889}
   topControlPoint: {fileID: 6690854722929554743}

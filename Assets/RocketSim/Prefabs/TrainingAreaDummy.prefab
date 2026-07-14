@@ -8,10 +8,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 1017208702370245666, guid: 4b8b53b4e9efa434f9d738b62bf7c5eb, type: 3}
-      propertyPath: maxGimbalAngle
-      value: 7
-      objectReference: {fileID: 0}
     - target: {fileID: 2369718807868200021, guid: 4b8b53b4e9efa434f9d738b62bf7c5eb, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

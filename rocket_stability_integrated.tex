@@ -1,0 +1,496 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{hyperref}
+
+\geometry{margin=2.5cm}
+\onehalfspacing
+\setlist[itemize]{leftmargin=1.2cm}
+\setlist[enumerate]{leftmargin=1.2cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\title{Rocket Stability}
+\author{swarnendu.ghosh and david.muhic}
+\date{June 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Reusable launch vehicles are difficult to control because they combine unstable rigid-body dynamics, rapidly changing mass, aerodynamic forces, actuator limitations, and strict landing requirements. A vertically landing rocket must keep its attitude stable while also controlling altitude, horizontal drift, velocity, fuel use, and the direction of its thrust vector. Small errors can quickly become large attitude deviations, especially when the vehicle is long, narrow, and mainly controlled from engines near its base.
+
+This project focuses on the development of a configurable rocket simulation environment for reinforcement learning. The simulator is built in Unity and uses Unity ML-Agents to train and evaluate control policies. The simulated vehicle is inspired by a reusable Falcon-9-style booster, although the goal is not to create an exact digital twin of Falcon 9. Instead, the goal is to build a physics-inspired environment where the rocket behaves plausibly enough to compare learning algorithms and different rocket configurations under controlled conditions.
+
+The long-term thesis goal is to study how reinforcement learning algorithms such as Proximal Policy Optimization (PPO) and Soft Actor-Critic (SAC) perform on rocket control tasks. Planned experiments include hovering, takeoff, landing, stage-separation-style attitude control, wind disturbances, possible hardware defects, and different rocket configurations. The current document describes the simulator and the systems that have already been implemented. The final experimental results and the full development story will be added later.
+
+At the current stage, the project already contains:
+
+\begin{itemize}
+    \item a configurable rocket body with adjustable radius, height, dry mass, fuel capacity, and starting fuel;
+    \item selectable engine layouts, including single-engine, three-engine, and nine-engine configurations;
+    \item thrust vector control through gimballed engines;
+    \item grid fin geometry, fin deflection, and simplified fin aerodynamics;
+    \item reaction control system (RCS) pods for attitude control in vacuum-like or thin-atmosphere conditions;
+    \item a simplified atmosphere, wind, gust, weather, and aerodynamic force model;
+    \item changing mass, centre of mass, and inertia as fuel and RCS propellant are consumed;
+    \item several training scenarios, including landing, hover, hover tracking, takeoff, and belly-flop-style reorientation;
+    \item a reinforcement learning observation and action interface using Unity ML-Agents;
+    \item scenario-specific reward functions;
+    \item telemetry logging to CSV files for later analysis;
+    \item a Python plotting tool for telemetry visualization;
+    \item a runtime user interface for changing rocket, environment, scenario, telemetry, and ML settings;
+    \item diagnostic hardware-style tests for engines, fins, aerodynamics, RCS, takeoff, and landing behavior.
+\end{itemize}
+
+The simulator should be understood as a research and experimentation environment. It includes many physical effects that are important for rocket control, but it is not yet a fully validated aerospace simulation. For this thesis, the most important requirement is not exact reproduction of real flight telemetry, but consistent and physically meaningful behavior. This makes it possible to compare algorithms fairly, because each algorithm is evaluated under the same assumptions, disturbances, and vehicle model.
+
+\section{Related Works}
+
+I am listing some papers below.
+\begin{itemize}
+    \item 
+    \href{https://www.researchgate.net/profile/Yazdi-Jenie/publication/340890938_Falcon_9_Rocket_Launch_Modeling_and_Simulation_with_Thrust_Vectoring_Control_and_Scheduling/links/641489c2a1b72772e4067118/Falcon-9-Rocket-Launch-Modeling-and-Simulation-with-Thrust-Vectoring-Control-and-Scheduling.pdf}{Falcon 9 Rocket Launch Modeling and Simulation with Thrust Vectoring Control and Scheduling}
+    \item \href{https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9986540}{Real-time Guidance for Powered Landing of Reusable Rockets via Deep Reinforcement Learning}
+    \item  \href{https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10461080}{Realizing Stabilized Landing for Computation-Limited Reusable Rockets: A Quantum Reinforcement Learning Approach}
+    \item  \href{https://www.sciencedirect.com/science/article/pii/S0925231224001486}{A reinforcement learning approach for adaptive tracking control of a reusable rocket model in a landing scenario}
+    \item  \href{https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11494205}{Robust Model-Based Reinforcement Learning for Rocket Landing}
+    
+\end{itemize}
+
+The papers listed above are related to this project in two main ways. First, they show that rocket launch, landing, and thrust-vector-control problems can be modeled as dynamic control problems with strong coupling between attitude, position, and actuator constraints. Second, they show that reinforcement learning is already being investigated for powered descent and reusable rocket landing. This project follows the same general research direction, but focuses on building a complete configurable simulator first. The simulator can then be used to compare reinforcement learning algorithms and rocket hardware configurations in a controlled environment.
+
+\section{Experimental Setup}
+
+This section describes the simulation environment that has already been developed. The final thesis experiments will be added later after systematic PPO and SAC training runs are completed.
+
+\subsection{Software Environment}
+
+The project is implemented in Unity using C\# scripts and Unity ML-Agents. Unity is used for the 3D scene, rigid-body physics loop, user interface, visualization, prefabs, and runtime object management. Unity ML-Agents provides the reinforcement learning interface between the Unity environment and Python-based trainers.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{p{0.28\linewidth} p{0.62\linewidth}}
+\toprule
+\textbf{Component} & \textbf{Role in the project} \\
+\midrule
+Unity & Main simulation engine, 3D visualization, physics loop, prefabs, and UI. \\
+Unity ML-Agents & Reinforcement learning interface for observations, actions, rewards, training, and inference. \\
+C\# & Main implementation language for simulator physics, rewards, telemetry, UI, and control code. \\
+Python & Used by ML-Agents training and telemetry plotting. \\
+ONNX & Format used for saved trained policies during inference. \\
+CSV telemetry & Output format for step-level and episode-level metrics. \\
+\bottomrule
+\end{tabular}
+\caption{Main technologies used in the current project.}
+\end{table}
+
+The project supports both training and inference. In training mode, the Unity scene connects to the ML-Agents Python trainer. In inference mode, a saved ONNX model is loaded and used to control the rocket directly inside Unity.
+
+\subsection{Simulator Architecture}
+
+The simulator is separated into several main components. This makes the system easier to modify, test, and extend.
+
+\begin{longtable}{p{0.30\linewidth} p{0.60\linewidth}}
+\toprule
+\textbf{Component} & \textbf{Responsibility} \\
+\midrule
+\endhead
+\texttt{FalconAgent} & Main ML-Agents agent. Handles observations, actions, physics forces, fuel, mass properties, scenario spawning, rewards, telemetry, and manual test control. \\
+\texttt{RocketAssembly} & Applies the selected rocket hardware configuration to the rocket prefab and builds a physics configuration snapshot for the agent. \\
+\texttt{RocketPartsConfig} & Stores adjustable rocket hardware parameters such as body size, engine layout, thrust, fins, and RCS settings. \\
+\texttt{RocketPhysicsConfig} & Stores the per-episode physics values consumed by the agent, such as mass, thrust, areas, centre of pressure, fin count, and RCS count. \\
+\texttt{RocketBody} & Computes geometry, axial area, lateral area, dry mass scaling, fuel capacity scaling, and centre-of-pressure approximation. \\
+\texttt{ThrusterComponent} & Defines engine layout, engine count, per-engine thrust, specific impulse, throttle limits, gimbal limits, and actuator slew rates. \\
+\texttt{FinComponent} & Defines grid fin layouts, fin geometry, fin area, maximum deflection, and fin slew rate. \\
+\texttt{RcsComponent} & Defines RCS pods and nozzle directions, creates visual plume effects, and provides jet force positions and directions. \\
+\texttt{SimEnvironmentConfig} & Stores scenario, wind, gust, weather, behavior mode, and hover-tracking curriculum settings. \\
+\texttt{RocketRewardModel} & Contains the reward function for each supported scenario. \\
+\texttt{TelemetryLogger} & Writes step-level and episode-level telemetry CSV files. \\
+\texttt{RocketSensorPackage} & Computes derived sensor and load quantities such as acceleration, load factor, angular acceleration, heat flux, and stress proxies. \\
+\texttt{TrainingAreaManager} & Spawns training, inference, and hardware test areas. Applies shared configuration to all agents. \\
+\texttt{TrainingLauncher} & Writes ML-Agents training configuration files and launches the Python trainer process. \\
+\texttt{RightConfigPanel} & Runtime UI for changing parts, telemetry, environment, scenario, and ML settings. \\
+\texttt{HardwareTestController} & Manual diagnostic controller for testing thrusters, fins, aerodynamics, RCS, takeoff, and landing. \\
+\bottomrule
+\caption{Important implemented classes and their responsibilities.}
+\end{longtable}
+
+During each physics step, the agent updates actuators, updates wind, applies engine forces, applies aerodynamic forces, updates sensor values, applies RCS forces, updates mass properties, computes rewards, and logs telemetry. This makes the simulation loop deterministic enough for comparison while still containing disturbances such as wind and randomized initial states.
+
+\subsection{Rocket Model}
+
+The rocket model is Falcon-9-inspired but configurable. The default body parameters are:
+
+\begin{itemize}
+    \item body radius: \(1.83\,\mathrm{m}\);
+    \item body height: \(41.2\,\mathrm{m}\);
+    \item base dry mass: \(22200\,\mathrm{kg}\);
+    \item base fuel capacity: \(400000\,\mathrm{kg}\);
+    \item default starting fuel: \(40000\,\mathrm{kg}\).
+\end{itemize}
+
+The body geometry is used to compute aerodynamic reference areas. The axial reference area is:
+
+\begin{equation}
+A_{\mathrm{axial}} = \pi r^2,
+\end{equation}
+
+where \(r\) is the body radius. The lateral reference area is approximated as:
+
+\begin{equation}
+A_{\mathrm{lateral}} = 2rh,
+\end{equation}
+
+where \(h\) is the body height. Fuel capacity scales with cylindrical volume:
+
+\begin{equation}
+m_{\mathrm{fuel,max}} \propto \pi r^2h.
+\end{equation}
+
+Dry mass scales with a surface-area-like structural approximation:
+
+\begin{equation}
+m_{\mathrm{dry}} \propto 2\pi r(h+r).
+\end{equation}
+
+The centre of pressure is approximated at \(65\%\) of the rocket height, measured from the base:
+
+\begin{equation}
+y_{\mathrm{CP}} = 0.65h.
+\end{equation}
+
+The rocket root position represents the base plane of the booster. This means that the altitude value in the simulation describes the base altitude, not the centre of the visual body.
+
+\subsection{Engine Model}
+
+The simulator supports three engine layouts:
+
+\begin{itemize}
+    \item \textbf{Single}: one active centre engine;
+    \item \textbf{Triple}: three active engines arranged around the base;
+    \item \textbf{Octaweb}: one centre engine and eight surrounding engines.
+\end{itemize}
+
+The default per-engine values are:
+
+\begin{itemize}
+    \item maximum thrust: \(845000\,\mathrm{N}\);
+    \item minimum throttle: \(0.39\);
+    \item specific impulse: \(282\,\mathrm{s}\);
+    \item maximum gimbal angle: \(7^\circ\);
+    \item throttle spool rate: \(5\,\mathrm{s^{-1}}\);
+    \item gimbal slew rate: \(30^\circ/\mathrm{s}\).
+\end{itemize}
+
+Engine thrust is applied at the physical engine positions. The thrust direction is controlled by two gimbal angles. The force magnitude for each active engine is approximated as:
+
+\begin{equation}
+F = u T_{\max} S_T(h),
+\end{equation}
+
+where \(u\) is throttle, \(T_{\max}\) is maximum thrust, and \(S_T(h)\) is an altitude-dependent thrust multiplier. The current model includes a modest increase in thrust and specific impulse with altitude. Fuel consumption is calculated using:
+
+\begin{equation}
+\dot{m} = \frac{F}{I_{\mathrm{sp}}g_0},
+\end{equation}
+
+where \(g_0 = 9.80665\,\mathrm{m/s^2}\). If the rocket does not have enough fuel for a full physics step, the thrust is scaled down so that fuel cannot become negative.
+
+\subsection{Grid Fins}
+
+The grid fin system supports three layouts:
+
+\begin{itemize}
+    \item three fins \(120^\circ\) apart;
+    \item four fins in a plus-style layout;
+    \item four fins in a project-defined X-style layout.
+\end{itemize}
+
+Each fin has configurable width, depth, height, maximum deflection, slew rate, and lift scale. The fin reference area is approximated by:
+
+\begin{equation}
+A_{\mathrm{fin}} = w_x w_z.
+\end{equation}
+
+The fin aerodynamic model uses local air-relative velocity, commanded deflection, sideslip, a thin-airfoil-style lift approximation, a stall fade factor, and a simplified induced drag term. Forces are applied at the fin world positions, so they produce moments on the rocket body.
+
+\subsection{Reaction Control System}
+
+The RCS model represents two opposing cold-nitrogen pods near the top of the booster. Each pod has four nozzle directions: aft, outboard, and two opposing tangential directions. This gives eight independently controlled RCS valves.
+
+The visual plume direction represents the exhaust direction. The force applied to the rocket is in the opposite direction, following the physical reaction principle. RCS uses a separate propellant mass approximation instead of consuming the main engine fuel. The default RCS values are:
+
+\begin{itemize}
+    \item thrust per jet: \(750\,\mathrm{N}\);
+    \item RCS specific impulse: \(70\,\mathrm{s}\);
+    \item minimum valve pulse: \(0.10\,\mathrm{s}\);
+    \item RCS propellant mass approximation: \(150\,\mathrm{kg}\).
+\end{itemize}
+
+\subsection{Atmosphere, Wind, and Aerodynamics}
+
+The atmospheric density model uses an exponential approximation:
+
+\begin{equation}
+\rho(h) = \rho_0M_{\rho}e^{-h/H},
+\end{equation}
+
+where \(\rho_0 = 1.225\,\mathrm{kg/m^3}\), \(M_{\rho}\) is a weather-dependent multiplier, and \(H = 8500\,\mathrm{m}\). Dynamic pressure is computed as:
+
+\begin{equation}
+q = \frac{1}{2}\rho \|\vec{v}_{\mathrm{rel}}\|^2,
+\end{equation}
+
+where:
+
+\begin{equation}
+\vec{v}_{\mathrm{rel}} = \vec{v}_{\mathrm{rocket}} - \vec{v}_{\mathrm{wind}}.
+\end{equation}
+
+The implemented aerodynamic forces include axial drag, lateral body drag, base drag during tail-first descent, and grid-fin forces. Axial drag acts along the rocket body axis and opposes motion along that axis. Lateral drag is applied at the approximate centre of pressure, creating both translation and attitude moments. Base drag is active when the rocket descends tail-first.
+
+Wind is represented as a horizontal velocity vector. Gusts change the target wind over time, and the actual wind smoothly approaches the target. Weather settings currently modify density and gust strength. This is a simplified disturbance model, not a full weather simulation.
+
+\subsection{Mass, Centre of Mass, and Inertia}
+
+The total simulated mass is:
+
+\begin{equation}
+m_{\mathrm{total}} = m_{\mathrm{dry}} + m_{\mathrm{fuel}} + m_{\mathrm{RCS,propellant}}.
+\end{equation}
+
+Dry mass includes approximate contributions from the selected number of engines, fins, RCS hardware, and remaining structure. The centre of mass is recomputed from component masses and vertical positions. Engine mass is placed near the base, structure is distributed along the vehicle, fins and RCS are placed near the top, and fuel is placed around the tank-stack average. Pitch, yaw, and spin inertia are also updated as mass changes.
+
+This is still an approximation, but it is more suitable for learning experiments than a constant-mass model. It allows the control problem to change as fuel is consumed.
+
+\subsection{Observation and Action Space}
+
+The ML-Agents observation vector contains:
+
+\begin{itemize}
+    \item relative position to the target pad;
+    \item linear velocity;
+    \item angular velocity;
+    \item rocket up vector;
+    \item current throttle values;
+    \item current gimbal values;
+    \item current fin deflections;
+    \item current RCS valve states;
+    \item fuel fraction;
+    \item normalized altitude;
+    \item angle of attack;
+    \item normalized dynamic pressure;
+    \item wind in the rocket-local frame;
+    \item sine and cosine of target-heading error.
+\end{itemize}
+
+The base observation count is 21, including the sine and cosine of target-heading error. The total observation size depends on the active hardware:
+
+\begin{equation}
+N_{\mathrm{obs}} = 21 + 3N_{\mathrm{engines}} + N_{\mathrm{fins}} + N_{\mathrm{RCS}}.
+\end{equation}
+
+The action space is hybrid. Engine, gimbal, and fin commands are continuous:
+
+\begin{equation}
+N_{\mathrm{continuous}} = 3N_{\mathrm{engines}} + N_{\mathrm{fins}}.
+\end{equation}
+
+RCS uses \(N_{\mathrm{RCS}}\) binary discrete branches, one per valve. An open command produces full rated thrust and is held for at least the configured minimum pulse duration.
+
+\subsection{Implemented Scenarios}
+
+The current simulator supports five scenario types:
+
+\begin{longtable}{p{0.22\linewidth} p{0.68\linewidth}}
+\toprule
+\textbf{Scenario} & \textbf{Description} \\
+\midrule
+\endhead
+Landing & The rocket starts above the pad with downward velocity and must descend upright, slow down, and touch down near the target. \\
+Hover & The rocket must hold a fixed altitude around \(30\,\mathrm{m}\), remain upright, and resist drift. \\
+Hover Tracking & The rocket must hover and follow a moving target pad. A curriculum gradually changes difficulty. \\
+Takeoff & The rocket starts near ground clearance and must lift off, climb, and avoid excessive lateral drift. \\
+Belly Flop & The rocket starts in a high-tilt state and must transition toward upright landing behavior. \\
+\bottomrule
+\caption{Implemented scenario modes.}
+\end{longtable}
+
+Hover and hover tracking use a goal altitude of \(30\,\mathrm{m}\). Takeoff uses a goal altitude of \(120\,\mathrm{m}\). Landing-style scenarios use a ground-clearance target of \(0.5\,\mathrm{m}\).
+
+\subsection{Reward Functions}
+
+The reward model is scenario-specific. Most reward functions use combinations of:
+
+\begin{itemize}
+    \item distance to the goal;
+    \item horizontal distance to the target pad;
+    \item vertical error;
+    \item speed and vertical speed;
+    \item uprightness;
+    \item angular rate;
+    \item control effort;
+    \item fuel availability;
+    \item terminal success or failure conditions.
+\end{itemize}
+
+Several reward terms use an exponential closeness function:
+
+\begin{equation}
+\mathrm{closeness}(x,s) = e^{-\frac{|x|}{s}},
+\end{equation}
+
+where \(x\) is an error and \(s\) is a scale factor. This gives smooth feedback instead of only rewarding the final success state.
+
+Landing rewards low horizontal error, upright attitude, low angular rate, low speed, and low vertical speed near the landing zone. Hover rewards altitude control, horizontal centering, low speed, and stable attitude. Hover tracking separates the task into a movement phase and a hover phase. Takeoff rewards altitude gain, upward velocity, and uprightness. Belly-flop mode rewards broadside descent at altitude and upright landing behavior near the ground.
+
+\subsection{Telemetry}
+
+Telemetry is logged to CSV files. The logger can write step-level telemetry and episode-level aggregated telemetry. Logged values include:
+
+\begin{itemize}
+    \item goal distance, horizontal error, and vertical error;
+    \item altitude;
+    \item target bearing and velocity bearing;
+    \item velocity alignment with the target;
+    \item tilt angle and uprightness;
+    \item angular rates;
+    \item angle of attack;
+    \item horizontal, vertical, and total speed;
+    \item mean throttle and maximum throttle;
+    \item mean gimbal and fin deflection;
+    \item fuel fraction and fuel used;
+    \item load factor;
+    \item dynamic pressure;
+    \item heat flux proxy;
+    \item bending and axial stress proxies;
+    \item wind speed and wind alignment;
+    \item step reward.
+\end{itemize}
+
+A Python telemetry plotting script is included. It can generate episode-level plots, step-derived summaries, hover-tracking curriculum plots, control-effort plots, and safety/load plots. These metrics will be important later when comparing PPO and SAC.
+
+\subsection{Hardware and Diagnostic Tests}
+
+The simulator includes manual diagnostic tests that do not use reinforcement learning. These tests command the rocket directly and measure whether the implemented physics and actuators behave as expected.
+
+Implemented tests include:
+
+\begin{itemize}
+    \item fin axis response tests;
+    \item aerodynamics test;
+    \item takeoff test;
+    \item landing burn test;
+    \item RCS vacuum test;
+    \item stage separation RCS test;
+    \item top stabilizer/RCS test;
+    \item engine static/thruster test.
+\end{itemize}
+
+These tests measure quantities such as dynamic pressure, lateral speed damping, angular response, altitude gain, vertical speed, thrust-to-weight ratio, pointing error, and whether the rocket remains controlled.
+
+\section{Analysis}
+
+The final analysis will be added after systematic training and testing. The current project already contains the telemetry and configuration systems needed for this analysis.
+
+\subsection{Planned PPO and SAC Comparison}
+
+The main planned comparison is between PPO and SAC. PPO is an on-policy method that is often stable and commonly used in Unity ML-Agents. SAC is an off-policy method that can be more sample-efficient but may behave differently in continuous-control tasks. Since rocket control is a nonlinear continuous-control problem, comparing these algorithms is a natural thesis direction.
+
+The comparison should be based on the same simulator settings, same rocket configuration, same scenario, and same evaluation conditions. Useful comparison metrics include:
+
+\begin{itemize}
+    \item success rate;
+    \item crash or failure rate;
+    \item average reward;
+    \item final distance to target;
+    \item horizontal landing error;
+    \item vertical speed at landing;
+    \item average tilt;
+    \item maximum tilt;
+    \item angular rate;
+    \item fuel used;
+    \item mean throttle;
+    \item gimbal effort;
+    \item fin effort;
+    \item dynamic pressure;
+    \item load factor;
+    \item stress proxy values.
+\end{itemize}
+
+\subsection{Planned Configuration Tests}
+
+The simulator allows different hardware configurations to be tested. Possible configuration comparisons include:
+
+\begin{itemize}
+    \item single-engine, triple-engine, and nine-engine layouts;
+    \item shared engine control versus independent engine control;
+    \item different maximum gimbal angles;
+    \item fins enabled versus fins disabled;
+    \item different fin layouts and fin sizes;
+    \item RCS enabled versus RCS disabled;
+    \item different starting fuel masses;
+    \item different body dimensions.
+\end{itemize}
+
+These tests can show whether the trained policy is robust or whether it only works for one exact vehicle configuration.
+
+\subsection{Planned Disturbance and Defect Tests}
+
+The project is also suitable for future defect analysis. Possible defects include:
+
+\begin{itemize}
+    \item reduced engine thrust;
+    \item one engine disabled;
+    \item stuck gimbal;
+    \item reduced gimbal range;
+    \item stuck or weakened fin;
+    \item disabled RCS jet;
+    \item fuel leak;
+    \item sensor noise;
+    \item stronger wind or gusts.
+\end{itemize}
+
+The goal would be to compare how different trained policies react to the same defect. A robust controller should degrade gracefully instead of immediately failing.
+
+\subsection{Current Limitations}
+
+The current simulator is already functional, but it still has important limitations:
+
+\begin{itemize}
+    \item aerodynamic coefficients are simplified and not validated against CFD or real flight data;
+    \item grid fin aerodynamics are simplified and do not model detailed high-speed flow effects;
+    \item structural stress and heat flux are telemetry proxies, not certified engineering calculations;
+    \item weather is modeled mainly through density and wind disturbance values;
+    \item engine startup, shutdown, and failure behavior are still simplified;
+    \item landing legs and detailed ground contact dynamics are not yet fully modeled;
+    \item the simulator has not yet been fully validated against real rocket telemetry.
+\end{itemize}
+
+Because of these limitations, final conclusions should focus on algorithm behavior inside this simulator rather than claiming direct prediction of real-world Falcon 9 behavior.
+
+\section{Conclusion}
+
+The current project provides a detailed foundation for studying reinforcement learning control of a reusable rocket-like vehicle. It includes a configurable rocket model, thrust vectoring, grid fins, RCS, fuel consumption, changing mass properties, simplified aerodynamics, wind disturbances, multiple scenarios, reward functions, telemetry logging, plotting tools, a runtime UI, and diagnostic hardware tests.
+
+The simulator is best described as a physics-inspired research environment. It is not yet a validated high-fidelity aerospace simulator, but it is sufficiently structured to support controlled comparisons between reinforcement learning algorithms and rocket configurations. The next major step is to perform systematic PPO and SAC training runs, evaluate the trained policies using telemetry, and test robustness under configuration changes, wind conditions, and possible defects.
+
+\end{document}
