@@ -46,9 +46,9 @@ package "Shared configuration" {
 package "Runtime orchestration" {
   [ConfigBridge] as Bridge
   [TrainingAreaManager\nshared configs + area spawn] as Manager
-  [TrainingLauncher\ntraining/inference entry] as Launcher
+  [TrainingLauncher\ntraining/inference/evaluator entry] as Launcher
   [Repositories\nTrainingRunRepository\nModelRepository] as Repos
-  [RocketAgentSchema\nML-Agents behavior/action schema] as Schema
+  [RocketAgentSchema\nfixed 109-observation / 39-action schema] as Schema
 }
 
 package "Rocket construction" {
@@ -63,21 +63,22 @@ package "Simulation agent" {
   [FalconAgent.Actuators\nthrottle/gimbal/fins/RCS] as Actuators
   [FalconAgent.Physics\nforces + mass properties] as Physics
   [FalconAgent.Scenarios\nspawn/targets] as Scenarios
-  [FalconAgent.LandingCapture\nchopstick capture state] as Landing
+  [FalconAgent.ChopstickLanding\nlogical capture state] as ChopstickLanding
+  [FalconAgent.LegLanding\nphysical foot-contact state] as LegLanding
   [FalconAgent.Telemetry\nmeasured terms/log rows] as AgentTelemetry
-  [Pure helpers\nEngineStateMachine\nRcsValveBank\nAtmosphereModel\nFinAerodynamicsModel\nRocketMassProperties\nLandingCaptureEvaluator] as AgentHelpers
+  [Pure helpers\nEngineStateMachine / RcsValveBank\nAtmosphere / FinAerodynamics\nRocketMassProperties\nChopstickCaptureEvaluator\nLegLandingContactEvaluator] as AgentHelpers
 }
 
 package "Learning feedback" {
   [RocketRewardModel\ndispatcher] as RewardDispatcher
-  [Scenario reward models\nLanding / Hover / Takeoff / BellyFlop] as RewardModels
+  [Scenario reward models\nChopstick / Leg / Hover\nTakeoff / BellyFlop] as RewardModels
   [Reward data\nRewardRuntimeContext\nRewardTerms\nRewardDecision] as RewardData
 }
 
 package "Telemetry output" {
   [TelemetryLogger\nsingleton facade] as Logger
   [Telemetry pipeline\nMetricCatalog\nRowFormatter\nCsvWriter\nAccumulator\nRunningStats] as TelemetryPipeline
-  [CSV files\nstep telemetry\nepisode summaries] as CsvFiles
+  [CSV + JSON files\nstep telemetry\nepisode summaries\nevaluation aggregate] as CsvFiles
 }
 
 package "Hardware diagnostics" {
@@ -120,7 +121,8 @@ Assembly --> PhysicsConfig : derives mass/area/thrust constants
 AgentCore --> Scenarios : reset spawn + targets
 AgentCore --> Actuators : step commands
 AgentCore --> Physics : apply forces
-AgentCore --> Landing : update platform/capture state
+AgentCore --> ChopstickLanding : update logical capture state
+AgentCore --> LegLanding : update physical contact state
 AgentCore --> RewardDispatcher : compute reward/termination
 AgentCore --> AgentTelemetry : measure/log step
 
@@ -130,7 +132,9 @@ Physics --> AgentHelpers : atmosphere/aero/mass calculations
 Physics --> Hardware : force application points
 Physics --> PhysicsConfig : runtime constants
 Scenarios --> EnvConfig : scenario/inference spawn settings
-Landing --> EnvConfig : chopstick curriculum/envelope settings
+ChopstickLanding --> EnvConfig : chopstick curriculum/envelope
+LegLanding --> EnvConfig : independent leg curriculum/envelope
+LegLanding --> Hardware : generated four-leg collider assembly
 
 RewardDispatcher --> RewardModels : scenario-specific reward
 RewardModels --> RewardData : terms/context/decision

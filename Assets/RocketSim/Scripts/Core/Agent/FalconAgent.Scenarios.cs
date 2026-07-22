@@ -21,6 +21,12 @@ namespace RocketSim
         {
             if (envConfig.behaviorType == BehaviorType.Inference)
             {
+                if (envConfig.IsStandardEvaluation && envConfig.scenario.IsLanding())
+                {
+                    SpawnLanding(ActiveLandingProfile);
+                    return;
+                }
+
                 SpawnForInference();
                 return;
             }
@@ -29,81 +35,13 @@ namespace RocketSim
             float rz = RandomRange(-5f, 5f);
             switch (envConfig.scenario)
             {
-                case ScenarioType.Landing:
-                    LandingCurriculumProfile landingProfile = ActiveLandingProfile;
-                    float landingTerminalAltitude = ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
-                    float landingAltitudeMin = Mathf.Min(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
-                    float landingAltitudeMax = Mathf.Max(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
-                    landingAltitudeMin = Mathf.Max(landingAltitudeMin, landingTerminalAltitude + 15f);
-                    landingAltitudeMax = Mathf.Max(landingAltitudeMax, landingAltitudeMin + 10f);
-                    float landingVerticalSpeedMin = Mathf.Min(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
-                    float landingVerticalSpeedMax = Mathf.Max(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
-                    float landingAltitude = RandomRange(
-                        landingAltitudeMin,
-                        landingAltitudeMax);
-                    float availableAltitude = landingAltitude - landingTerminalAltitude;
-                    float vehicleMass = cfg.dryMass + fuel + rcsPropellant;
-                    float gravity = Mathf.Abs(Physics.gravity.y);
-                    float netUpwardAcceleration = LandingFeasibility.NetUpwardAcceleration(
-                        cfg.maxThrust,
-                        cfg.activeEngineCount,
-                        vehicleMass,
-                        gravity);
-                    float recoverableDownwardSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
-                        availableAltitude,
-                        netUpwardAcceleration,
-                        cfg.engineStartupDelay,
-                        gravity);
-                    float feasibleDownwardSpeedMin = Mathf.Min(
-                        Mathf.Max(0f, landingVerticalSpeedMin),
-                        recoverableDownwardSpeed);
-                    float feasibleDownwardSpeedMax = Mathf.Min(
-                        Mathf.Max(feasibleDownwardSpeedMin, landingVerticalSpeedMax),
-                        recoverableDownwardSpeed);
-                    float landingDownwardSpeed = RandomRange(
-                        feasibleDownwardSpeedMin,
-                        feasibleDownwardSpeedMax);
-
-                    LandingFeasibility.HorizontalEnvelope(
-                        availableAltitude,
-                        landingDownwardSpeed,
-                        cfg.maxThrust,
-                        cfg.activeEngineCount,
-                        vehicleMass,
-                        cfg.maxGimbal,
-                        cfg.engineStartupDelay,
-                        gravity,
-                        out float recoverableHorizontalSpeed,
-                        out float recoverableHorizontalOffset);
-                    float landingOffsetLimit = Mathf.Min(landingProfile.spawnRadius, recoverableHorizontalOffset);
-                    float landingHorizontalSpeedLimit = Mathf.Min(
-                        landingProfile.horizontalSpeedMax,
-                        recoverableHorizontalSpeed);
-                    Vector2 landingOffset = RandomInsideUnitCircle() * landingOffsetLimit;
-                    Vector2 landingHorizontalVelocity = RandomInsideUnitCircle() * landingHorizontalSpeedLimit;
-                    float landingTiltRange = Mathf.Max(0f, landingProfile.spawnTiltRangeDeg);
-                    float landingAngularSpeedMax = Mathf.Max(0f, landingProfile.angularSpeedMaxDegS);
-
-                    transform.localRotation = Quaternion.Euler(
-                        RandomRange(-landingTiltRange, landingTiltRange),
-                        envConfig.landingTargetYawDeg + RandomRange(
-                            -landingProfile.spawnYawRangeDeg,
-                            landingProfile.spawnYawRangeDeg),
-                        RandomRange(-landingTiltRange, landingTiltRange));
-                    PlaceLandingCatchFrameAtLocalPosition(new Vector3(landingOffset.x, landingAltitude, landingOffset.y));
-                    rb.linearVelocity = new Vector3(
-                        landingHorizontalVelocity.x,
-                        -landingDownwardSpeed,
-                        landingHorizontalVelocity.y);
-                    if (landingAngularSpeedMax > 0f)
-                    {
-                        Vector3 angularAxis = RandomUnitVector3();
-                        rb.angularVelocity = angularAxis * RandomRange(0f, landingAngularSpeedMax) * Mathf.Deg2Rad;
-                    }
+                case ScenarioType.ChopstickLanding:
+                case ScenarioType.LegLanding:
+                    SpawnLanding(ActiveLandingProfile);
                     break;
 
                 case ScenarioType.Hover:
-                    transform.localPosition = new Vector3(rx, 30f, rz);
+                    transform.localPosition = new Vector3(rx, ScenarioCatalog.HoverStartAltitude, rz);
                     transform.localRotation = Quaternion.Euler(
                         RandomRange(-1f, 1f), 0f, RandomRange(-1f, 1f));
                     rb.linearVelocity = new Vector3(
@@ -111,7 +49,7 @@ namespace RocketSim
                     break;
 
                 case ScenarioType.HoverTracking:
-                    transform.localPosition = new Vector3(rx, 30f, rz);
+                    transform.localPosition = new Vector3(rx, ScenarioCatalog.HoverTrackingStartAltitude, rz);
                     transform.localRotation = Quaternion.Euler(
                         RandomRange(-1f, 1f), 0f, RandomRange(-1f, 1f));
                     break;
@@ -142,8 +80,10 @@ namespace RocketSim
             float altitude = SampleProfile(profile, profile.altitudeMin, profile.altitudeMax);
             if (envConfig.scenario == ScenarioType.Takeoff && altitude <= 0f)
                 altitude = BaseGroundClearance;
-            if (envConfig.scenario == ScenarioType.Landing)
-                altitude = Mathf.Max(altitude, ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig) + 15f);
+            if (envConfig.scenario.IsLanding())
+                altitude = Mathf.Max(
+                    altitude,
+                    ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y + 15f);
 
             Vector2 offset = profile.randomizeEachEpisode
                 ? RandomInsideUnitCircle() * profile.horizontalOffsetMax
@@ -169,38 +109,39 @@ namespace RocketSim
             transform.localRotation = Quaternion.Euler(tiltX, yaw, tiltZ);
             float verticalSpeed = SampleProfile(profile, profile.verticalSpeedMin, profile.verticalSpeedMax);
 
-            if (envConfig.scenario == ScenarioType.Landing)
+            if (envConfig.scenario.IsLanding())
             {
-                float terminalAltitude = ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
+                float terminalAltitude = ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y;
                 float availableAltitude = altitude - terminalAltitude;
-                float vehicleMass = cfg.dryMass + fuel + rcsPropellant;
+                LandingFeasibilityInputs(out float vehicleMass, out float maxThrust,
+                    out int activeEngineCount, out float maxGimbalDeg, out float startupDelay);
                 float gravity = Mathf.Abs(Physics.gravity.y);
                 float netUpwardAcceleration = LandingFeasibility.NetUpwardAcceleration(
-                    cfg.maxThrust,
-                    cfg.activeEngineCount,
+                    maxThrust,
+                    activeEngineCount,
                     vehicleMass,
                     gravity);
                 float maxDownwardSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
                     availableAltitude,
                     netUpwardAcceleration,
-                    cfg.engineStartupDelay,
+                    startupDelay,
                     gravity);
                 verticalSpeed = -Mathf.Min(Mathf.Max(0f, -verticalSpeed), maxDownwardSpeed);
 
                 LandingFeasibility.HorizontalEnvelope(
                     availableAltitude,
                     -verticalSpeed,
-                    cfg.maxThrust,
-                    cfg.activeEngineCount,
+                    maxThrust,
+                    activeEngineCount,
                     vehicleMass,
-                    cfg.maxGimbal,
-                    cfg.engineStartupDelay,
+                    maxGimbalDeg,
+                    startupDelay,
                     gravity,
                     out float maxHorizontalSpeed,
                     out float maxHorizontalOffset);
                 planarSpeed = Mathf.Min(planarSpeed, maxHorizontalSpeed);
                 offset = Vector2.ClampMagnitude(offset, maxHorizontalOffset);
-                PlaceLandingCatchFrameAtLocalPosition(new Vector3(offset.x, altitude, offset.y));
+                PlaceLandingReferenceAtLocalPosition(new Vector3(offset.x, altitude, offset.y));
             }
             else
             {
@@ -222,6 +163,125 @@ namespace RocketSim
             {
                 rb.angularVelocity = Vector3.zero;
             }
+        }
+
+        /// <summary>
+        /// Samples one feasible landing start from an immutable difficulty
+        /// profile. Training and standardized evaluation share this exact path,
+        /// ensuring d=1 means the same distribution in both workflows.
+        /// </summary>
+        void SpawnLanding(LandingCurriculumProfile landingProfile)
+        {
+            float landingTerminalAltitude = ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y;
+            float landingAltitudeMin = Mathf.Min(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
+            float landingAltitudeMax = Mathf.Max(landingProfile.spawnAltitudeMin, landingProfile.spawnAltitudeMax);
+            landingAltitudeMin = Mathf.Max(landingAltitudeMin, landingTerminalAltitude + 15f);
+            landingAltitudeMax = Mathf.Max(landingAltitudeMax, landingAltitudeMin + 10f);
+            float landingVerticalSpeedMin = Mathf.Min(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
+            float landingVerticalSpeedMax = Mathf.Max(landingProfile.verticalSpeedMin, landingProfile.verticalSpeedMax);
+            float landingAltitude = RandomRange(landingAltitudeMin, landingAltitudeMax);
+            float availableAltitude = landingAltitude - landingTerminalAltitude;
+            LandingFeasibilityInputs(out float vehicleMass, out float maxThrust,
+                out int activeEngineCount, out float maxGimbalDeg, out float startupDelay);
+            float gravity = Mathf.Abs(Physics.gravity.y);
+            float netUpwardAcceleration = LandingFeasibility.NetUpwardAcceleration(
+                maxThrust,
+                activeEngineCount,
+                vehicleMass,
+                gravity);
+            float recoverableDownwardSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
+                availableAltitude,
+                netUpwardAcceleration,
+                startupDelay,
+                gravity);
+            float feasibleDownwardSpeedMin = Mathf.Min(
+                Mathf.Max(0f, landingVerticalSpeedMin),
+                recoverableDownwardSpeed);
+            float feasibleDownwardSpeedMax = Mathf.Min(
+                Mathf.Max(feasibleDownwardSpeedMin, landingVerticalSpeedMax),
+                recoverableDownwardSpeed);
+            float landingDownwardSpeed = RandomRange(
+                feasibleDownwardSpeedMin,
+                feasibleDownwardSpeedMax);
+
+            LandingFeasibility.HorizontalEnvelope(
+                availableAltitude,
+                landingDownwardSpeed,
+                maxThrust,
+                activeEngineCount,
+                vehicleMass,
+                maxGimbalDeg,
+                startupDelay,
+                gravity,
+                out float recoverableHorizontalSpeed,
+                out float recoverableHorizontalOffset);
+            float landingOffsetLimit = Mathf.Min(landingProfile.spawnRadius, recoverableHorizontalOffset);
+            float landingHorizontalSpeedLimit = Mathf.Min(
+                landingProfile.horizontalSpeedMax,
+                recoverableHorizontalSpeed);
+            Vector2 landingOffset = RandomInsideUnitCircle() * landingOffsetLimit;
+            Vector2 landingHorizontalVelocity = RandomInsideUnitCircle() * landingHorizontalSpeedLimit;
+            float landingTiltRange = Mathf.Max(0f, landingProfile.spawnTiltRangeDeg);
+            float landingAngularSpeedMax = Mathf.Max(0f, landingProfile.angularSpeedMaxDegS);
+
+            transform.localRotation = Quaternion.Euler(
+                RandomRange(-landingTiltRange, landingTiltRange),
+                (envConfig.scenario == ScenarioType.ChopstickLanding ? envConfig.landingTargetYawDeg : 0f) + RandomRange(
+                    -landingProfile.spawnYawRangeDeg,
+                    landingProfile.spawnYawRangeDeg),
+                RandomRange(-landingTiltRange, landingTiltRange));
+            PlaceLandingReferenceAtLocalPosition(new Vector3(landingOffset.x, landingAltitude, landingOffset.y));
+            rb.linearVelocity = new Vector3(
+                landingHorizontalVelocity.x,
+                -landingDownwardSpeed,
+                landingHorizontalVelocity.y);
+            if (landingAngularSpeedMax > 0f)
+            {
+                Vector3 angularAxis = RandomUnitVector3();
+                rb.angularVelocity = angularAxis * RandomRange(0f, landingAngularSpeedMax) * Mathf.Deg2Rad;
+            }
+            else
+            {
+                rb.angularVelocity = Vector3.zero;
+            }
+        }
+
+        /// <summary>Places the scenario-specific catch or feet guidance frame.</summary>
+        void PlaceLandingReferenceAtLocalPosition(Vector3 desiredPosition)
+        {
+            if (envConfig.scenario == ScenarioType.LegLanding)
+                PlaceLegFeetFrameAtLocalPosition(desiredPosition);
+            else
+                PlaceLandingCatchFrameAtLocalPosition(desiredPosition);
+        }
+
+        /// <summary>
+        /// Selects the feasibility model used to clip sampled starts. Physical
+        /// leg ablations share a single-engine Falcon 9 reference so their
+        /// seeded training/evaluation states stay identical across hardware.
+        /// </summary>
+        void LandingFeasibilityInputs(
+            out float vehicleMass,
+            out float maxThrust,
+            out int activeEngineCount,
+            out float maxGimbalDeg,
+            out float startupDelay)
+        {
+            if (envConfig.scenario == ScenarioType.LegLanding)
+            {
+                vehicleMass = LegLandingReferenceEnvelope.ReferenceVehicleMassKg;
+                maxThrust = LegLandingReferenceEnvelope.MaxThrustPerEngineN;
+                activeEngineCount = LegLandingReferenceEnvelope.ActiveEngineCount;
+                maxGimbalDeg = LegLandingReferenceEnvelope.MaxGimbalDeg;
+                startupDelay = LegLandingReferenceEnvelope.StartupDelayS;
+                return;
+            }
+
+            vehicleMass = cfg.dryMass + fuel + rcsPropellant;
+            maxThrust = cfg.maxThrust;
+            activeEngineCount = cfg.activeEngineCount;
+            maxGimbalDeg = cfg.maxGimbal;
+            startupDelay = cfg.engineStartupDelay;
         }
 
         float SampleProfile(InferenceSpawnProfile profile, float a, float b)

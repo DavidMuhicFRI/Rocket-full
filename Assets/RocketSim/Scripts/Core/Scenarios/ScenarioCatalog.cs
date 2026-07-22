@@ -14,11 +14,39 @@ namespace RocketSim
 {
     public enum ScenarioType
     {
-        Landing,
-        Hover,
-        HoverTracking,
-        Takeoff,
-        BellyFlop
+        // Explicit values protect saved JsonUtility/Unity data when scenarios
+        // are renamed or inserted. Value zero was the old generic Landing task;
+        // that implementation was chopstick-specific, so it remains the catch.
+        ChopstickLanding = 0,
+        Hover = 1,
+        HoverTracking = 2,
+        Takeoff = 3,
+        BellyFlop = 4,
+        LegLanding = 5
+    }
+
+    /// <summary>
+    /// Keeps landing-family checks readable without hiding which task owns
+    /// chopstick-only or foot-contact-only behavior.
+    /// </summary>
+    public static class ScenarioTypeExtensions
+    {
+        public static bool IsLanding(this ScenarioType scenario) =>
+            scenario == ScenarioType.ChopstickLanding || scenario == ScenarioType.LegLanding;
+
+        public static bool IsChopstickLanding(this ScenarioType scenario) =>
+            scenario == ScenarioType.ChopstickLanding;
+
+        public static bool IsLegLanding(this ScenarioType scenario) =>
+            scenario == ScenarioType.LegLanding;
+
+        /// <summary>
+        /// Returns whether the scenario has a fixed, seeded evaluator contract.
+        /// Fixed hover is evaluated until fuel depletion or an existing failure
+        /// terminal; the two landing tasks use their full-difficulty benchmark.
+        /// </summary>
+        public static bool SupportsStandardEvaluation(this ScenarioType scenario) =>
+            scenario.IsLanding() || scenario == ScenarioType.Hover;
     }
 
     public readonly struct ScenarioDefinition
@@ -110,9 +138,14 @@ namespace RocketSim
 
     public static class ScenarioCatalog
     {
-        public const float LandingStartFuelFraction = 0.08f;
-        public const float HoverStartFuelFraction = 0.10f;
-        public const float HoverTrackingStartFuelFraction = 0.10f;
+        public const float ChopstickLandingStartFuelFraction = 0.08f;
+        public const float LegLandingStartFuelFraction = 0.08f;
+        // Retained as a source-compatible generic default for older helpers.
+        public const float LandingStartFuelFraction = ChopstickLandingStartFuelFraction;
+        public const float HoverStartFuelFraction = 0.1f;
+        public const float HoverTrackingStartFuelFraction = 0.1f;
+        public const float HoverStartAltitude = 80f;
+        public const float HoverTrackingStartAltitude = 80f;
         public const float TakeoffStartFuelFraction = 1.00f;
         public const float BellyFlopStartFuelFraction = 0.12f;
 
@@ -126,11 +159,19 @@ namespace RocketSim
         static readonly ScenarioDefinition[] Entries =
         {
             new(
-                ScenarioType.Landing,
-                "Landing",
-                "Guide a reusable booster into the tower capture envelope",
-                LandingStartFuelFraction,
+                ScenarioType.ChopstickLanding,
+                "Chopstick Catch Landing",
+                "Guide a reusable booster into the tower's kinematic catch envelope",
+                ChopstickLandingStartFuelFraction,
                 SimEnvironmentConfig.DefaultLandingCatchAltitude,
+                false,
+                new InferenceSpawnDefaults(250f, 500f, 50f, -70f, -25f, 0f, 12f, 0f, 8f, 20f)),
+            new(
+                ScenarioType.LegLanding,
+                "Falcon 9 Leg Landing",
+                "Perform a powered landing on four deployed feet and remain stable on the pad",
+                LegLandingStartFuelFraction,
+                0f,
                 false,
                 new InferenceSpawnDefaults(250f, 500f, 50f, -70f, -25f, 0f, 12f, 0f, 8f, 20f)),
             new(
@@ -171,7 +212,7 @@ namespace RocketSim
 
         /// <summary>
         /// Returns metadata for a scenario. Unknown enum values safely fall back
-        /// to Landing so callers always receive a valid definition.
+        /// to ChopstickLanding so callers always receive a valid definition.
         /// </summary>
         public static ScenarioDefinition Get(ScenarioType scenario)
         {

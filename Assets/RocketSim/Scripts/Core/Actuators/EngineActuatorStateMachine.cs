@@ -9,6 +9,32 @@ using UnityEngine;
 
 namespace RocketSim
 {
+    /// <summary>
+    /// Calculates the throttle that balances vehicle weight with the engines
+    /// selected for an already-running hover start. This establishes a physical
+    /// initial condition; it is not exposed to, or used by, the reward model.
+    /// </summary>
+    public static class HoverThrustInitialization
+    {
+        public static float EquilibriumThrottle(
+            float vehicleMassKg,
+            float gravityMagnitude,
+            float effectiveMaxThrustPerEngineN,
+            int runningEngineCount,
+            float minimumThrottle)
+        {
+            float availableThrust = Mathf.Max(0f, effectiveMaxThrustPerEngineN) *
+                                    Mathf.Max(0, runningEngineCount);
+            if (availableThrust <= 0f)
+                return 0f;
+
+            float requiredThrottle = Mathf.Max(0f, vehicleMassKg) *
+                                     Mathf.Max(0f, gravityMagnitude) /
+                                     availableThrust;
+            return Mathf.Clamp(requiredThrottle, Mathf.Clamp01(minimumThrottle), 1f);
+        }
+    }
+
     internal enum EngineRunState
     {
         Off,

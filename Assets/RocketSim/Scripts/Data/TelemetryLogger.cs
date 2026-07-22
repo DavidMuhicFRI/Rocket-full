@@ -34,6 +34,14 @@ namespace RocketSim
         string _stepFilePath;
         string _episodeFilePath;
         bool _loggingEnabled;
+        int _stepLogInterval = 1;
+
+        /// <summary>
+        /// Raised after one completed episode has been durably appended. The
+        /// standardized evaluator consumes this event without parsing its own
+        /// CSV output while the simulation is running.
+        /// </summary>
+        public event Action<TelemetryEpisodeOutcome> EpisodeCompleted;
 
         /// <summary>
         /// Establishes the process-wide logger singleton. The object is detached
@@ -71,7 +79,7 @@ namespace RocketSim
         /// </summary>
         public void Initialize(TelemetryConfig cfg, string runId)
         {
-            InitializeSession(cfg, runId, null);
+            InitializeSession(cfg, runId, null, evaluation: false);
         }
 
         /// <summary>
@@ -80,15 +88,16 @@ namespace RocketSim
         /// </summary>
         public void InitializeEvaluation(TelemetryConfig cfg, string runId)
         {
-            InitializeSession(cfg, runId, $"evaluation_{DateTime.UtcNow:yyyyMMdd_HHmmss}");
+            InitializeSession(cfg, runId, $"evaluation_{DateTime.UtcNow:yyyyMMdd_HHmmss}", evaluation: true);
         }
 
-        void InitializeSession(TelemetryConfig cfg, string runId, string sessionSuffix)
+        void InitializeSession(TelemetryConfig cfg, string runId, string sessionSuffix, bool evaluation)
         {
             CloseFiles();
 
             _loggingEnabled = true;
             _cfg = cfg ?? new TelemetryConfig();
+            _stepLogInterval = evaluation ? 1 : _cfg.TrainingStepLogInterval;
             _metrics = TelemetryMetricCatalog.Build(_cfg);
             _formatter = new TelemetryRowFormatter(_metrics);
 
@@ -106,7 +115,7 @@ namespace RocketSim
             _stepFilePath = _stepWriter.FilePath;
 
             Debug.Log($"[TelemetryLogger] Episode telemetry: {_episodeFilePath}");
-            Debug.Log($"[TelemetryLogger] Step telemetry: {_stepFilePath}");
+            Debug.Log($"[TelemetryLogger] Step telemetry: {_stepFilePath} (every {_stepLogInterval} physics step(s))");
         }
 
         /// <summary>
@@ -124,14 +133,15 @@ namespace RocketSim
         /// Records one simulation step into the active episode accumulator and,
         /// for the configured area only, appends the full per-step CSV row.
         /// </summary>
-        public void Log(TelemetryRow row)
+        public void Log(TelemetryRow row, bool forceStepWrite = false)
         {
             if (!_loggingEnabled) return;
             if (_cfg == null || _stepWriter == null || _episodeWriter == null || _formatter == null) return;
 
             AccumulateEpisode(row);
 
-            if (row.areaIndex == stepLoggingAreaIndex)
+            if (row.areaIndex == stepLoggingAreaIndex &&
+                (forceStepWrite || row.step <= 1 || row.step % _stepLogInterval == 0))
                 _stepWriter.WriteLine(_formatter.FormatStepRow(row));
         }
 
@@ -149,6 +159,7 @@ namespace RocketSim
             acc.Outcome = outcome;
             AppendEpisodeRow(acc);
             _openEpisodes.Remove(areaIndex);
+            EpisodeCompleted?.Invoke(outcome);
         }
 
         public string FilePath        => _stepFilePath;
@@ -230,9 +241,45 @@ namespace RocketSim
         public bool curriculumReplay;
         public float landingStartAltitude;
         public float landingFlyawayAltitude;
+        public ScenarioType scenario;
+        public float initialPlanarDistanceM;
+        public float initialYawErrorDeg;
+        public float initialSpeedMps;
+        public float initialVerticalSpeedMps;
+        public float initialHorizontalSpeedMps;
+        public float initialTiltDeg;
+        public float initialAngularRateDegS;
+        public float initialFuelKg;
+        public float initialVehicleMassKg;
+        public float minimumCommandableNonzeroThrustToWeight;
+        public float allEnginesMinimumThrustToWeight;
+        public float allEnginesMaximumThrustToWeight;
         public float durationSeconds;
         public float fixedDeltaTimeSeconds;
         public int decisionPeriod;
+        public float finalPlanarDistanceM;
+        public float finalYawErrorDeg;
+        public float finalSpeedMps;
+        public float finalVerticalSpeedMps;
+        public float finalHorizontalSpeedMps;
+        public float finalTiltDeg;
+        public float finalAngularRateDegS;
+        public float fuelUsedKg;
+        public float rcsPropellantUsedKg;
+        public int engineRestartCount;
+        public bool legTouchdownOccurred;
+        public int legFeetOnPad;
+        public bool legFootOutsidePad;
+        public bool legStructuralStrike;
+        public float legTouchdownTimeSeconds;
+        public float legFirstContactSpeedMps;
+        public float legFirstContactVerticalSpeedMps;
+        public float legFirstContactHorizontalSpeedMps;
+        public float legFirstContactTiltDeg;
+        public float legFirstContactAngularRateDegS;
+        public float legStableHoldSeconds;
+        public float legMaximumContactImpulseNs;
+        public float legMaximumReboundHeightM;
     }
 
     /// <summary>
@@ -258,8 +305,15 @@ namespace RocketSim
         public float track_phaseHover01, track_hoverReady01, track_stableTime, track_targetReached01, track_settleRadius;
         public float track_curriculumProgress, track_segmentStartDistance, track_segmentElapsedTime;
         public float track_travelProgress01, track_travelProgressRate, track_directionEfficiency01, track_settleQuality01;
-        public float landing_platformRequired01, landing_platformInsideCapture01;
-        public float landing_platformStable01, landing_platformStableTime, landing_platformHalfSize;
+        public float chopstick_platformRequired01, chopstick_platformInsideCapture01;
+        public float chopstick_platformStable01, chopstick_platformStableTime, chopstick_platformHalfSize;
+        public float leg_touchdownStarted01, leg_firstContactEvent01, leg_feetOnPad;
+        public float leg_foot1OnPad01, leg_foot2OnPad01, leg_foot3OnPad01, leg_foot4OnPad01;
+        public float leg_footOutsidePad01, leg_structuralStrike01;
+        public float leg_stable01, leg_stableTime;
+        public float leg_firstContactSpeed, leg_firstContactVerticalSpeed, leg_firstContactHorizontalSpeed;
+        public float leg_firstContactTiltDeg, leg_firstContactAngularRateDegS;
+        public float leg_maxContactImpulseNs, leg_maxReboundHeightM;
         public float nav_targetBearingDeg, nav_velocityBearingDeg, nav_velocityTargetErrorDeg;
         public float nav_goalAlignment, nav_gimbalBearingDeg, nav_gimbalTargetErrorDeg;
         public float state_altitude;
@@ -267,6 +321,8 @@ namespace RocketSim
         public float att_angularRateDegS, att_tiltRateDegS, att_pitchRateDegS, att_yawRateDegS, att_rollRateDegS;
         public float vel_speed3D, vel_planarSpeed, vel_verticalSpeed, vel_goalClosureRate, vel_horizontalClosureRate;
         public float ctrl_throttleMean, ctrl_throttleMax, ctrl_gimbalMeanAbsDeg, ctrl_finMeanAbsDeg, ctrl_rcsActiveFraction;
+        public float ctrl_throttleSaturatedFraction, ctrl_gimbalSaturatedFraction, ctrl_finSaturatedFraction;
+        public float ctrl_engineRestartEvents, ctrl_engineRestartCount;
         public float rcs_propellantKg, rcs_propellantFraction;
         public float fuel_fraction, fuel_usedKg;
         public float load_gForce, load_angularAccelDegS2;

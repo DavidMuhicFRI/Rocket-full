@@ -57,19 +57,30 @@ yaw_error_deg            = shortest heading error to the configured chopstick ya
 control_effort           = mean(throttle)
                          + 0.05 * mean_abs(gimbal_degrees)
                          + 0.02 * mean_abs(fin_degrees)
+                         + 0.10 * mean(RCS valve state)
 ```
 
 The control effort weights are intentionally small. They discourage frantic
-control use without preventing the agent from using throttle, gimbal, or fins
+control use without preventing the agent from using throttle, gimbal, fins, or RCS
 when those controls are necessary.
 
 The reward model also receives runtime context:
 
 ```text
 altitude_m               = rocket altitude
-ground_clearance_m       = base clearance threshold used for contact/landing
+terminal_altitude_m       = goal/catch plane altitude
+gravity_mps2              = current Unity gravity magnitude
+episode_elapsed_s         = simulated time since the episode began
+landing_time_limit_s      = nonterminal landing safety limit
 fuel_kg                  = remaining fuel
 hover_track_radius_m     = current hover-tracking settle radius from curriculum
+landing_flyaway_altitude  = sampled CatchFrame/FeetFrame start altitude + 100 m
+platform_stable_transition = true only on the first stable-capture step
+leg_first_contact_this_step = true only on the first foot contact
+leg_touchdown_started     = at least one landing foot has touched the pad
+leg_stable_transition     = true only when stable multi-foot support is first reached
+leg_structural_strike     = a body or landing-leg strut hit the pad
+leg_foot_outside_pad      = a landing foot contacted outside the usable pad
 ```
 
 In simple terms, reward terms describe what the rocket is doing, while runtime
@@ -89,53 +100,53 @@ drive, approach drive, settle precision, belly attitude, and terminal signal.
 Presets in the UI set these factors to useful starting points, and moving any
 slider marks that scenario reward model as custom.
 
-## Landing
+## Chopstick Catch Landing
 
 Goal: guide the upper CatchFrame into the simulated chopstick envelope upright,
 slow, and aligned with the target yaw.
 
 ```text
-height_above_touchdown_m = max(0, altitude_m - ground_clearance_m)
-touchdown_speed_scale = sqrt(gravity * ground_clearance_m)
+height_above_touchdown_m = max(0, altitude_m - terminal_altitude_m)
 desired_descent_speed_mps = 0.30 * sqrt(2 * gravity * height_above_touchdown_m)
 desired_vertical_speed_mps = -desired_descent_speed_mps
-speed_tolerance = max(touchdown_speed_scale, 0.45 * desired_descent_speed_mps)
+descent_error = clamp01(
+    abs(vertical_speed_mps - desired_vertical_speed_mps)
+    / max(5, desired_descent_speed_mps))
+signed_closure = clamp(goal_closure_rate_mps / max(5, desired_descent_speed_mps), -1, 1)
 
-vertical_profile_score =
-    2 * closeness(vertical_speed_mps - desired_vertical_speed_mps, speed_tolerance) - 1
+lateral_error = 1 - exp(-horizontal_error_m / 25)
+attitude_error = 1 - upright_score
+near_catch = exp(-height_above_touchdown_m / 50)
+lateral_speed_error = clamp01(horizontal_speed_mps / 5)
+yaw_error = clamp01(yaw_error_deg / 45)
+angular_rate_error = clamp01(angular_rate_deg_s / 60)
 
-closure_scale = max(touchdown_speed_scale, desired_descent_speed_mps + speed_tolerance)
-goal_closure_score = clamp01(goal_closure_rate_mps / closure_scale)
-wrong_way_score = clamp01(max(0, -goal_closure_rate_mps) / closure_scale)
-near_ground_score = 1 - clamp01(height_above_touchdown_m / 50)
-center_precision_score = closeness(horizontal_error_m, max(0.5, success_radius_m * 0.5))
-heading_precision_score = closeness(yaw_error_deg, max(1, success_yaw_error_deg))
+reward_rate_per_second =
+    0.060 * signed_closure
+  - 0.040 * descent_error
+  - 0.025 * lateral_error
+  - 0.020 * attitude_error
+  - near_catch * (
+        0.025 * lateral_speed_error
+      + 0.015 * yaw_error
+      + 0.015 * angular_rate_error)
+  - 0.005 * clamp01(control_effort)
+  - 0.005
 
-reward =
-  0.10 * closeness(horizontal_error_m, 12)
-+ 0.10 * near_ground_score * center_precision_score
-+ 0.06 * upright_score
-+ 0.04 * closeness(angular_rate_deg_s, 60)
-+ 0.06 * near_ground_score * heading_precision_score * upright_score
-+ 0.16 * vertical_profile_score
-+ 0.05 * goal_closure_score
-- 0.05 * wrong_way_score
-- 0.0020 * horizontal_error_m
-- 0.0007 * angular_rate_deg_s
-- 0.0030 * control_effort
-- 0.0060
+physics_step_shaping = reward_rate_per_second * fixed_delta_time_seconds
+stable_capture_transition_event = +1 once
 ```
 
 Terminal rules:
 
 ```text
 if upright_dot < 0.35 or horizontal_error_m > 150 or fuel_kg <= 0:
-    reward = -35
+    terminal_reward = -5
 
 if altitude_m > actual_episode_start_altitude_m + 100:
-    reward = -30
+    terminal_reward = -5
 
-if altitude_m <= ground_clearance_m:
+if altitude_m <= terminal_altitude_m:
     touchdown_speed_limit = curriculum_total_touchdown_speed_mps
     touchdown_vertical_speed_limit = curriculum_vertical_touchdown_speed_mps
     touchdown_horizontal_speed_limit = curriculum_horizontal_touchdown_speed_mps
@@ -149,34 +160,35 @@ if altitude_m <= ground_clearance_m:
         and horizontal_speed_mps < touchdown_horizontal_speed_limit
         and angular_rate_deg_s < curriculum_angular_rate_deg_s
         and yaw_error_deg < curriculum_yaw_error_deg
+        and simulated_platform_stable
 
-    precision_bonus = 12 * center_precision_score + 8 * heading_precision_score
-    reward = 35 + precision_bonus if good_landing else -25
+    terminal_reward = +10 if good_landing else -5
+
+if elapsed_episode_seconds >= 120:
+    terminal_reward = -5
 ```
 
 Why these values:
 
-- `horizontal_error_m` uses a 12 m closeness scale because early landing needs a
-  broad attraction basin. The hard terminal success threshold is 2 m, so the
-  shaping reward guides the agent before it is precise enough to land.
-- The landing reward now uses one altitude-derived vertical-speed profile. The
-  desired downward speed is based on current height and gravity, so it naturally
-  becomes slower near touchdown.
-- Upward flight is not a separate special case in shaping. It is penalized
-  because positive vertical speed is far away from the desired downward speed.
-- A small per-step cost makes delaying touchdown less profitable than completing
-  the landing.
+- Signed closure rewards movement toward the catch and penalizes movement away.
+  The altitude-derived descent profile smoothly approaches zero at capture.
+- All shaping errors are bounded and use fixed physical scales. The curriculum
+  can change task limits without also changing the unit size of the reward.
+- There is no positive state-only bonus. A stationary rocket therefore pays the
+  descent error and time cost instead of earning return by hovering.
+- Fine lateral speed, yaw, and rotation costs grow near the catch, where those
+  errors determine whether the simulated platform can hold the CatchFrame.
+- Shaping is a per-second rate integrated with `Time.fixedDeltaTime`; the `+1`
+  stable-capture event and terminal rewards are one-off values. All are additive,
+  so a terminal reward does not erase shaping since the previous policy decision.
 - `upright_dot > 0.94` is the broad final landing posture gate, then the
   curriculum tilt limit tightens it from 20 degrees to 5 degrees. `upright_dot
   < 0.35` is treated as unrecoverable. The gap gives the agent room to correct
   during descent.
-- A successful touchdown is worth `35` plus up to `12` for exact pad centering
-  and up to `8` for exact chopstick heading. Landing at the edge of the allowed
-  radius therefore succeeds but earns less than landing in the center.
-- Heading is represented by sine and cosine of the signed yaw error in the v2
-  observation schema. Saved v1 models keep their original input size and skip
-  heading reward and the heading success gate; they must be retrained to learn
-  chopstick alignment.
+- The terminal scale is deliberately simple: `+10` success and `-5` failure.
+  The separate stable-capture event supplies an earlier sparse milestone.
+- The 120 s time limit prevents pathological nonterminal episodes; normal fuel,
+  touchdown, attitude, and flyaway rules usually finish the episode first.
 
 Landing curriculum:
 
@@ -240,9 +252,100 @@ from the target or climbing more than 100 m above the sampled CatchFrame start
 height ends the episode. A high curriculum spawn is therefore valid, while the
 early-training "boost upward" failure mode still terminates promptly.
 
+## Falcon 9 Leg Landing
+
+Goal: place the physical landing feet onto the reused ground pad, make a safe
+first contact, and remain stably supported. The shaping baseline is intentionally
+the same as chopstick descent so the experiments do not prescribe a throttle
+schedule. Heading/yaw is removed because a leg landing is rotationally symmetric
+around the vertical axis.
+
+```text
+height_above_pad_m = max(0, altitude_m - measured_pad_top_m)
+desired_descent_speed_mps = 0.30 * sqrt(2 * gravity * height_above_pad_m)
+desired_vertical_speed_mps = -desired_descent_speed_mps
+descent_error = clamp01(
+    abs(vertical_speed_mps - desired_vertical_speed_mps)
+    / max(5, desired_descent_speed_mps))
+signed_closure = clamp(goal_closure_rate_mps / max(5, desired_descent_speed_mps), -1, 1)
+
+lateral_error = 1 - exp(-horizontal_error_m / 25)
+attitude_error = 1 - upright_score
+near_pad = exp(-height_above_pad_m / 50)
+lateral_speed_error = clamp01(horizontal_speed_mps / 5)
+angular_rate_error = clamp01(angular_rate_deg_s / 60)
+
+reward_rate_per_second =
+    0.060 * signed_closure
+  - 0.040 * descent_error
+  - 0.025 * lateral_error
+  - 0.020 * attitude_error
+  - near_pad * (
+        0.025 * lateral_speed_error
+      + 0.015 * angular_rate_error)
+  - 0.005 * clamp01(control_effort)
+  - 0.005
+
+first_foot_contact_event = +0.25 once
+stable_support_transition_event = +1 once
+```
+
+First contact is safe only when total, absolute vertical, horizontal, tilt, and
+angular-rate values are all below the current continuous curriculum limits.
+Stable support requires:
+
+```text
+feet_on_pad >= 3
+and no foot outside the pad
+and no body/strut strike
+and horizontal_error_m < curriculum_success_radius_m
+and all speed, tilt, and angular-rate limits remain satisfied
+and stable time reaches lerp(0.25 s, 1.00 s, difficulty)
+```
+
+Terminal rules:
+
+```text
+stable support                         -> +10 success
+unsafe first contact                   -> -5 hard touchdown
+body/strut contact                     -> -5 structural strike
+foot contact outside usable pad        -> -5 outside-pad failure
+upright_dot < 0.35                     -> -5 unsafe attitude
+horizontal_error_m > 150               -> -5 flyaway
+FeetFrame above start height + 100 m   -> -5 flyaway
+FeetFrame below pad by more than 2 m
+    without any contact                -> -5 missed pad
+fuel_kg <= 0 while still airborne      -> -5 fuel depleted
+elapsed time >= 120 s                  -> -5 time limit
+```
+
+Fuel depletion does not fail a vehicle already in its short stable-contact hold;
+it may be safely supported with its engines off. Merely crossing pad altitude
+does not terminate the task: physical collision callbacks decide touchdown.
+
+The generated four-leg assembly has an approximately 18 m footprint. Feet and
+struts use compound colliders and a zero-bounce contact material, but add no
+aerodynamic drag. Contact impulse and rebound telemetry are simulator diagnostics,
+not structural certification values.
+
 ## Hover
 
-Goal: hold a fixed altitude around 30 m while remaining upright and controlled.
+Goal: acquire and hold a fixed altitude around 30 m while remaining upright and
+controlled. Training starts at 80 m so the vehicle has adequate recovery height.
+The center engine begins already running at the physically calculated equilibrium
+throttle for the current mass and atmospheric thrust scale:
+
+```text
+initial_throttle = clamp(
+    vehicle_mass_kg * gravity_mps2 /
+    available_running_engine_thrust_n,
+    minimum_throttle,
+    1)
+```
+
+This is only the episode's initial actuator state. The reward does not contain a
+desired throttle or thrust-ratio term, and PPO may immediately choose any valid
+command.
 
 ```text
 reward =
@@ -256,6 +359,17 @@ reward =
 - 0.0025 * control_effort
 ```
 
+An ignition after an engine has previously shut down is a one-off event:
+
+```text
+restart_event_reward = -0.25 * engine_restart_factor * restarted_engine_count
+```
+
+The pre-running engine does not count as a restart. The event penalty is smaller
+than one second of accurate hover shaping and much smaller than terminal failure,
+so a light vehicle can still use necessary minimum-throttle pulse control. It
+only makes avoidable early restart cycles less attractive.
+
 Terminal rule:
 
 ```text
@@ -264,8 +378,12 @@ or upright_dot < 0.45
 or fuel_kg <= 0
 or horizontal_error_m > 80
 or altitude_m > 200:
-    reward = -10
+    terminal_reward = -10
 ```
+
+These outcomes are stored separately as `HoverGroundImpact`,
+`HoverUnsafeAttitude`, `HoverFuelDepleted`, `HoverTooFarFromTarget`, or
+`HoverAboveAltitudeLimit`, so the evaluator preserves why an episode ended.
 
 Why these values:
 
@@ -278,6 +396,9 @@ Why these values:
   drift around the target.
 - The 80 m horizontal and 200 m altitude limits are generous failure bounds.
   They stop wasted episodes after the vehicle has clearly flown away.
+- Engine mode and normalized remaining startup/minimum-run/shutdown/cooldown time
+  are observations. This keeps actuator timing observable to the feed-forward
+  policy when late-flight pulse control is necessary.
 
 ## Hover Tracking
 
@@ -346,8 +467,10 @@ or upright_dot < 0.45
 or fuel_kg <= 0
 or horizontal_error_m > 90
 or altitude_m > 200:
-    reward = -10
+    terminal_reward = -10
 ```
+
+Hover Tracking uses the same categorized hover termination reasons.
 
 Extra hover-tracking cycle reward:
 
@@ -454,7 +577,7 @@ Terminal rules:
 
 ```text
 if upright_dot < 0.45 or horizontal_error_m > 80:
-    reward = -10
+    terminal_reward = -10
 
 if altitude_m > 120:
     good_takeoff =
@@ -462,10 +585,10 @@ if altitude_m > 120:
         and horizontal_error_m < 12
         and angular_rate_deg_s < 45
 
-    reward = 10 if good_takeoff else 4
+    terminal_reward = 10 if good_takeoff else 4
 
 if fuel_kg <= 0:
-    reward = -5
+    terminal_reward = -5
 ```
 
 Why these values:
@@ -519,10 +642,10 @@ if altitude_m <= ground_clearance_m:
         and speed_mps < 5
         and angular_rate_deg_s < 45
 
-    reward = 12 if good_landing else -10
+    terminal_reward = 12 if good_landing else -10
 
 if fuel_kg <= 0 or horizontal_error_m > 150:
-    reward = -10
+    terminal_reward = -10
 ```
 
 Why these values:

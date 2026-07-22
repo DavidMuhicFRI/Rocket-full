@@ -54,19 +54,21 @@ package "Manager / launch / repositories" as ManagerPkg {
   [ConfigBridge.cs] as Bridge
   [TrainingAreaManager.cs] as Manager
   [TrainingLauncher.cs] as Launcher
+  [EvaluationSession.cs] as EvaluationSession
   [TrainingRunRepository.cs] as TrainingRunRepo
   [TrainingProcessLauncher.cs] as ProcessLauncher
-  [TrainingLaunchRequest.cs] as LaunchRequest
+  [TrainingLaunchRequest\ninside TrainingProcessLauncher.cs] as LaunchRequest
   [ModelRepository.cs] as ModelRepo
   [RocketAgentSchema.cs] as AgentSchema
 }
 
 package "Configuration domain" as ConfigPkg {
   [SimEnvironmentConfig.cs] as EnvConfig
-  [ScenarioType.cs] as ScenarioTypes
+  [ScenarioCatalog.cs\nscenario enum + metadata] as ScenarioTypes
   [ScenarioProfile.cs] as ScenarioProfile
   [InferenceScenarioConfig.cs] as InferenceConfig
   [LandingCurriculumState.cs] as LandingCurriculum
+  [LegLandingCurriculumState.cs] as LegLandingCurriculum
   [HoverTrackCurriculumConfig.cs] as HoverCurriculum
   [MLAgentsConfig.cs] as MLConfig
   [RewardModelConfig.cs] as RewardConfig
@@ -76,9 +78,6 @@ package "Configuration domain" as ConfigPkg {
   [RocketHardwareTypes.cs] as HardwareTypes
   [Falcon9Reference.cs] as F9Ref
   [RocketHardwarePresetFactory.cs] as PresetFactory
-  [ScenarioFuelProfileCatalog.cs] as FuelCatalog
-  [EngineBurnGroupFactory.cs] as BurnGroupFactory
-  [RocketPartsConfigValidator.cs] as PartsValidator
 }
 
 package "Rocket assembly + hardware components" as HardwarePkg {
@@ -101,24 +100,30 @@ package "FalconAgent runtime" as AgentPkg {
   [FalconAgent.Actuators.cs\nactions/manual control] as AgentAct
   [FalconAgent.Physics.cs\nforces + mass update] as AgentPhys
   [FalconAgent.Scenarios.cs\nspawn/targets] as AgentScen
-  [FalconAgent.LandingCapture.cs\nchopstick platform state] as AgentLanding
+  [FalconAgent.ChopstickLanding.cs\nlogical capture state] as AgentLanding
+  [FalconAgent.LegLanding.cs\nphysical foot-contact state] as AgentLegLanding
   [FalconAgent.Telemetry.cs\nmeasure/log terms] as AgentTelem
 
-  [EngineStateMachine.cs] as EngineSM
-  [EngineTimingConfig.cs] as EngineTiming
-  [EngineRunState.cs] as EngineRunState
+  [EngineActuatorStateMachine.cs\nstate machine + timing + run state] as EngineSM
+  [EngineTimingConfig] as EngineTiming
+  [EngineRunState] as EngineRunState
   [RcsValveBank.cs] as RcsValveBank
   [AtmosphereModel.cs] as Atmosphere
   [FinAerodynamicsModel.cs] as FinAero
   [RocketMassProperties.cs] as MassProps
-  [LandingPlatformFactory.cs] as LandingFactory
-  [LandingCaptureEvaluator.cs] as LandingEval
-  [LandingPlatformComponent.cs] as LandingPlatform
+  [ChopstickCatchPlatformFactory.cs] as LandingFactory
+  [ChopstickCaptureEvaluator.cs] as LandingEval
+  [ChopstickCatchPlatform.cs] as LandingPlatform
+  [LandingLegAssembly.cs] as LandingLegs
+  [LandingPadSurface.cs] as LandingPad
+  [LegLandingContactEvaluator.cs] as LegLandingEval
+  [LegLandingReferenceEnvelope.cs] as LegLandingEnvelope
 }
 
 package "Reward system" as RewardPkg {
   [RocketRewardModel.cs\ndispatcher] as RewardDispatcher
-  [LandingRewardModel.cs] as LandingReward
+  [ChopstickLandingRewardModel.cs] as LandingReward
+  [LegLandingRewardModel.cs] as LegLandingReward
   [HoverRewardModel.cs] as HoverReward
   [TakeoffRewardModel.cs] as TakeoffReward
   [BellyFlopRewardModel.cs] as BellyReward
@@ -203,16 +208,13 @@ RCPTests --> Manager : starts hardware tests
 
 ' Config domain
 PartsConfig --> PresetFactory : ApplyPreset
-PartsConfig --> FuelCatalog : ApplyScenarioDefaults
 PartsConfig --> HardwareTypes : engine/fin/RCS counts
 PresetFactory --> F9Ref : reference constants
-PresetFactory --> PartsValidator : clamp generated preset
-FuelCatalog --> ScenarioProfile : start fuel/terminal profile
-FuelCatalog --> BurnGroupFactory : scenario burn-group defaults
-BurnGroupFactory --> HardwareTypes : octaweb burn group
+PartsConfig --> ScenarioProfile : scenario fuel defaults
 EnvConfig --> ScenarioTypes : scenario/weather/behavior enums
 EnvConfig --> InferenceConfig : inference spawn profile
 EnvConfig --> LandingCurriculum : landing progression fields
+EnvConfig --> LegLandingCurriculum : independent leg-landing progress
 EnvConfig --> HoverCurriculum : hover progression fields
 EnvConfig --> RewardConfig : scenario reward factors
 
@@ -221,10 +223,11 @@ Launcher --> TrainingRunRepo : writes YAML/JSON run config
 Launcher --> LaunchRequest : packages trainer args
 Launcher --> ProcessLauncher : launches mlagents-learn
 Launcher --> Manager : spawns areas after trainer ready
+Launcher --> EvaluationSession : aggregate fixed evaluation suite
 Manager --> ModelRepo : loads inference ONNX
 Launcher --> MLConfig : serializes trainer YAML
 Manager --> AgentSchema : configures ML-Agents behavior
-AgentSchema --> PartsConfig : action-space channels
+AgentSchema --> PartsConfig : missing hardware becomes zero/no-op slots
 
 ' Area spawning / assembly
 Manager --> Assembly : instantiate + ApplyPartsConfig
@@ -252,11 +255,13 @@ AgentAnchor --> AgentAct : partial class
 AgentAnchor --> AgentPhys : partial class
 AgentAnchor --> AgentScen : partial class
 AgentAnchor --> AgentLanding : partial class
+AgentAnchor --> AgentLegLanding : partial class
 AgentAnchor --> AgentTelem : partial class
 AgentCore --> AgentScen : OnEpisodeBegin spawn/reset
 AgentCore --> AgentAct : FixedUpdate actuator stepping
 AgentCore --> AgentPhys : FixedUpdate force application
 AgentCore --> AgentLanding : platform geometry/state
+AgentCore --> AgentLegLanding : landing gear/contact state
 AgentCore --> RewardDispatcher : reward + terminal decision
 AgentCore --> AgentTelem : log measured row
 AgentAnchor --> EnvConfig : shared runtime environment config
@@ -286,18 +291,25 @@ AgentScen --> InferenceConfig : inference spawn profile
 AgentLanding --> LandingFactory : find/create platform
 AgentLanding --> LandingPlatform : configure/query contacts
 AgentLanding --> LandingEval : capture envelope check
+AgentLegLanding --> LandingLegs : generate/configure four legs
+AgentLegLanding --> LandingPad : measured pad surface
+AgentLegLanding --> LegLandingEval : safe/stable contact rules
+AgentScen --> LegLandingEnvelope : common ablation spawn envelope
 
 ' Rewards
 RewardDispatcher --> LandingReward : landing scenario
+RewardDispatcher --> LegLandingReward : leg-landing scenario
 RewardDispatcher --> HoverReward : hover/hover-tracking
 RewardDispatcher --> TakeoffReward : takeoff
 RewardDispatcher --> BellyReward : belly-flop
 LandingReward --> RewardContext : reads context
+LegLandingReward --> RewardContext : reads contact context
 HoverReward --> RewardContext : reads context
 TakeoffReward --> RewardContext : reads context
 BellyReward --> RewardContext : reads context
 RewardContext --> RewardTerms : measured state terms
 LandingReward --> RewardDecision : returns reward/termination
+LegLandingReward --> RewardDecision : returns reward/termination
 HoverReward --> RewardDecision : returns reward/termination
 TakeoffReward --> RewardDecision : returns reward/termination
 BellyReward --> RewardDecision : returns reward/termination

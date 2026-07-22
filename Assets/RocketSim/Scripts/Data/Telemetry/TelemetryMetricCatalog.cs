@@ -24,6 +24,41 @@ namespace RocketSim
                 if (metric.IsEnabled(cfg))
                     metrics.Add(metric);
 
+            // Aggregate actuator values are convenient for plots, but an
+            // ablation study also needs to show whether individual engines or
+            // fins were actually used. The run-specific slot count prevents
+            // irrelevant all-zero columns on smaller vehicles.
+            if (cfg.logControlMetrics)
+            {
+                int engineSlots = Mathf.Clamp(cfg.LoggedEngineSlots, 0, TelemetryConfig.MaxEngines);
+                for (int i = 0; i < engineSlots; i++)
+                {
+                    int slot = i;
+                    metrics.Add(new TelemetryMetricDescriptor(
+                        $"Ctrl_Engine{slot + 1}_Throttle01",
+                        _ => true,
+                        row => Read(row.act_throttle, slot)));
+                    metrics.Add(new TelemetryMetricDescriptor(
+                        $"Ctrl_Engine{slot + 1}_GimbalXDeg",
+                        _ => true,
+                        row => ReadX(row.act_gimbal, slot)));
+                    metrics.Add(new TelemetryMetricDescriptor(
+                        $"Ctrl_Engine{slot + 1}_GimbalZDeg",
+                        _ => true,
+                        row => ReadY(row.act_gimbal, slot)));
+                }
+
+                int finSlots = Mathf.Clamp(cfg.activeFinCount, 0, TelemetryConfig.MaxFins);
+                for (int i = 0; i < finSlots; i++)
+                {
+                    int slot = i;
+                    metrics.Add(new TelemetryMetricDescriptor(
+                        $"Ctrl_Fin{slot + 1}_DeflectionDeg",
+                        _ => true,
+                        row => Read(row.act_fins, slot)));
+                }
+            }
+
             return metrics;
         }
 
@@ -33,12 +68,17 @@ namespace RocketSim
         /// </summary>
         public static int CountEnabled(TelemetryConfig cfg)
         {
-            int count = 0;
-            foreach (var metric in MetricCatalog)
-                if (metric.IsEnabled(cfg))
-                    count++;
-            return count;
+            return Build(cfg).Count;
         }
+
+        static float Read(float[] values, int index) =>
+            values != null && index >= 0 && index < values.Length ? values[index] : 0f;
+
+        static float ReadX(Vector2[] values, int index) =>
+            values != null && index >= 0 && index < values.Length ? values[index].x : 0f;
+
+        static float ReadY(Vector2[] values, int index) =>
+            values != null && index >= 0 && index < values.Length ? values[index].y : 0f;
 
         // Single source of truth for CSV column order and row extraction.
         static readonly TelemetryMetricDescriptor[] MetricCatalog =
@@ -60,11 +100,29 @@ namespace RocketSim
             new("Track_NormalizedTravelRate_1ps", cfg => cfg.logGoalMetrics, r => r.track_travelProgressRate),
             new("Track_DirectionAccuracy01", cfg => cfg.logGoalMetrics, r => r.track_directionEfficiency01),
             new("Track_StabilizationQuality01", cfg => cfg.logGoalMetrics, r => r.track_settleQuality01),
-            new("Landing_PlatformRequired01", cfg => cfg.logGoalMetrics, r => r.landing_platformRequired01),
-            new("Landing_PlatformInsideCapture01", cfg => cfg.logGoalMetrics, r => r.landing_platformInsideCapture01),
-            new("Landing_PlatformStable01", cfg => cfg.logGoalMetrics, r => r.landing_platformStable01),
-            new("Landing_PlatformStableTime_s", cfg => cfg.logGoalMetrics, r => r.landing_platformStableTime),
-            new("Landing_PlatformHalfSize_m", cfg => cfg.logGoalMetrics, r => r.landing_platformHalfSize),
+            new("Chopstick_PlatformRequired01", cfg => cfg.logGoalMetrics, r => r.chopstick_platformRequired01),
+            new("Chopstick_InsideCapture01", cfg => cfg.logGoalMetrics, r => r.chopstick_platformInsideCapture01),
+            new("Chopstick_StableCapture01", cfg => cfg.logGoalMetrics, r => r.chopstick_platformStable01),
+            new("Chopstick_StableTime_s", cfg => cfg.logGoalMetrics, r => r.chopstick_platformStableTime),
+            new("Chopstick_HalfSize_m", cfg => cfg.logGoalMetrics, r => r.chopstick_platformHalfSize),
+            new("Leg_TouchdownStarted01", cfg => cfg.logGoalMetrics, r => r.leg_touchdownStarted01),
+            new("Leg_FirstContactEvent01", cfg => cfg.logGoalMetrics, r => r.leg_firstContactEvent01),
+            new("Leg_FeetOnPad", cfg => cfg.logGoalMetrics, r => r.leg_feetOnPad),
+            new("Leg_Foot1OnPad01", cfg => cfg.logGoalMetrics, r => r.leg_foot1OnPad01),
+            new("Leg_Foot2OnPad01", cfg => cfg.logGoalMetrics, r => r.leg_foot2OnPad01),
+            new("Leg_Foot3OnPad01", cfg => cfg.logGoalMetrics, r => r.leg_foot3OnPad01),
+            new("Leg_Foot4OnPad01", cfg => cfg.logGoalMetrics, r => r.leg_foot4OnPad01),
+            new("Leg_FootOutsidePad01", cfg => cfg.logGoalMetrics, r => r.leg_footOutsidePad01),
+            new("Leg_StructuralStrike01", cfg => cfg.logGoalMetrics, r => r.leg_structuralStrike01),
+            new("Leg_StableLanding01", cfg => cfg.logGoalMetrics, r => r.leg_stable01),
+            new("Leg_StableTime_s", cfg => cfg.logGoalMetrics, r => r.leg_stableTime),
+            new("Leg_FirstContactSpeed_mps", cfg => cfg.logVelocityMetrics, r => r.leg_firstContactSpeed),
+            new("Leg_FirstContactVerticalSpeed_mps", cfg => cfg.logVelocityMetrics, r => r.leg_firstContactVerticalSpeed),
+            new("Leg_FirstContactHorizontalSpeed_mps", cfg => cfg.logVelocityMetrics, r => r.leg_firstContactHorizontalSpeed),
+            new("Leg_FirstContactTilt_deg", cfg => cfg.logAttitudeMetrics, r => r.leg_firstContactTiltDeg),
+            new("Leg_FirstContactAngularRate_deg_s", cfg => cfg.logAttitudeMetrics, r => r.leg_firstContactAngularRateDegS),
+            new("Leg_MaxContactImpulse_Ns", cfg => cfg.logAeroLoadMetrics, r => r.leg_maxContactImpulseNs),
+            new("Leg_MaxReboundHeight_m", cfg => cfg.logGoalMetrics, r => r.leg_maxReboundHeightM),
             new("State_RocketAltitude_m", cfg => cfg.logGoalMetrics, r => r.state_altitude),
             new("Nav_BearingToGoalDeg", cfg => cfg.logGoalMetrics, r => r.nav_targetBearingDeg),
             new("Nav_HorizontalVelocityBearingDeg", cfg => cfg.logVelocityMetrics, r => r.nav_velocityBearingDeg),
@@ -96,6 +154,11 @@ namespace RocketSim
             new("Ctrl_MeanGimbalDeflectionDeg", cfg => cfg.logControlMetrics, r => r.ctrl_gimbalMeanAbsDeg),
             new("Ctrl_MeanFinDeflectionDeg", cfg => cfg.logControlMetrics, r => r.ctrl_finMeanAbsDeg),
             new("Ctrl_RcsActiveFraction01", cfg => cfg.logControlMetrics, r => r.ctrl_rcsActiveFraction),
+            new("Ctrl_ThrottleSaturatedFraction01", cfg => cfg.logControlMetrics, r => r.ctrl_throttleSaturatedFraction),
+            new("Ctrl_GimbalSaturatedFraction01", cfg => cfg.logControlMetrics, r => r.ctrl_gimbalSaturatedFraction),
+            new("Ctrl_FinSaturatedFraction01", cfg => cfg.logControlMetrics, r => r.ctrl_finSaturatedFraction),
+            new("Ctrl_EngineRestartEvents", cfg => cfg.logControlMetrics, r => r.ctrl_engineRestartEvents),
+            new("Ctrl_EngineRestartCount", cfg => cfg.logControlMetrics, r => r.ctrl_engineRestartCount),
             new("RCS_PropellantRemainingKg", cfg => cfg.logControlMetrics, r => r.rcs_propellantKg),
             new("RCS_PropellantRemainingFraction01", cfg => cfg.logControlMetrics, r => r.rcs_propellantFraction),
             new("Fuel_RemainingFraction01", cfg => cfg.logControlMetrics, r => r.fuel_fraction),

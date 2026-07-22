@@ -58,7 +58,7 @@ namespace RocketSim
         /// <summary>
         /// Measures and writes one telemetry row for the current simulation step.
         /// </summary>
-        void LogTelemetry()
+        void LogTelemetry(bool forceStepWrite = false)
         {
             if (!TelemetryLogger.Instance) return;
 
@@ -92,7 +92,8 @@ namespace RocketSim
             float horizontalClosureRate = horizontalError.sqrMagnitude > 0.0001f
                 ? -Vector2.Dot(horizontalVelocity, horizontalError.normalized)
                 : 0f;
-            bool isLanding = envConfig.scenario == ScenarioType.Landing;
+            bool isChopstickLanding = envConfig.scenario == ScenarioType.ChopstickLanding;
+            bool isLegLanding = envConfig.scenario == ScenarioType.LegLanding;
             float directionEfficiency01 = horizontalVelocity.magnitude > 0.1f && horizontalError.sqrMagnitude > 0.0001f
                 ? Mathf.Clamp01((Vector2.Dot(horizontalVelocity.normalized, horizontalTargetDir) + 1f) * 0.5f)
                 : 0.5f;
@@ -152,11 +153,29 @@ namespace RocketSim
                 track_travelProgressRate = travelProgressRate,
                 track_directionEfficiency01 = isHoverTracking ? directionEfficiency01 : 0f,
                 track_settleQuality01 = settleQuality01,
-                landing_platformRequired01 = isLanding && envConfig.CurrentLandingPlatformRequired ? 1f : 0f,
-                landing_platformInsideCapture01 = isLanding && _landingPlatformInsideCapture ? 1f : 0f,
-                landing_platformStable01 = isLanding && _landingPlatformStable ? 1f : 0f,
-                landing_platformStableTime = isLanding ? _landingPlatformStableTime : 0f,
-                landing_platformHalfSize = isLanding ? ActiveLandingProfile.platformHalfSize : 0f,
+                chopstick_platformRequired01 = isChopstickLanding && envConfig.CurrentLandingPlatformRequired ? 1f : 0f,
+                chopstick_platformInsideCapture01 = isChopstickLanding && _landingPlatformInsideCapture ? 1f : 0f,
+                chopstick_platformStable01 = isChopstickLanding && _landingPlatformStable ? 1f : 0f,
+                chopstick_platformStableTime = isChopstickLanding ? _landingPlatformStableTime : 0f,
+                chopstick_platformHalfSize = isChopstickLanding ? ActiveLandingProfile.platformHalfSize : 0f,
+                leg_touchdownStarted01 = isLegLanding && _legTouchdownStarted ? 1f : 0f,
+                leg_firstContactEvent01 = isLegLanding && _legFirstContactThisStep ? 1f : 0f,
+                leg_feetOnPad = isLegLanding ? LegLandingContactEvaluator.CountFeet(_legFootMask) : 0f,
+                leg_foot1OnPad01 = isLegLanding && IsLandingFootOnPad(0) ? 1f : 0f,
+                leg_foot2OnPad01 = isLegLanding && IsLandingFootOnPad(1) ? 1f : 0f,
+                leg_foot3OnPad01 = isLegLanding && IsLandingFootOnPad(2) ? 1f : 0f,
+                leg_foot4OnPad01 = isLegLanding && IsLandingFootOnPad(3) ? 1f : 0f,
+                leg_footOutsidePad01 = isLegLanding && _legFootOutsidePad ? 1f : 0f,
+                leg_structuralStrike01 = isLegLanding && _legStructuralStrike ? 1f : 0f,
+                leg_stable01 = isLegLanding && _legStable ? 1f : 0f,
+                leg_stableTime = isLegLanding ? _legStableTime : 0f,
+                leg_firstContactSpeed = isLegLanding ? _legFirstContactSpeed : 0f,
+                leg_firstContactVerticalSpeed = isLegLanding ? _legFirstContactVerticalSpeed : 0f,
+                leg_firstContactHorizontalSpeed = isLegLanding ? _legFirstContactHorizontalSpeed : 0f,
+                leg_firstContactTiltDeg = isLegLanding ? _legFirstContactTiltDeg : 0f,
+                leg_firstContactAngularRateDegS = isLegLanding ? _legFirstContactAngularRateDegS : 0f,
+                leg_maxContactImpulseNs = isLegLanding ? _legMaximumContactImpulseNs : 0f,
+                leg_maxReboundHeightM = isLegLanding ? _legMaximumReboundHeightM : 0f,
                 state_altitude        = guidancePosition.y,
                 nav_targetBearingDeg       = targetBearing,
                 nav_velocityBearingDeg     = velocityBearing,
@@ -183,6 +202,11 @@ namespace RocketSim
                 ctrl_gimbalMeanAbsDeg = MeanAbs(gimbal),
                 ctrl_finMeanAbsDeg    = MeanAbs(finAngles),
                 ctrl_rcsActiveFraction = Mean(rcsValveStates),
+                ctrl_throttleSaturatedFraction = FractionAtOrAbove(throttle, 0.98f),
+                ctrl_gimbalSaturatedFraction = FractionAtLimit(gimbal, cfg.maxGimbal, 0.98f),
+                ctrl_finSaturatedFraction = FractionAtLimit(finAngles, cfg.maxFinAngle, 0.98f),
+                ctrl_engineRestartEvents = _engineRestartsThisStep,
+                ctrl_engineRestartCount = _episodeEngineRestartCount,
                 rcs_propellantKg      = rcsPropellant,
                 rcs_propellantFraction = cfg.rcsPropellantMass > 0f
                     ? rcsPropellant / cfg.rcsPropellantMass
@@ -200,7 +224,45 @@ namespace RocketSim
                 stepReward = _stepReward
             };
 
-            TelemetryLogger.Instance.Log(row);
+            TelemetryLogger.Instance.Log(row, forceStepWrite);
+        }
+
+        /// <summary>
+        /// Freezes the randomized episode start state for paired-seed analysis.
+        /// Aggregate episode means cannot reconstruct these values later, so
+        /// they are stored explicitly in every episode summary row.
+        /// </summary>
+        void CaptureEpisodeInitialTelemetry()
+        {
+            if (envConfig == null)
+                return;
+
+            RewardTerms terms = MeasureRewardTerms(
+                ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
+            _episodeInitialPlanarDistance = terms.planarDistance;
+            _episodeInitialYawErrorDeg = terms.yawErrorDeg;
+            _episodeInitialSpeed = terms.speed;
+            _episodeInitialVerticalSpeed = terms.verticalSpeed;
+            _episodeInitialHorizontalSpeed = terms.planarSpeed;
+            _episodeInitialTiltDeg = Mathf.Acos(Mathf.Clamp(terms.upDot, -1f, 1f)) * Mathf.Rad2Deg;
+            _episodeInitialAngularRateDegS = terms.angularRateDegS;
+            _episodeInitialFuelKg = fuel;
+            _episodeInitialVehicleMassKg = Mathf.Max(1f, cfg.dryMass + fuel + rcsPropellant);
+
+            // These describe available authority at the episode's initial mass;
+            // none is a commanded or rewarded throttle target. Independent
+            // engines make one-engine minimum TWR different from all-engine
+            // minimum-throttle TWR, so telemetry records both explicitly.
+            ThrustAuthoritySnapshot authority = ThrustAuthorityMetrics.Calculate(
+                _episodeInitialVehicleMassKg,
+                Physics.gravity.y,
+                cfg.activeEngineCount,
+                cfg.maxThrust,
+                cfg.minThrottle,
+                cfg.independentEngines);
+            _episodeMinimumCommandableNonzeroThrustToWeight = authority.MinimumCommandableNonzeroTwr;
+            _episodeAllEnginesMinimumThrustToWeight = authority.AllActiveEnginesMinimumThrottleTwr;
+            _episodeAllEnginesMaximumThrustToWeight = authority.AllActiveEnginesMaximumTwr;
         }
 
         /// <summary>
@@ -289,6 +351,44 @@ namespace RocketSim
                 sum += (Mathf.Abs(values[i].x) + Mathf.Abs(values[i].y)) * 0.5f;
 
             return sum / values.Length;
+        }
+
+        /// <summary>Returns the fraction of scalar actuator slots at or above a normalized threshold.</summary>
+        static float FractionAtOrAbove(float[] values, float threshold)
+        {
+            if (values == null || values.Length == 0) return 0f;
+
+            int saturated = 0;
+            for (int i = 0; i < values.Length; i++)
+                if (values[i] >= threshold)
+                    saturated++;
+            return saturated / (float)values.Length;
+        }
+
+        /// <summary>Returns the fraction of scalar signed actuators operating near either configured limit.</summary>
+        static float FractionAtLimit(float[] values, float limit, float threshold01)
+        {
+            if (values == null || values.Length == 0 || limit <= 0f) return 0f;
+
+            int saturated = 0;
+            float threshold = Mathf.Abs(limit) * Mathf.Clamp01(threshold01);
+            for (int i = 0; i < values.Length; i++)
+                if (Mathf.Abs(values[i]) >= threshold)
+                    saturated++;
+            return saturated / (float)values.Length;
+        }
+
+        /// <summary>Returns the fraction of two-axis actuators touching either axis limit.</summary>
+        static float FractionAtLimit(Vector2[] values, float limit, float threshold01)
+        {
+            if (values == null || values.Length == 0 || limit <= 0f) return 0f;
+
+            int saturated = 0;
+            float threshold = Mathf.Abs(limit) * Mathf.Clamp01(threshold01);
+            for (int i = 0; i < values.Length; i++)
+                if (Mathf.Abs(values[i].x) >= threshold || Mathf.Abs(values[i].y) >= threshold)
+                    saturated++;
+            return saturated / (float)values.Length;
         }
 
         /// <summary>

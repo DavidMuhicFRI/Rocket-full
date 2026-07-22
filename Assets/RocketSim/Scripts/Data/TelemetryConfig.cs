@@ -29,6 +29,10 @@ namespace RocketSim
         public bool logEnvironmentMetrics = false; // wind/gust scalars
         public bool logRewardMetrics      = true;  // scalar reward accumulated this step
 
+        [Range(1, 100)]
+        [Tooltip("Writes one detailed training trajectory row every N physics steps. Episode statistics still consume every physics step, and evaluation always logs every step.")]
+        public int trainingStepLogInterval = 10;
+
         // ── Set by TrainingAreaManager at Launch from partsConfig ─────────────
         [HideInInspector] public int  activeEngineCount   = 1;
         [HideInInspector] public bool independentEngines  = false;
@@ -42,5 +46,11 @@ namespace RocketSim
         /// independent control logs each active engine.
         /// </summary>
         public int LoggedEngineSlots => independentEngines ? activeEngineCount : 1;
+
+        /// <summary>
+        /// Sanitized trajectory sampling interval used only for training CSVs.
+        /// Episode accumulators always see every simulation step.
+        /// </summary>
+        public int TrainingStepLogInterval => Mathf.Clamp(trainingStepLogInterval, 1, 100);
     }
 }

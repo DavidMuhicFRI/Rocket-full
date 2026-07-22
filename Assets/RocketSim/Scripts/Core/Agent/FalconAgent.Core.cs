@@ -32,7 +32,7 @@ namespace RocketSim
                 ClearRcsCommands();
             if (rb)
                 UpdateMassProperties();
-            UpdateLandingPlatformGeometry();
+            UpdateChopstickPlatformGeometry();
             UpdateThrusterVisuals();
         }
 
@@ -45,6 +45,9 @@ namespace RocketSim
             _episode = 0;
             _hasEpisodeStarted = false;
             _currentEpisodeCompleted = false;
+            _defaultSolverIterations = rb.solverIterations;
+            _defaultSolverVelocityIterations = rb.solverVelocityIterations;
+            _defaultCollisionDetectionMode = rb.collisionDetectionMode;
             rb.maxAngularVelocity = 30f;
             rb.linearDamping = 0f;
             rb.angularDamping = 0f;
@@ -65,7 +68,7 @@ namespace RocketSim
             {
                 if (!_currentEpisodeCompleted && _step > 0)
                 {
-                    _episodeTerminationReason = EpisodeTerminationReason.LandingMaxStepOrExternalReset;
+                    _episodeTerminationReason = DefaultExternalTerminationReason(maxStepOrReset: true);
                     LogLandingEpisodeEnd(_episodeTerminationReason);
                     TelemetryLogger.Instance?.CompleteEpisode(
                         _areaIndex,
@@ -92,7 +95,10 @@ namespace RocketSim
             _hoverTrackEpisodeCaptures = 0;
             _landingEpisodeSucceeded = false;
             _episodeTerminationReason = EpisodeTerminationReason.None;
-            ResetLandingPlatformState();
+            _engineRestartsThisStep = 0;
+            _episodeEngineRestartCount = 0;
+            ResetChopstickPlatformState();
+            ResetLegLandingState();
 
             RefreshConfig();
             EnsureActuatorBuffers(true);
@@ -124,10 +130,13 @@ namespace RocketSim
 
             ResetWindForEpisode();
             SpawnForScenario();
+            InitializeHoverEngineAtEquilibrium();
             CaptureLandingEpisodeStartAltitude();
             RandomizeTarget();
-            UpdateLandingPlatformGeometry();
-            UpdateLandingPlatformState(0f);
+            UpdateChopstickPlatformGeometry();
+            UpdateChopstickPlatformState(0f);
+            UpdateLegLandingState(0f);
+            CaptureEpisodeInitialTelemetry();
             _sensors.Tick(rb, transform, 0f, 0f, 0f, 0f, 0f, cfg.radius, episodeStart: true);
         }
 
@@ -141,7 +150,8 @@ namespace RocketSim
             Vector3 goalPosition = ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig);
 
             // 1. Relative position from the active guidance point to its target (3).
-            // Landing uses the grid-fin catch frame; other scenarios use the root/base frame.
+            // Chopstick landing uses CatchFrame; leg landing uses FeetFrame;
+            // other scenarios use the root/base frame.
             sensor.AddObservation((goalPosition - guidancePosition) / 100f);
 
             // 2. Linear velocity (3)
@@ -153,11 +163,30 @@ namespace RocketSim
             // 4. Orientation — full up vector (3)
             sensor.AddObservation(transform.up);
 
-            // 5. Actuator state (engine control channels * 3 + fins + RCS jets)
-            for (int i = 0; i < cfg.independentEngineCount; i++) sensor.AddObservation(throttle[i]);
-            for (int i = 0; i < cfg.independentEngineCount; i++) sensor.AddObservation(gimbal[i] / Mathf.Max(cfg.maxGimbal, 1f));
-            if (cfg.hasFins) for (int i = 0; i < cfg.finCount; i++) sensor.AddObservation(finAngles[i] / Mathf.Max(cfg.maxFinAngle, 1f));
-            if (cfg.hasRCS) for (int i = 0; i < cfg.rcsJetCount; i++) sensor.AddObservation(RcsJetCommand(i));
+            // 5. Actuator state (throttle/gimbal, engine mode and timing,
+            // fins, and RCS jets). Engine timing makes the actuator dynamics
+            // Markov for a feed-forward policy during low-mass pulse control.
+            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
+                sensor.AddObservation(i < cfg.independentEngineCount ? throttle[i] : 0f);
+            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
+                sensor.AddObservation(i < cfg.independentEngineCount
+                    ? gimbal[i] / Mathf.Max(cfg.maxGimbal, 1f)
+                    : Vector2.zero);
+            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
+            {
+                bool available = i < cfg.independentEngineCount;
+                sensor.AddObservation(available && engineStates[i] == EngineRunState.Off ? 1f : 0f);
+                sensor.AddObservation(available && engineStates[i] == EngineRunState.Starting ? 1f : 0f);
+                sensor.AddObservation(available && engineStates[i] == EngineRunState.Running ? 1f : 0f);
+                sensor.AddObservation(available && engineStates[i] == EngineRunState.Shutdown ? 1f : 0f);
+                sensor.AddObservation(available ? EngineConstraintTimeRemaining01(i) : 0f);
+            }
+            for (int i = 0; i < RocketAgentSchema.MaxFinChannels; i++)
+                sensor.AddObservation(cfg.hasFins && i < cfg.finCount
+                    ? finAngles[i] / Mathf.Max(cfg.maxFinAngle, 1f)
+                    : 0f);
+            for (int i = 0; i < RocketAgentSchema.MaxRcsChannels; i++)
+                sensor.AddObservation(cfg.hasRCS && i < cfg.rcsJetCount ? RcsJetCommand(i) : 0f);
 
             // 6. Fuel fraction (1)
             sensor.AddObservation(fuel / Mathf.Max(cfg.startFuelMass, 1f));
@@ -179,6 +208,11 @@ namespace RocketSim
             float headingErrorRad = SignedHeadingErrorDeg() * Mathf.Deg2Rad;
             sensor.AddObservation(Mathf.Sin(headingErrorRad));
             sensor.AddObservation(Mathf.Cos(headingErrorRad));
+
+            // 11. Four fixed landing-foot contact slots. They remain zero in
+            // non-leg scenarios so Hover -> Landing models stay shape-compatible.
+            for (int i = 0; i < RocketAgentSchema.LandingFootObservationCount; i++)
+                sensor.AddObservation(envConfig.scenario == ScenarioType.LegLanding && IsLandingFootOnPad(i) ? 1f : 0f);
         }
 
         /// <summary>
@@ -224,7 +258,8 @@ namespace RocketSim
             _currentEpisodeCompleted = true;
             _hoverTrackStableTime = 0f;
             _hoverTrackSegmentElapsedTime = 0f;
-            ResetLandingPlatformState();
+            ResetChopstickPlatformState();
+            ResetLegLandingState();
 
             fuel = Mathf.Clamp(cfg.startFuelMass, 0f, cfg.maxFuelMass);
             rcsPropellant = cfg.hasRCS ? cfg.rcsPropellantMass : 0f;
@@ -244,7 +279,7 @@ namespace RocketSim
             assembly.fins?.ApplyDeflections(finAngles);
             UpdateMassProperties();
             UpdateThrusterVisuals();
-            UpdateLandingPlatformGeometry();
+            UpdateChopstickPlatformGeometry();
             _sensors.Tick(rb, transform, 0f, 0f, 0f, 0f, 0f, cfg.radius, episodeStart: true);
         }
 
@@ -254,10 +289,12 @@ namespace RocketSim
         void FixedUpdate()
         {
             _step++;
+            CommitLegLandingContactFrame();
             _stepReward = 0f;
             _telemetryLoggedThisStep = false;
             _episodeEndedThisStep    = false;
             _hoverTrackTargetReachedThisStep = false;
+            _engineRestartsThisStep = 0;
             _hoverTrackSegmentElapsedTime += Time.fixedDeltaTime;
             _episodeElapsedSeconds += Time.fixedDeltaTime;
 
@@ -286,8 +323,9 @@ namespace RocketSim
             
             ApplyRcs();
             UpdateMassProperties();
-            UpdateLandingPlatformGeometry();
-            UpdateLandingPlatformState(Time.fixedDeltaTime);
+            UpdateChopstickPlatformGeometry();
+            UpdateChopstickPlatformState(Time.fixedDeltaTime);
+            UpdateLegLandingState(Time.fixedDeltaTime);
 
             if (!_hardwareTestMode)
             {
@@ -332,10 +370,13 @@ namespace RocketSim
             // FixedUpdate frequency while terminal/event rewards remain one-offs.
             AddReward(decision.shapingReward * Time.fixedDeltaTime);
 
+            if (decision.eventReward != 0f)
+                AddReward(decision.eventReward);
+
             if (decision.hasTerminalReward)
                 AddReward(decision.terminalReward);
 
-            if (decision.successTerminal && envConfig.scenario == ScenarioType.Landing)
+            if (decision.successTerminal && envConfig.scenario.IsLanding())
                 _landingEpisodeSucceeded = true;
 
             if (decision.endEpisode)
@@ -365,10 +406,10 @@ namespace RocketSim
             if (_episodeEndedThisStep) return;
 
             if (_episodeTerminationReason == EpisodeTerminationReason.None)
-                _episodeTerminationReason = EpisodeTerminationReason.LandingExternalEndRequest;
+                _episodeTerminationReason = DefaultExternalTerminationReason(maxStepOrReset: false);
 
             LogLandingEpisodeEnd(_episodeTerminationReason);
-            LogTelemetry();
+            LogTelemetry(forceStepWrite: true);
             TelemetryLogger.Instance?.CompleteEpisode(
                 _areaIndex,
                 _episode,
@@ -393,19 +434,25 @@ namespace RocketSim
         TelemetryEpisodeOutcome BuildTelemetryEpisodeOutcome()
         {
             DecisionRequester decisionRequester = GetComponent<DecisionRequester>();
+            RewardTerms finalTerms = envConfig != null
+                ? MeasureRewardTerms(ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig))
+                : default;
+            float finalTiltDeg = Mathf.Acos(Mathf.Clamp(finalTerms.upDot, -1f, 1f)) * Mathf.Rad2Deg;
             bool success = envConfig != null && envConfig.scenario switch
             {
                 ScenarioType.HoverTracking => _hoverTrackEpisodeCaptures > 0,
-                ScenarioType.Landing => _landingEpisodeSucceeded,
+                ScenarioType.ChopstickLanding => _landingEpisodeSucceeded,
+                ScenarioType.LegLanding => _landingEpisodeSucceeded,
                 _ => false
             };
             float globalDifficulty = envConfig == null ? 0f : envConfig.scenario switch
             {
                 ScenarioType.HoverTracking => envConfig.hoverTrackCurriculumProgress,
-                ScenarioType.Landing => envConfig.landingCurriculumProgress,
+                ScenarioType.ChopstickLanding => envConfig.landingCurriculumProgress,
+                ScenarioType.LegLanding => envConfig.legLandingCurriculumProgress,
                 _ => 0f
             };
-            float episodeDifficulty = envConfig != null && envConfig.scenario == ScenarioType.Landing
+            float episodeDifficulty = envConfig != null && envConfig.scenario.IsLanding()
                 ? ActiveLandingProfile.difficulty01
                 : globalDifficulty;
 
@@ -419,17 +466,53 @@ namespace RocketSim
                 curriculumGlobalDifficulty01 = globalDifficulty,
                 curriculumDifficulty01 = episodeDifficulty,
                 curriculumReplay = envConfig != null &&
-                                   envConfig.scenario == ScenarioType.Landing &&
+                                   envConfig.scenario.IsLanding() &&
                                    _landingEpisodeUsesEasierReplay,
-                landingStartAltitude = envConfig != null && envConfig.scenario == ScenarioType.Landing
+                scenario = envConfig != null ? envConfig.scenario : ScenarioType.ChopstickLanding,
+                landingStartAltitude = envConfig != null && envConfig.scenario.IsLanding()
                     ? _landingEpisodeStartAltitude
                     : 0f,
-                landingFlyawayAltitude = envConfig != null && envConfig.scenario == ScenarioType.Landing
+                landingFlyawayAltitude = envConfig != null && envConfig.scenario.IsLanding()
                     ? _landingEpisodeFlyawayAltitude
                     : 0f,
+                initialPlanarDistanceM = _episodeInitialPlanarDistance,
+                initialYawErrorDeg = _episodeInitialYawErrorDeg,
+                initialSpeedMps = _episodeInitialSpeed,
+                initialVerticalSpeedMps = _episodeInitialVerticalSpeed,
+                initialHorizontalSpeedMps = _episodeInitialHorizontalSpeed,
+                initialTiltDeg = _episodeInitialTiltDeg,
+                initialAngularRateDegS = _episodeInitialAngularRateDegS,
+                initialFuelKg = _episodeInitialFuelKg,
+                initialVehicleMassKg = _episodeInitialVehicleMassKg,
+                minimumCommandableNonzeroThrustToWeight = _episodeMinimumCommandableNonzeroThrustToWeight,
+                allEnginesMinimumThrustToWeight = _episodeAllEnginesMinimumThrustToWeight,
+                allEnginesMaximumThrustToWeight = _episodeAllEnginesMaximumThrustToWeight,
                 durationSeconds = _episodeElapsedSeconds,
                 fixedDeltaTimeSeconds = Time.fixedDeltaTime,
-                decisionPeriod = decisionRequester ? decisionRequester.DecisionPeriod : 1
+                decisionPeriod = decisionRequester ? decisionRequester.DecisionPeriod : 1,
+                finalPlanarDistanceM = finalTerms.planarDistance,
+                finalYawErrorDeg = finalTerms.yawErrorDeg,
+                finalSpeedMps = finalTerms.speed,
+                finalVerticalSpeedMps = finalTerms.verticalSpeed,
+                finalHorizontalSpeedMps = finalTerms.planarSpeed,
+                finalTiltDeg = finalTiltDeg,
+                finalAngularRateDegS = finalTerms.angularRateDegS,
+                fuelUsedKg = Mathf.Max(0f, cfg.startFuelMass - fuel),
+                rcsPropellantUsedKg = Mathf.Max(0f, cfg.rcsPropellantMass - rcsPropellant),
+                engineRestartCount = _episodeEngineRestartCount,
+                legTouchdownOccurred = _legTouchdownStarted,
+                legFeetOnPad = LegLandingContactEvaluator.CountFeet(_legFootMask),
+                legFootOutsidePad = _legFootOutsidePad,
+                legStructuralStrike = _legStructuralStrike,
+                legTouchdownTimeSeconds = _legTouchdownTime,
+                legFirstContactSpeedMps = _legFirstContactSpeed,
+                legFirstContactVerticalSpeedMps = _legFirstContactVerticalSpeed,
+                legFirstContactHorizontalSpeedMps = _legFirstContactHorizontalSpeed,
+                legFirstContactTiltDeg = _legFirstContactTiltDeg,
+                legFirstContactAngularRateDegS = _legFirstContactAngularRateDegS,
+                legStableHoldSeconds = _legStableTime,
+                legMaximumContactImpulseNs = _legMaximumContactImpulseNs,
+                legMaximumReboundHeightM = _legMaximumReboundHeightM
             };
         }
 
@@ -444,11 +527,12 @@ namespace RocketSim
             bool successfulEpisode = envConfig.scenario switch
             {
                 ScenarioType.HoverTracking => _hoverTrackEpisodeCaptures > 0,
-                ScenarioType.Landing => _landingEpisodeSucceeded,
+                ScenarioType.ChopstickLanding => _landingEpisodeSucceeded,
+                ScenarioType.LegLanding => _landingEpisodeSucceeded,
                 _ => false
             };
             bool includeInCurriculumEstimate =
-                envConfig.scenario != ScenarioType.Landing || !_landingEpisodeUsesEasierReplay;
+                !envConfig.scenario.IsLanding() || !_landingEpisodeUsesEasierReplay;
             assembly.GetComponentInParent<TrainingAreaManager>()?.NotifyEpisodeEnd(
                 successfulEpisode,
                 includeInCurriculumEstimate);
@@ -462,6 +546,7 @@ namespace RocketSim
         {
             cfg = assembly ? assembly.GetPhysicsConfig() : RocketAssembly.Falcon9StaticFallback;
             ConfigureCatchFrame();
+            ConfigureLegLandingHardware();
         }
 
         /// <summary>
@@ -473,7 +558,10 @@ namespace RocketSim
             LandingCurriculumProfile landing = ActiveLandingProfile;
             return new RewardRuntimeContext(
                 ScenarioReferenceLocalPosition().y,
-                ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
+                ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y,
+                Mathf.Abs(Physics.gravity.y),
+                _episodeElapsedSeconds,
+                envConfig.landingMaxEpisodeSeconds,
                 fuel,
                 envConfig.hoverTrackSettleRadius,
                 _landingEpisodeFlyawayAltitude > 0f
@@ -489,9 +577,24 @@ namespace RocketSim
                 envConfig.CurrentLandingPlatformRequired,
                 _landingPlatformInsideCapture,
                 _landingPlatformStable,
+                _landingPlatformBecameStable,
                 _landingPlatformStableTime,
                 landing.platformStableHoldTime,
-                landing.platformHalfSize);
+                landing.platformHalfSize,
+                _engineRestartsThisStep,
+                _legTouchdownStarted,
+                _legFirstContactThisStep,
+                LegLandingContactEvaluator.CountFeet(_legFootMask),
+                _legFootOutsidePad,
+                _legStructuralStrike,
+                _legStable,
+                _legBecameStable,
+                _legStableTime,
+                _legFirstContactSpeed,
+                _legFirstContactVerticalSpeed,
+                _legFirstContactHorizontalSpeed,
+                _legFirstContactTiltDeg,
+                _legFirstContactAngularRateDegS);
         }
 
         /// <summary>
@@ -500,7 +603,7 @@ namespace RocketSim
         /// </summary>
         void LogLandingEpisodeEnd(EpisodeTerminationReason reason)
         {
-            if (_landingEpisodeEndLogged || envConfig == null || envConfig.scenario != ScenarioType.Landing)
+            if (_landingEpisodeEndLogged || envConfig == null || !envConfig.scenario.IsLanding())
                 return;
 
             RewardTerms terms = MeasureRewardTerms(
@@ -518,17 +621,19 @@ namespace RocketSim
             RewardRuntimeContext context,
             float terminalReward)
         {
-            if (_landingEpisodeEndLogged || envConfig == null || envConfig.scenario != ScenarioType.Landing)
+            if (_landingEpisodeEndLogged || envConfig == null || !envConfig.scenario.IsLanding())
                 return;
 
             _landingEpisodeEndLogged = true;
 
             float tiltDeg = Mathf.Acos(Mathf.Clamp(terms.upDot, -1f, 1f)) * Mathf.Rad2Deg;
-            float effectiveTiltLimit = Mathf.Min(
-                context.landingSuccessMaxTiltDeg,
-                Mathf.Acos(0.94f) * Mathf.Rad2Deg);
-            bool reachedCaptureAltitude = context.altitude <= context.terminalAltitude;
-            bool successfulTouchdown = reason == EpisodeTerminationReason.LandingSuccessfulTouchdown;
+            bool isChopstick = envConfig.scenario == ScenarioType.ChopstickLanding;
+            float effectiveTiltLimit = isChopstick
+                ? Mathf.Min(context.landingSuccessMaxTiltDeg, Mathf.Acos(0.94f) * Mathf.Rad2Deg)
+                : context.landingSuccessMaxTiltDeg;
+            bool reachedTargetAltitude = context.altitude <= context.terminalAltitude;
+            bool successfulTouchdown = reason == EpisodeTerminationReason.ChopstickSuccessfulCapture ||
+                                       reason == EpisodeTerminationReason.LegLandingSuccessfulTouchdown;
             bool uprightPass = tiltDeg < effectiveTiltLimit;
             bool targetPass = terms.planarDistance < context.landingSuccessRadius;
             bool totalSpeedPass = terms.speed < context.landingSuccessMaxSpeed;
@@ -539,23 +644,35 @@ namespace RocketSim
             bool platformPass = !context.landingPlatformRequired || context.landingPlatformStable;
 
             string terminalRewardText = float.IsNaN(terminalReward) ? "n/a" : terminalReward.ToString("F2");
-            string touchdownChecks = reachedCaptureAltitude
-                ? $" checks=[upright:{PassFail(uprightPass)}, target:{PassFail(targetPass)}, " +
-                  $"totalSpeed:{PassFail(totalSpeedPass)}, verticalSpeed:{PassFail(verticalSpeedPass)}, " +
-                  $"horizontalSpeed:{PassFail(horizontalSpeedPass)}, angularRate:{PassFail(angularRatePass)}, " +
-                  $"heading:{PassFail(headingPass)}, platform:{PassFail(platformPass)}]"
-                : string.Empty;
-            string platformStatus =
-                $" platform=[enabled:{envConfig.landingPlatformEnabled}, " +
-                $"required:{context.landingPlatformRequired}, simulated:true, " +
-                $"inside:{context.landingPlatformInsideCapture}, stable:{context.landingPlatformStable}, " +
-                $"stableTime:{context.landingPlatformStableTime:F2}/{context.landingPlatformStableHoldTime:F2}s, " +
-                $"halfSize:{context.landingPlatformHalfSize:F2}m]";
+            string touchdownChecks = string.Empty;
+            if (reachedTargetAltitude || context.legTouchdownStarted)
+            {
+                touchdownChecks = isChopstick
+                    ? $" checks=[upright:{PassFail(uprightPass)}, target:{PassFail(targetPass)}, " +
+                      $"totalSpeed:{PassFail(totalSpeedPass)}, verticalSpeed:{PassFail(verticalSpeedPass)}, " +
+                      $"horizontalSpeed:{PassFail(horizontalSpeedPass)}, angularRate:{PassFail(angularRatePass)}, " +
+                      $"heading:{PassFail(headingPass)}, platform:{PassFail(platformPass)}]"
+                    : $" checks=[upright:{PassFail(uprightPass)}, target:{PassFail(targetPass)}, " +
+                      $"totalSpeed:{PassFail(totalSpeedPass)}, verticalSpeed:{PassFail(verticalSpeedPass)}, " +
+                      $"horizontalSpeed:{PassFail(horizontalSpeedPass)}, angularRate:{PassFail(angularRatePass)}, " +
+                      $"feet:{PassFail(context.legFeetOnPad >= LegLandingContactEvaluator.MinimumStableFeet)}, " +
+                      $"insidePad:{PassFail(!context.legFootOutsidePad)}, " +
+                      $"noStrike:{PassFail(!context.legStructuralStrike)}, stable:{PassFail(context.legStable)}]";
+            }
+            string platformStatus = isChopstick
+                ? $" chopstick=[enabled:{envConfig.landingPlatformEnabled}, " +
+                  $"required:{context.landingPlatformRequired}, simulated:true, " +
+                  $"inside:{context.landingPlatformInsideCapture}, stable:{context.landingPlatformStable}, " +
+                  $"stableTime:{context.landingPlatformStableTime:F2}/{context.landingPlatformStableHoldTime:F2}s, " +
+                  $"halfSize:{context.landingPlatformHalfSize:F2}m]"
+                : $" feet=[onPad:{context.legFeetOnPad}/4, outside:{context.legFootOutsidePad}, " +
+                  $"structuralStrike:{context.legStructuralStrike}, stable:{context.legStable}, " +
+                  $"stableTime:{context.legStableTime:F2}/{context.landingPlatformStableHoldTime:F2}s]";
 
             Debug.Log(
                 $"[LandingEpisodeEnd] area={_areaIndex} episode={_episode} step={_step} " +
                 $"duration={_step * Time.fixedDeltaTime:F2}s reason={reason} success={successfulTouchdown} " +
-                $"terminalAltitudeReached={reachedCaptureAltitude} altitude={context.altitude:F2}m " +
+                $"targetAltitudeReached={reachedTargetAltitude} altitude={context.altitude:F2}m " +
                 $"terminalAltitude={context.terminalAltitude:F2}m startAltitude={_landingEpisodeStartAltitude:F2}m " +
                 $"flyawayAltitude={context.landingFlyawayAltitude:F2}m " +
                 $"distance3D={terms.distance3D:F2}m planarDistance={terms.planarDistance:F2}m " +
@@ -563,23 +680,45 @@ namespace RocketSim
                 $"verticalSpeed={terms.verticalSpeed:F2}m/s horizontalSpeed={terms.planarSpeed:F2}m/s " +
                 $"angularRate={terms.angularRateDegS:F2}deg/s yawError={terms.yawErrorDeg:F2}deg " +
                 $"fuel={context.fuelKg:F2}kg " +
-                $"terminalReward={terminalRewardText} curriculumEnabled={envConfig.landingCurriculumEnabled} " +
-                $"curriculumMode={envConfig.landingCurriculumMode} " +
-                $"globalCurriculum={envConfig.landingCurriculumProgress * 100f:F4}% " +
+                $"terminalReward={terminalRewardText} curriculumEnabled={envConfig.ActiveLandingCurriculumEnabled} " +
+                $"curriculumMode={envConfig.ActiveLandingCurriculumMode} " +
+                $"globalCurriculum={envConfig.ActiveLandingCurriculumProgress * 100f:F4}% " +
                 $"episodeDifficulty={ActiveLandingProfile.difficulty01 * 100f:F4}% " +
                 $"easierReplay={_landingEpisodeUsesEasierReplay} " +
-                $"curriculumEpisodes={envConfig.landingCurriculumEpisodeCount} " +
-                $"curriculumSuccesses={envConfig.landingCurriculumSuccessfulEpisodes} " +
-                $"recentSuccessRate={envConfig.LandingCurriculumSuccessRate * 100f:F1}% " +
+                $"curriculumEpisodes={envConfig.ActiveLandingCurriculumEpisodeCount} " +
+                $"curriculumSuccesses={envConfig.ActiveLandingCurriculumSuccessfulEpisodes} " +
+                $"recentSuccessRate={envConfig.ActiveLandingCurriculumSuccessRate * 100f:F1}% " +
                 $"touchdownLimits=[planar<{context.landingSuccessRadius:F2}m, " +
                 $"totalSpeed<{context.landingSuccessMaxSpeed:F2}m/s, " +
                 $"absVerticalSpeed<{context.landingSuccessMaxVerticalSpeed:F2}m/s, " +
                 $"horizontalSpeed<{context.landingSuccessMaxHorizontalSpeed:F2}m/s, " +
                 $"tilt<{effectiveTiltLimit:F2}deg, " +
-                $"angularRate<{context.landingSuccessMaxAngularRateDegS:F2}deg/s, " +
-                $"yawError<{context.landingSuccessMaxYawErrorDeg:F2}deg]" +
+                $"angularRate<{context.landingSuccessMaxAngularRateDegS:F2}deg/s" +
+                (isChopstick ? $", yawError<{context.landingSuccessMaxYawErrorDeg:F2}deg]" : "]") +
                 platformStatus +
                 touchdownChecks);
+        }
+
+        /// <summary>
+        /// Converts an external reset/end into the active landing task's
+        /// scenario-specific terminal category. Non-landing callers retain None.
+        /// </summary>
+        EpisodeTerminationReason DefaultExternalTerminationReason(bool maxStepOrReset)
+        {
+            if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding)
+                return maxStepOrReset
+                    ? EpisodeTerminationReason.LegLandingMaxStepOrExternalReset
+                    : EpisodeTerminationReason.LegLandingExternalEndRequest;
+            if (envConfig != null && envConfig.scenario == ScenarioType.ChopstickLanding)
+                return maxStepOrReset
+                    ? EpisodeTerminationReason.ChopstickMaxStepOrExternalReset
+                    : EpisodeTerminationReason.ChopstickExternalEndRequest;
+            if (envConfig != null &&
+                (envConfig.scenario == ScenarioType.Hover || envConfig.scenario == ScenarioType.HoverTracking))
+                return maxStepOrReset
+                    ? EpisodeTerminationReason.HoverMaxStepOrExternalReset
+                    : EpisodeTerminationReason.HoverExternalEndRequest;
+            return EpisodeTerminationReason.None;
         }
 
     }

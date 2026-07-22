@@ -537,20 +537,20 @@ MonoBehaviour:
     learningRate: 0.0002
     beta: 0.01
     epsilon: 0.2
-    lambd: 0.95
+    lambd: 0.98
     numEpoch: 6
     lrSchedule: 0
     normalize: 1
     hiddenUnits: 512
     numLayers: 3
-    extrinsicGamma: 0.99
+    extrinsicGamma: 0.995
     extrinsicStrength: 1
-    curiosityEnabled: 1
+    curiosityEnabled: 0
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001
     maxSteps: 10000000
-    timeHorizon: 512
+    timeHorizon: 1024
     summaryFreq: 20000
     threaded: 1
 --- !u!1 &1661786655
@@ -708,20 +708,20 @@ MonoBehaviour:
     learningRate: 0.0002
     beta: 0.01
     epsilon: 0.2
-    lambd: 0.95
+    lambd: 0.98
     numEpoch: 6
     lrSchedule: 0
     normalize: 1
     hiddenUnits: 512
     numLayers: 3
-    extrinsicGamma: 0.99
+    extrinsicGamma: 0.995
     extrinsicStrength: 1
-    curiosityEnabled: 1
+    curiosityEnabled: 0
     curiosityGamma: 0.99
     curiosityStrength: 0.01
     curiosityLR: 0.0001
     maxSteps: 10000000
-    timeHorizon: 512
+    timeHorizon: 1024
     summaryFreq: 20000
     threaded: 1
   trainingAreaManager: {fileID: 0}

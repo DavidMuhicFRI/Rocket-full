@@ -166,13 +166,14 @@ namespace UI
                 return;
             }
 
-            if (env.scenario == ScenarioType.Landing)
+            if (env.scenario.IsLanding())
             {
                 SetCurriculumHudVisible(true);
-                SetText(curriculumTitleText, "CURRICULUM: LANDING");
-                SetText(curriculumProgressText, $"PROGRESS: {FormatPercent(env.landingCurriculumProgress)}");
+                string taskName = env.scenario == ScenarioType.LegLanding ? "LEG LANDING" : "CHOPSTICK LANDING";
+                SetText(curriculumTitleText, $"CURRICULUM: {taskName}");
+                SetText(curriculumProgressText, $"PROGRESS: {FormatPercent(env.ActiveLandingCurriculumProgress)}");
                 SetText(curriculumRateText,
-                    $"SUCCESS RATE: {FormatPercent(env.LandingCurriculumSuccessRate)}  ({env.landingCurriculumSuccessfulEpisodes}/{env.landingCurriculumEpisodeCount} episodes)");
+                    $"SUCCESS RATE: {FormatPercent(env.ActiveLandingCurriculumSuccessRate)}  ({env.ActiveLandingCurriculumSuccessfulEpisodes}/{env.ActiveLandingCurriculumEpisodeCount} episodes)");
                 SetText(curriculumPrimaryText,
                     $"SPAWN: {env.CurrentLandingSpawnAltitudeMin:F0}-{env.CurrentLandingSpawnAltitudeMax:F0} m, <= {env.CurrentLandingSpawnRadius:F0} m offset");
                 SetText(curriculumSecondaryText,

@@ -76,6 +76,7 @@ namespace RocketSim
         private bool _expanded;
 
         private bool _resumeRun;
+        private string _initializeFromRunId = "";
         private string _loadedConfigRunId;
         private string _loadedInferenceRunId;
         private bool _showLoadedRunBanner;

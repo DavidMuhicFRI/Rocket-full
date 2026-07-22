@@ -23,14 +23,13 @@ namespace RocketSim
             if (_manualControlActive) return;
 
             var act = actions.ContinuousActions;
-            var actionIndex = 0;
             // Throttle: action <= 0 is off; action > 0 selects [minThrottle, 1].
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
                 // Non-positive policy output is engine-off. Positive output
                 // selects the available throttle range without an engine-on
                 // command at the policy's zero-centred initial action.
-                float raw = Mathf.Clamp01(act[actionIndex++]);
+                float raw = Mathf.Clamp01(act[RocketAgentSchema.ThrottleActionOffset + i]);
                 bool engineLit = EngineIsIgnited(i);
                 float threshold = engineLit ? EngineShutdownThreshold : EngineIgnitionThreshold;
                 commandedThrottle[i] = raw > threshold ? Mathf.Lerp(cfg.minThrottle, 1f, raw) : 0f;
@@ -38,14 +37,16 @@ namespace RocketSim
 
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
-                var x = act[actionIndex++] * cfg.maxGimbal;
-                var y = act[actionIndex++] * cfg.maxGimbal;
+                int gimbalIndex = RocketAgentSchema.GimbalActionOffset + i * 2;
+                var x = act[gimbalIndex] * cfg.maxGimbal;
+                var y = act[gimbalIndex + 1] * cfg.maxGimbal;
                 targetGimbal[i] = ClampGimbalCone(new Vector2(x, y));
             }
 
             if (cfg.hasFins)
             {
-                for (int i = 0; i < cfg.finCount; i++) targetFinAngles[i] = act[actionIndex++] * cfg.maxFinAngle;
+                for (int i = 0; i < cfg.finCount; i++)
+                    targetFinAngles[i] = act[RocketAgentSchema.FinActionOffset + i] * cfg.maxFinAngle;
             }
             else
             {
@@ -55,10 +56,13 @@ namespace RocketSim
             if (cfg.hasRCS)
             {
                 for (int i = 0; i < cfg.rcsJetCount; i++)
-                    rcsValveRequests[i] = actionIndex < act.Length &&
-                                          act[actionIndex++] > RcsValveActionThreshold
+                {
+                    int rcsActionIndex = RocketAgentSchema.RcsActionOffset + i;
+                    rcsValveRequests[i] = rcsActionIndex < act.Length &&
+                                          act[rcsActionIndex] > RcsValveActionThreshold
                         ? 1f
                         : 0f;
+                }
             }
             else
             {
@@ -158,6 +162,26 @@ namespace RocketSim
             if (commandedThrottle == null || targetThrottle == null || engineStates == null)
                 return;
 
+            EngineTimingConfig timing = EngineTimingConfig.FromPhysicsConfig(cfg);
+            for (int i = 0; i < cfg.independentEngineCount; i++)
+            {
+                bool ignitionWillStart =
+                    engineStates[i] == EngineRunState.Off &&
+                    commandedThrottle[i] > EngineCommandEpsilon &&
+                    engineOffTimes[i] >= timing.restartCooldown;
+                if (!ignitionWillStart)
+                    continue;
+
+                // The first ignition in an episode is a normal mission event.
+                // Only an ignition after a prior shutdown counts as a restart.
+                if (engineIgnitionCounts[i] > 0)
+                {
+                    _engineRestartsThisStep++;
+                    _episodeEngineRestartCount++;
+                }
+                engineIgnitionCounts[i]++;
+            }
+
             EngineActuatorStateMachine.StepAll(
                 dt,
                 cfg.independentEngineCount,
@@ -168,9 +192,76 @@ namespace RocketSim
                 engineStateTimers,
                 engineRunTimes,
                 engineOffTimes,
-                EngineTimingConfig.FromPhysicsConfig(cfg),
+                timing,
                 EngineCommandEpsilon,
                 EngineShutdownThreshold);
+        }
+
+        /// <summary>
+        /// Starts the center hover engine in its stabilized Running state at the
+        /// throttle that balances the current episode mass. PPO receives no
+        /// target-throttle reward and may change or shut down the engine at once.
+        /// </summary>
+        void InitializeHoverEngineAtEquilibrium()
+        {
+            if (envConfig == null ||
+                (envConfig.scenario != ScenarioType.Hover && envConfig.scenario != ScenarioType.HoverTracking) ||
+                cfg.independentEngineCount <= 0 ||
+                throttle == null || throttle.Length == 0)
+                return;
+
+            // Independent control starts only the center channel. With shared
+            // control, channel zero drives every engine in the configured group.
+            int runningEngineCount = cfg.independentEngines ? 1 : Mathf.Max(1, cfg.activeEngineCount);
+            float faultScale = 1f - ActiveFaultSeverity(RocketFaultType.EngineThrustLoss, 0);
+            float effectiveMaxThrust = cfg.maxThrust * CurrentEngineThrustScale() * faultScale;
+            float initialThrottle = HoverThrustInitialization.EquilibriumThrottle(
+                rb.mass,
+                Mathf.Abs(Physics.gravity.y),
+                effectiveMaxThrust,
+                runningEngineCount,
+                cfg.minThrottle);
+            if (initialThrottle <= 0f)
+                return;
+
+            EngineTimingConfig timing = EngineTimingConfig.FromPhysicsConfig(cfg);
+            throttle[0] = commandedThrottle[0] = targetThrottle[0] = initialThrottle;
+            engineStates[0] = EngineRunState.Running;
+            engineStateTimers[0] = 0f;
+            engineRunTimes[0] = timing.minimumRunTime;
+            engineOffTimes[0] = 0f;
+            engineIgnitionCounts[0] = 1;
+            UpdateThrusterVisuals();
+        }
+
+        /// <summary>
+        /// Returns the normalized time remaining on the current engine-state
+        /// constraint. Together with the one-hot state observation this tells a
+        /// feed-forward policy when startup, minimum-run, shutdown, or cooldown
+        /// will finish instead of leaving actuator timing hidden.
+        /// </summary>
+        float EngineConstraintTimeRemaining01(int index)
+        {
+            if (engineStates == null || index < 0 || index >= engineStates.Length)
+                return 0f;
+
+            EngineTimingConfig timing = EngineTimingConfig.FromPhysicsConfig(cfg);
+            return engineStates[index] switch
+            {
+                EngineRunState.Off => timing.restartCooldown > 0f
+                    ? Mathf.Clamp01((timing.restartCooldown - engineOffTimes[index]) / timing.restartCooldown)
+                    : 0f,
+                EngineRunState.Starting => timing.startupDelay > 0f
+                    ? Mathf.Clamp01(engineStateTimers[index] / timing.startupDelay)
+                    : 0f,
+                EngineRunState.Running => timing.minimumRunTime > 0f
+                    ? Mathf.Clamp01((timing.minimumRunTime - engineRunTimes[index]) / timing.minimumRunTime)
+                    : 0f,
+                EngineRunState.Shutdown => timing.shutdownTransient > 0f
+                    ? Mathf.Clamp01(engineStateTimers[index] / timing.shutdownTransient)
+                    : 0f,
+                _ => 0f
+            };
         }
 
         /// <summary>
@@ -309,6 +400,7 @@ namespace RocketSim
             if (engineStateTimers == null || engineStateTimers.Length != engineCount) engineStateTimers = new float[engineCount];
             if (engineRunTimes == null || engineRunTimes.Length != engineCount) engineRunTimes = new float[engineCount];
             if (engineOffTimes == null || engineOffTimes.Length != engineCount) engineOffTimes = new float[engineCount];
+            if (engineIgnitionCounts == null || engineIgnitionCounts.Length != engineCount) engineIgnitionCounts = new int[engineCount];
 
             if (finAngles == null || finAngles.Length != finCount) finAngles = new float[finCount];
             if (targetFinAngles == null || targetFinAngles.Length != finCount) targetFinAngles = new float[finCount];
@@ -329,6 +421,7 @@ namespace RocketSim
                 engineStateTimers[i] = 0f;
                 engineRunTimes[i] = 0f;
                 engineOffTimes[i] = restartCooldown;
+                engineIgnitionCounts[i] = 0;
             }
 
             for (int i = 0; i < finCount; i++)

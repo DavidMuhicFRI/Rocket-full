@@ -21,12 +21,12 @@ namespace RocketSim
         static readonly IReadOnlyList<ScenarioDefinition> Scenarios = ScenarioCatalog.All;
 
         /// <summary>
-        /// Returns the currently selected task, falling back to Landing while
+        /// Returns the currently selected task, falling back to Chopstick Landing while
         /// the environment config is not yet connected.
         /// </summary>
         ScenarioType CurrentScenario()
         {
-            return envConfig?.scenario ?? ScenarioType.Landing;
+            return envConfig?.scenario ?? ScenarioType.ChopstickLanding;
         }
 
         /// <summary>
@@ -99,7 +99,7 @@ namespace RocketSim
                     envConfig.scenario = selectedScenario;
                     envConfig.moveTargetEnabled = ScenarioProfile.UsesMovingTarget(selectedScenario);
                     if (selectedScenario == ScenarioType.HoverTracking) envConfig.ResetHoverTrackCurriculum();
-                    if (selectedScenario == ScenarioType.Landing) envConfig.ResetLandingCurriculum();
+                    if (selectedScenario.IsLanding()) envConfig.ResetActiveLandingCurriculum();
                     ApplyCurrentScenarioHardwareDefaults();
                     Dirty();
                     BuildVehicleTab(_tabContents[VehicleTab]);
@@ -137,8 +137,8 @@ namespace RocketSim
                     ApplyCurrentScenarioHardwareDefaults();
                     if (selectedScenario == ScenarioType.HoverTracking)
                         envConfig.ResetHoverTrackCurriculum();
-                    if (selectedScenario == ScenarioType.Landing)
-                        envConfig.ResetLandingCurriculum();
+                    if (selectedScenario.IsLanding())
+                        envConfig.ResetActiveLandingCurriculum();
                     Dirty();
                     BuildVehicleTab(_tabContents[VehicleTab]);
                     RefreshScenarioCards(grid);
@@ -163,6 +163,28 @@ namespace RocketSim
         void BuildInferenceScenarioSection(VisualElement root)
         {
             root.Clear();
+            root.Add(UIHelper.SectionLabel("Inference Purpose"));
+
+            var purposeField = new EnumField("Purpose", envConfig.inferencePurpose);
+            purposeField.AddToClassList("rs-enum-field");
+            purposeField.RegisterValueChangedCallback(evt =>
+            {
+                envConfig.inferencePurpose = (InferencePurpose)evt.newValue;
+                Dirty();
+                BuildInferenceScenarioSection(root);
+                BuildRunTab(_tabContents[RunTab]);
+                RefreshStartButton();
+            });
+            root.Add(purposeField);
+
+            if (envConfig.inferencePurpose == InferencePurpose.StandardEvaluation)
+            {
+                BuildStandardEvaluationControls(root);
+                return;
+            }
+
+            root.Add(BuildGroupDetail(
+                "Manual inference keeps editable spawn ranges for visual inspection. Its episodes are not the standardized thesis benchmark."));
             root.Add(UIHelper.SectionLabel("Simulation Scenario"));
 
             var grid = new VisualElement();
@@ -185,6 +207,66 @@ namespace RocketSim
             RefreshScenarioCards(grid);
 
             BuildInferenceSpawnControls(root, envConfig.GetInferenceSpawnProfile(envConfig.scenario));
+        }
+
+        /// <summary>
+        /// Builds the immutable benchmark controls. Only episode count and the
+        /// shared suite seed are editable. Landing uses the canonical d=1
+        /// profile; fixed hover uses its canonical near-target spawn profile.
+        /// </summary>
+        void BuildStandardEvaluationControls(VisualElement root)
+        {
+            EvaluationConfig evaluation = envConfig.EnsureEvaluationConfig();
+            string evaluatorDescription = envConfig.scenario.IsLanding()
+                ? "Standard evaluation uses deterministic policy actions, clear weather, no faults, no curriculum replay, and the full d=1 landing distribution."
+                : "Standard hover evaluation uses deterministic policy actions, clear weather, no faults, and a fixed seeded near-target spawn distribution. Episodes end through fuel depletion or an existing failure terminal.";
+            root.Add(BuildGroupDetail(evaluatorDescription));
+
+            root.Add(UIHelper.SectionLabel("Evaluation Suite"));
+            root.Add(UIHelper.ReadOnly("Scenario", envConfig.scenario.ToString()));
+            root.Add(UIHelper.IntSlider("Episodes", evaluation.episodeCount, 10, 1000, value =>
+            {
+                evaluation.episodeCount = value;
+                evaluation.Clamp();
+            }, "Runs exactly this many completed episodes before writing the aggregate summary and stopping automatically."));
+            root.Add(UIHelper.IntSlider("Evaluation Seed", evaluation.seed, 0, 100000, value =>
+            {
+                evaluation.seed = value;
+                evaluation.Clamp();
+            }, "Use the same seed for every trained model so episode indices map to identical initial states."));
+
+            if (envConfig.scenario == ScenarioType.Hover)
+            {
+                InferenceSpawnProfile hover = envConfig.GetInferenceSpawnProfile(ScenarioType.Hover);
+                root.Add(UIHelper.SectionLabel("Fixed Benchmark"));
+                root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{hover.altitudeMin:F0}..{hover.altitudeMax:F0} m"));
+                root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {hover.horizontalOffsetMax:F0} m"));
+                root.Add(UIHelper.ReadOnly("Vertical Speed", $"{hover.verticalSpeedMin:F1}..{hover.verticalSpeedMax:F1} m/s"));
+                root.Add(UIHelper.ReadOnly("Horizontal Speed", $"up to {hover.horizontalSpeedMax:F1} m/s"));
+                root.Add(UIHelper.ReadOnly("Endpoint", "Fuel depletion or an existing failure terminal"));
+                root.Add(BuildGroupDetail(
+                    "Hover has no artificial success terminal. Compare duration, time in the declared hover envelope, RMS position/motion error, fuel use, restart count, and terminal state."));
+                return;
+            }
+
+            if (!envConfig.scenario.IsLanding())
+            {
+                root.Add(BuildGroupDetail(
+                    "This scenario does not yet have a standardized evaluator contract. Use Manual Inference."));
+                return;
+            }
+
+            LandingCurriculumProfile full = envConfig.GetActiveLandingCurriculumProfile(1f);
+            root.Add(UIHelper.SectionLabel("Fixed Benchmark"));
+            root.Add(UIHelper.ReadOnly("Difficulty", "d = 1.000 (full)"));
+            root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{full.spawnAltitudeMin:F0}..{full.spawnAltitudeMax:F0} m"));
+            root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {full.spawnRadius:F0} m"));
+            root.Add(UIHelper.ReadOnly("Downward Speed", $"{full.verticalSpeedMin:F0}..{full.verticalSpeedMax:F0} m/s before feasibility clipping"));
+            string limits = envConfig.scenario == ScenarioType.ChopstickLanding
+                ? $"{full.successRadius:F1} m radius, {full.successMaxVerticalSpeed:F1} m/s vertical, {full.successMaxYawErrorDeg:F0} deg yaw"
+                : $"3/4 feet, {full.successMaxVerticalSpeed:F1} m/s vertical, {full.successMaxTiltDeg:F0} deg tilt, {full.platformStableHoldTime:F2} s hold";
+            root.Add(UIHelper.ReadOnly("Success Limits", limits));
+            root.Add(UIHelper.ReadOnly("Emergency Limit", $"{SimEnvironmentConfig.LandingDefaultMaxEpisodeSeconds:F0} simulated seconds"));
         }
 
         /// <summary>
@@ -272,8 +354,10 @@ namespace RocketSim
         /// </summary>
         void BuildScenarioTargetControls(VisualElement root)
         {
-            if (envConfig.scenario == ScenarioType.Landing)
+            if (envConfig.scenario == ScenarioType.ChopstickLanding)
                 BuildLandingTargetControls(root);
+            else if (envConfig.scenario == ScenarioType.LegLanding)
+                BuildLegLandingTargetControls(root);
             else if (envConfig.scenario == ScenarioType.HoverTracking)
                 BuildMovingTargetControls(root);
         }
@@ -296,6 +380,18 @@ namespace RocketSim
                 envConfig.landingPlatformEnabled
                     ? $"{envConfig.CurrentLandingPlatformHalfSize:F1} m half-size, hold {envConfig.CurrentLandingPlatformStableHoldTime:F2} s"
                     : "disabled"));
+        }
+
+        /// <summary>Shows the fixed physical-pad and deployed-foot contact contract.</summary>
+        void BuildLegLandingTargetControls(VisualElement root)
+        {
+            LandingCurriculumProfile profile = envConfig.GetActiveLandingCurriculumProfile(
+                envConfig.ActiveLandingCurriculumProgress);
+            root.Add(UIHelper.SectionLabel("Physical Landing Target"));
+            root.Add(UIHelper.ReadOnly("Pad", "Existing 20 x 20 m Landing_Pad collider"));
+            root.Add(UIHelper.ReadOnly("Stable Contact", $"at least 3 of 4 feet for {profile.platformStableHoldTime:F2} s"));
+            root.Add(UIHelper.ReadOnly("Touchdown Limits",
+                $"vertical < {profile.successMaxVerticalSpeed:F1} m/s, horizontal < {profile.successMaxHorizontalSpeed:F1} m/s, tilt < {profile.successMaxTiltDeg:F0} deg"));
         }
 
         /// <summary>Builds hover-target movement and settling controls.</summary>

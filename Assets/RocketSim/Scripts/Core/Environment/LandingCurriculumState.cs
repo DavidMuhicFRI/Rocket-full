@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/LandingCurriculumState.cs
-// Purpose: Tracks landing-training performance and maps one continuous
-// difficulty value to spawn, capture, and success thresholds.
+// Purpose: Defines the shared landing-profile curve and tracks the legacy
+// chopstick task's independent continuous curriculum state.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -123,6 +123,7 @@ namespace RocketSim
         [HideInInspector] public float landingPlatformHalfSizeFull = LandingDefaultPlatformHalfSizeFull;
         [HideInInspector] public float landingPlatformStableHoldInitial = LandingDefaultPlatformStableHoldInitial;
         [HideInInspector] public float landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
+        [HideInInspector] public float landingMaxEpisodeSeconds = LandingDefaultMaxEpisodeSeconds;
 
         public const float DefaultLandingCatchAltitude = 60f;
         public const float LandingDefaultCurriculumBatchesToFullDifficulty = 360f;
@@ -170,6 +171,7 @@ namespace RocketSim
         public const float LandingDefaultPlatformHalfSizeFull = 3f;
         public const float LandingDefaultPlatformStableHoldInitial = 0.15f;
         public const float LandingDefaultPlatformStableHoldFull = 0.45f;
+        public const float LandingDefaultMaxEpisodeSeconds = 120f;
 
         public float LandingCurriculumSuccessRate =>
             landingCurriculumEpisodeCount > 0 ? Mathf.Clamp01(landingCurriculumRecentSuccessRate) : 0f;
@@ -203,7 +205,12 @@ namespace RocketSim
         /// </summary>
         public void RecordLandingCurriculumEpisode(bool successfulEpisode, int activeAreaCount)
         {
-            if (scenario != ScenarioType.Landing) return;
+            if (scenario == ScenarioType.LegLanding)
+            {
+                RecordLegLandingCurriculumEpisode(successfulEpisode, activeAreaCount);
+                return;
+            }
+            if (scenario != ScenarioType.ChopstickLanding) return;
 
             EnsureLandingCurriculumDefaults();
             landingCurriculumEpisodeCount++;
@@ -250,7 +257,7 @@ namespace RocketSim
         /// </summary>
         public void ApplyLandingCurriculum()
         {
-            if (scenario != ScenarioType.Landing) return;
+            if (scenario != ScenarioType.ChopstickLanding) return;
 
             EnsureLandingCurriculumDefaults();
             landingCurriculumEnabled = landingCurriculumMode != LandingCurriculumMode.FixedFullDifficulty;
@@ -296,32 +303,33 @@ namespace RocketSim
         /// </summary>
         public float LandingEpisodeDifficulty(bool useEasierReplay)
         {
-            if (!landingCurriculumEnabled || !useEasierReplay)
-                return landingCurriculumProgress;
-            return Mathf.Max(0f, landingCurriculumProgress - landingCurriculumEasierReplayOffset);
+            float progress = ActiveLandingCurriculumProgress;
+            if (!ActiveLandingCurriculumEnabled || !useEasierReplay)
+                return progress;
+            return Mathf.Max(0f, progress - ActiveLandingReplayOffset);
         }
 
-        public float CurrentLandingSpawnAltitudeMin => GetLandingCurriculumProfile(landingCurriculumProgress).spawnAltitudeMin;
-        public float CurrentLandingSpawnAltitudeMax => GetLandingCurriculumProfile(landingCurriculumProgress).spawnAltitudeMax;
-        public float CurrentLandingSpawnRadius => GetLandingCurriculumProfile(landingCurriculumProgress).spawnRadius;
-        public float CurrentLandingVerticalSpeedMin => GetLandingCurriculumProfile(landingCurriculumProgress).verticalSpeedMin;
-        public float CurrentLandingVerticalSpeedMax => GetLandingCurriculumProfile(landingCurriculumProgress).verticalSpeedMax;
-        public float CurrentLandingHorizontalSpeedMax => GetLandingCurriculumProfile(landingCurriculumProgress).horizontalSpeedMax;
-        public float CurrentLandingSpawnTiltRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnTiltRangeDeg;
-        public float CurrentLandingAngularSpeedMaxDegS => GetLandingCurriculumProfile(landingCurriculumProgress).angularSpeedMaxDegS;
-        public float CurrentLandingSpawnYawRangeDeg => GetLandingCurriculumProfile(landingCurriculumProgress).spawnYawRangeDeg;
-        public float CurrentLandingSuccessRadius => GetLandingCurriculumProfile(landingCurriculumProgress).successRadius;
-        public float CurrentLandingSuccessMaxSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxSpeed;
-        public float CurrentLandingSuccessMaxVerticalSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxVerticalSpeed;
-        public float CurrentLandingSuccessMaxHorizontalSpeed => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxHorizontalSpeed;
-        public float CurrentLandingSuccessMaxTiltDeg => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxTiltDeg;
-        public float CurrentLandingSuccessMaxAngularRateDegS => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxAngularRateDegS;
-        public float CurrentLandingSuccessMaxYawErrorDeg => GetLandingCurriculumProfile(landingCurriculumProgress).successMaxYawErrorDeg;
-        public float CurrentLandingPlatformHalfSize => GetLandingCurriculumProfile(landingCurriculumProgress).platformHalfSize;
-        public float CurrentLandingPlatformStableHoldTime => GetLandingCurriculumProfile(landingCurriculumProgress).platformStableHoldTime;
+        public float CurrentLandingSpawnAltitudeMin => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).spawnAltitudeMin;
+        public float CurrentLandingSpawnAltitudeMax => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).spawnAltitudeMax;
+        public float CurrentLandingSpawnRadius => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).spawnRadius;
+        public float CurrentLandingVerticalSpeedMin => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).verticalSpeedMin;
+        public float CurrentLandingVerticalSpeedMax => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).verticalSpeedMax;
+        public float CurrentLandingHorizontalSpeedMax => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).horizontalSpeedMax;
+        public float CurrentLandingSpawnTiltRangeDeg => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).spawnTiltRangeDeg;
+        public float CurrentLandingAngularSpeedMaxDegS => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).angularSpeedMaxDegS;
+        public float CurrentLandingSpawnYawRangeDeg => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).spawnYawRangeDeg;
+        public float CurrentLandingSuccessRadius => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successRadius;
+        public float CurrentLandingSuccessMaxSpeed => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxSpeed;
+        public float CurrentLandingSuccessMaxVerticalSpeed => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxVerticalSpeed;
+        public float CurrentLandingSuccessMaxHorizontalSpeed => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxHorizontalSpeed;
+        public float CurrentLandingSuccessMaxTiltDeg => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxTiltDeg;
+        public float CurrentLandingSuccessMaxAngularRateDegS => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxAngularRateDegS;
+        public float CurrentLandingSuccessMaxYawErrorDeg => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).successMaxYawErrorDeg;
+        public float CurrentLandingPlatformHalfSize => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).platformHalfSize;
+        public float CurrentLandingPlatformStableHoldTime => GetActiveLandingCurriculumProfile(ActiveLandingCurriculumProgress).platformStableHoldTime;
         // The capture envelope exists from d=0 onward and never becomes a
         // collision surface. Only its size and required stable time change.
-        public bool CurrentLandingPlatformRequired => landingPlatformEnabled;
+        public bool CurrentLandingPlatformRequired => scenario == ScenarioType.ChopstickLanding && landingPlatformEnabled;
 
         /// <summary>Returns one bounded hysteretic difficulty change per batch.</summary>
         float LandingCurriculumProgressDelta(float successRate)
@@ -412,6 +420,9 @@ namespace RocketSim
                 landingPlatformStableHoldInitial = LandingDefaultPlatformStableHoldInitial;
             if (landingPlatformStableHoldFull < 0f)
                 landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
+            if (landingMaxEpisodeSeconds <= 0f)
+                landingMaxEpisodeSeconds = LandingDefaultMaxEpisodeSeconds;
+            landingMaxEpisodeSeconds = Mathf.Clamp(landingMaxEpisodeSeconds, 30f, 600f);
         }
     }
 }

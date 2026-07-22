@@ -396,7 +396,8 @@ namespace RocketSim
         {
             return scenario switch
             {
-                ScenarioType.Landing => "Landing reserve",
+                ScenarioType.ChopstickLanding => "Chopstick landing reserve",
+                ScenarioType.LegLanding => "Leg-landing reserve",
                 ScenarioType.Hover => "Hover reserve",
                 ScenarioType.HoverTracking => "Hover-track reserve",
                 ScenarioType.Takeoff => "Takeoff load",

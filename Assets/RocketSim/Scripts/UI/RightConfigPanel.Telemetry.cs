@@ -23,8 +23,30 @@ namespace RocketSim
             var tc = telemetryConfig ?? new TelemetryConfig();
 
             BuildTelemetryLogGroups(c, tc);
+            BuildTelemetrySamplingSection(c, tc);
             BuildTelemetryWidthSection(c, tc);
             BuildTelemetryOutputSection(c);
+        }
+
+        /// <summary>
+        /// Controls only detailed training trajectories. Episode statistics are
+        /// always accumulated at full physics rate and evaluation trajectories
+        /// deliberately ignore this interval and log every step.
+        /// </summary>
+        void BuildTelemetrySamplingSection(VisualElement root, TelemetryConfig tc)
+        {
+            root.Add(UIHelper.SectionLabel("Trajectory Sampling"));
+            root.Add(UIHelper.IntSlider(
+                "Training Step Interval",
+                tc.TrainingStepLogInterval,
+                1,
+                100,
+                value =>
+                {
+                    tc.trainingStepLogInterval = value;
+                    RefreshTelemetryColumnCount(root, tc);
+                },
+                "1 writes every physics step; 10 writes at 10 Hz with the current 0.01 s timestep. Episode summaries and evaluation stay full-rate."));
         }
 
         /// <summary>
@@ -112,13 +134,19 @@ namespace RocketSim
         {
             int metricCols = TelemetryMetricCatalog.CountEnabled(tc);
             int stepCols = 4 + metricCols;
-            int episodeCols = 4 + metricCols * 2;
+            const int episodeIdentityAndOutcomeCols = 40;
+            int episodeCols = episodeIdentityAndOutcomeCols + metricCols * 2;
             UpdateLabelText(root, "label-col-count",
                 $"Steps: {stepCols} cols - Episodes: {episodeCols} cols");
             // A typical CSV number plus comma is roughly 12 bytes. This is an
             // estimate, not a promise, but is useful before starting a long run.
-            float estimatedMegabytes = stepCols * 12f * 1_000_000f / (1024f * 1024f);
-            UpdateLabelText(root, "label-csv-size", $"~{estimatedMegabytes:F0} MB");
+            float estimatedMegabytes = stepCols * 12f * 1_000_000f /
+                                       tc.TrainingStepLogInterval /
+                                       (1024f * 1024f);
+            UpdateLabelText(
+                root,
+                "label-csv-size",
+                $"~{estimatedMegabytes:F0} MB per 1M simulated physics steps at 1/{tc.TrainingStepLogInterval} sampling");
         }
     }
 }

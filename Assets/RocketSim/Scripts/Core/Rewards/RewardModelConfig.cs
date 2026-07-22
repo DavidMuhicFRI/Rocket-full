@@ -14,7 +14,9 @@ namespace RocketSim
     [Serializable]
     public class RewardModelConfig
     {
+        // `landing` is the serialized legacy field for the chopstick task.
         public ScenarioRewardFactors landing = new();
+        public ScenarioRewardFactors legLanding = new();
         public ScenarioRewardFactors hover = new();
         public ScenarioRewardFactors hoverTracking = new();
         public ScenarioRewardFactors takeoff = new();
@@ -27,12 +29,14 @@ namespace RocketSim
         public void EnsureDefaults()
         {
             landing ??= new ScenarioRewardFactors();
+            legLanding ??= new ScenarioRewardFactors();
             hover ??= new ScenarioRewardFactors();
             hoverTracking ??= new ScenarioRewardFactors();
             takeoff ??= new ScenarioRewardFactors();
             bellyFlop ??= new ScenarioRewardFactors();
 
             landing.EnsureInitialized();
+            legLanding.EnsureInitialized();
             hover.EnsureInitialized();
             hoverTracking.EnsureInitialized();
             takeoff.EnsureInitialized();
@@ -47,7 +51,8 @@ namespace RocketSim
             EnsureDefaults();
             return scenario switch
             {
-                ScenarioType.Landing => landing,
+                ScenarioType.ChopstickLanding => landing,
+                ScenarioType.LegLanding => legLanding,
                 ScenarioType.Hover => hover,
                 ScenarioType.HoverTracking => hoverTracking,
                 ScenarioType.Takeoff => takeoff,
@@ -151,7 +156,7 @@ namespace RocketSim
     [Serializable]
     public class ScenarioRewardFactors
     {
-        const int CurrentSchemaVersion = 3;
+        const int CurrentSchemaVersion = 4;
 
         public int schemaVersion = CurrentSchemaVersion;
         public string presetName = "Balanced";
@@ -166,6 +171,7 @@ namespace RocketSim
         public float rotation = 1f;
         public float orientation = 1f;
         public float controlEffort = 1f;
+        public float engineRestart = 1f;
         public float progress = 1f;
         public float tracking = 1f;
         public float settle = 1f;
@@ -189,6 +195,7 @@ namespace RocketSim
             rotation = 1f;
             orientation = 1f;
             controlEffort = 1f;
+            engineRestart = 1f;
             progress = 1f;
             tracking = 1f;
             settle = 1f;
@@ -215,6 +222,7 @@ namespace RocketSim
             rotation = Mathf.Clamp(rotation, 0f, 2.5f);
             orientation = Mathf.Clamp(orientation, 0f, 2.5f);
             controlEffort = Mathf.Clamp(controlEffort, 0f, 2.5f);
+            engineRestart = Mathf.Clamp(engineRestart, 0f, 2.5f);
             progress = Mathf.Clamp(progress, 0f, 2.5f);
             tracking = Mathf.Clamp(tracking, 0f, 2.5f);
             settle = Mathf.Clamp(settle, 0f, 2.5f);
@@ -240,6 +248,7 @@ namespace RocketSim
                 rotation <= 0f &&
                 orientation <= 0f &&
                 controlEffort <= 0f &&
+                engineRestart <= 0f &&
                 progress <= 0f &&
                 tracking <= 0f &&
                 settle <= 0f &&
@@ -255,6 +264,7 @@ namespace RocketSim
                 ascentPenalty = ascentPenalty <= 0f ? 1f : ascentPenalty;
                 timePressure = timePressure <= 0f ? 1f : timePressure;
                 orientation = orientation <= 0f ? 1f : orientation;
+                engineRestart = engineRestart <= 0f ? 1f : engineRestart;
                 schemaVersion = CurrentSchemaVersion;
             }
 

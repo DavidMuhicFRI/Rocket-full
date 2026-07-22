@@ -86,7 +86,7 @@ namespace RocketSim
                 "Limits how much PPO may change the policy in one update."));
 
             root.Add(UIHelper.Slider("lambd (GAE)", mlConfig.lambd, 0.80f, 0.999f, v => mlConfig.lambd = v,
-                "Balances short-term bias against noisy long-term advantage estimates."));
+                "Controls how far observed rewards influence PPO advantage estimates. Higher values use more real future outcomes but add variance; lower values trust the critic more."));
 
             root.Add(UIHelper.IntSlider("num_epoch", mlConfig.numEpoch, 1, 20, v => mlConfig.numEpoch = v,
                 "Full passes over each buffer. Higher values reuse data more."));
@@ -122,7 +122,7 @@ namespace RocketSim
             root.Add(UIHelper.SectionLabel("Reward - Extrinsic"));
 
             root.Add(UIHelper.Slider("gamma", mlConfig.extrinsicGamma, 0.80f, 0.9999f, v => mlConfig.extrinsicGamma = v,
-                "Discount factor. Higher values make the agent care more about future rewards."));
+                "Per-decision discount factor. At the fixed 33.3 Hz control rate, 0.995 retains about 19% of a reward received ten simulated seconds later."));
 
             root.Add(UIHelper.Slider("strength", mlConfig.extrinsicStrength, 0.10f, 5f, v => mlConfig.extrinsicStrength = v,
                 "Scales the task reward before it is combined with curiosity."));
@@ -163,7 +163,7 @@ namespace RocketSim
                 "Sets the total environment steps before training ends."));
 
             root.Add(UIHelper.IntSlider("time_horizon", mlConfig.timeHorizon, 64, 2048, v => mlConfig.timeHorizon = v,
-                "Steps collected per agent before estimating the remaining return."));
+                "Maximum per-agent rollout chunk before critic bootstrapping. 1024 decisions equal 30.72 simulated seconds; this does not end the episode."));
 
             root.Add(UIHelper.IntSlider("summary_freq (x1k)", mlConfig.summaryFreq / 1000, 1, 100, v => mlConfig.summaryFreq = v * 1000,
                 "Sets how often training statistics are written for TensorBoard."));
@@ -171,8 +171,8 @@ namespace RocketSim
             root.Add(UIHelper.IntSlider("checkpoint (x1k)", mlConfig.checkpointInterval / 1000, 10, 5000,
                 v => mlConfig.checkpointInterval = v * 1000,
                 "Sets the number of steps between saved model checkpoints."));
-            root.Add(UIHelper.IntSlider("keep checkpoints", mlConfig.keepCheckpoints, 1, 20, v => mlConfig.keepCheckpoints = v,
-                "Sets how many recent checkpoints remain on disk."));
+            root.Add(UIHelper.IntSlider("keep checkpoints", mlConfig.keepCheckpoints, 1, 100, v => mlConfig.keepCheckpoints = v,
+                "Sets how many checkpoints remain on disk. Keep at least max_steps / checkpoint_interval to preserve the complete learning curve."));
             root.Add(UIHelper.IntSlider("trainer seed", mlConfig.trainerSeed, 0, 100000, v => mlConfig.trainerSeed = v,
                 "Sets ML-Agents' random seed for repeatable experiments."));
             root.Add(UIHelper.IntSlider("environment seed", envConfig.environmentSeed, 0, 100000, v => envConfig.environmentSeed = v,

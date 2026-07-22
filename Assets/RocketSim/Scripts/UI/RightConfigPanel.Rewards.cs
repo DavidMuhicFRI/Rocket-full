@@ -33,6 +33,7 @@ namespace RocketSim
             Rotation,
             Orientation,
             ControlEffort,
+            EngineRestart,
             Progress,
             Tracking,
             Settle,
@@ -40,9 +41,14 @@ namespace RocketSim
             Terminal
         }
 
-        static readonly string[] LandingRewardPresets =
+        static readonly string[] ChopstickLandingRewardPresets =
         {
             "Balanced", "Chopstick Catch", "Descent Focus", "Soft Landing", "Upright Focus", "Target Precision", "Efficient Control"
+        };
+
+        static readonly string[] LegLandingRewardPresets =
+        {
+            "Balanced", "Soft Landing", "Descent Focus", "Upright Focus", "Target Precision", "Efficient Control"
         };
 
         static readonly string[] HoverRewardPresets =
@@ -70,7 +76,7 @@ namespace RocketSim
         // These catalogs are the UI-to-config map for each task. Keeping label,
         // meaning, and config key together prevents a slider from editing the
         // wrong reward factor when task-specific controls change.
-        static readonly (RewardFactor factor, string label, string hint)[] LandingRewardSliders =
+        static readonly (RewardFactor factor, string label, string hint)[] ChopstickLandingRewardSliders =
         {
             (RewardFactor.TargetPrecision, "Target Precision", "Scales pad-centering reward and horizontal drift penalty."),
             (RewardFactor.Orientation, "Chopstick Alignment", "Scales near-ground reward for matching the configured target yaw."),
@@ -78,6 +84,18 @@ namespace RocketSim
             (RewardFactor.Uprightness, "Uprightness", "Scales upright posture shaping during descent."),
             (RewardFactor.Rotation, "Attitude Calm", "Scales angular-rate reward and angular-rate penalty."),
             (RewardFactor.ControlEffort, "Control Efficiency", "Scales the penalty for wasteful throttle, gimbal, and fin use."),
+            (RewardFactor.Terminal, "Terminal Signal", "Scales success and failure rewards at episode end."),
+        };
+
+        static readonly (RewardFactor factor, string label, string hint)[] LegLandingRewardSliders =
+        {
+            (RewardFactor.TargetPrecision, "Pad Centering", "Scales horizontal centering toward the physical landing pad."),
+            (RewardFactor.DescentDrive, "Vertical Profile", "Scales the altitude-based target vertical speed without prescribing throttle."),
+            (RewardFactor.Uprightness, "Uprightness", "Scales upright posture shaping during descent."),
+            (RewardFactor.Speed, "Touchdown Motion", "Scales near-pad horizontal speed discipline."),
+            (RewardFactor.Rotation, "Attitude Calm", "Scales angular-rate penalties near touchdown."),
+            (RewardFactor.Settle, "Contact And Settle", "Scales one-off first-contact and stable-landing events."),
+            (RewardFactor.ControlEffort, "Control Efficiency", "Scales the penalty for wasteful throttle, gimbal, fin, and RCS use."),
             (RewardFactor.Terminal, "Terminal Signal", "Scales success and failure rewards at episode end."),
         };
 
@@ -89,6 +107,7 @@ namespace RocketSim
             (RewardFactor.Speed, "Speed Discipline", "Scales reward for calm, low-speed hover motion."),
             (RewardFactor.Rotation, "Attitude Calm", "Scales angular-rate reward and angular-rate penalty."),
             (RewardFactor.ControlEffort, "Control Efficiency", "Scales the penalty for wasteful control effort."),
+            (RewardFactor.EngineRestart, "Engine Restarts", "Scales the one-off penalty for reigniting an engine after it has shut down. The pre-running hover engine is not penalized."),
             (RewardFactor.Terminal, "Terminal Signal", "Scales terminal failure reward."),
         };
 
@@ -103,6 +122,7 @@ namespace RocketSim
             (RewardFactor.Tracking, "Approach Drive", "Scales reward for moving toward the shifted pad."),
             (RewardFactor.Settle, "Settle Precision", "Scales reward for tight centering once close to the pad."),
             (RewardFactor.ControlEffort, "Control Efficiency", "Scales the penalty for wasteful control effort."),
+            (RewardFactor.EngineRestart, "Engine Restarts", "Scales the one-off penalty for reigniting an engine after it has shut down. Necessary low-mass pulse control remains allowed."),
             (RewardFactor.Terminal, "Terminal Signal", "Scales terminal failure reward."),
         };
 
@@ -186,7 +206,8 @@ namespace RocketSim
         {
             return scenario switch
             {
-                ScenarioType.Landing => LandingRewardPresets,
+                ScenarioType.ChopstickLanding => ChopstickLandingRewardPresets,
+                ScenarioType.LegLanding => LegLandingRewardPresets,
                 ScenarioType.Hover => HoverRewardPresets,
                 ScenarioType.HoverTracking => HoverTrackingRewardPresets,
                 ScenarioType.Takeoff => TakeoffRewardPresets,
@@ -199,7 +220,8 @@ namespace RocketSim
         {
             return scenario switch
             {
-                ScenarioType.Landing => LandingRewardSliders,
+                ScenarioType.ChopstickLanding => ChopstickLandingRewardSliders,
+                ScenarioType.LegLanding => LegLandingRewardSliders,
                 ScenarioType.Hover => HoverRewardSliders,
                 ScenarioType.HoverTracking => HoverTrackingRewardSliders,
                 ScenarioType.Takeoff => TakeoffRewardSliders,
@@ -225,6 +247,7 @@ namespace RocketSim
                 RewardFactor.Rotation => factors.rotation,
                 RewardFactor.Orientation => factors.orientation,
                 RewardFactor.ControlEffort => factors.controlEffort,
+                RewardFactor.EngineRestart => factors.engineRestart,
                 RewardFactor.Progress => factors.progress,
                 RewardFactor.Tracking => factors.tracking,
                 RewardFactor.Settle => factors.settle,
@@ -251,6 +274,7 @@ namespace RocketSim
                 case RewardFactor.Rotation: factors.rotation = value; break;
                 case RewardFactor.Orientation: factors.orientation = value; break;
                 case RewardFactor.ControlEffort: factors.controlEffort = value; break;
+                case RewardFactor.EngineRestart: factors.engineRestart = value; break;
                 case RewardFactor.Progress: factors.progress = value; break;
                 case RewardFactor.Tracking: factors.tracking = value; break;
                 case RewardFactor.Settle: factors.settle = value; break;

@@ -1,11 +1,13 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Physics/RocketPhysicsConfig.cs
-// Purpose: Stores runtime physics constants derived from the selected rocket hardware.
+// Purpose: Stores runtime physics constants derived from the selected rocket
+// hardware and defines unambiguous thrust-authority calculations for telemetry.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using System;
+using UnityEngine;
 
 namespace RocketSim
 {
@@ -62,5 +64,55 @@ namespace RocketSim
         public float rcsDryMass;
         public float rcsPropellantMass;
         public float rcsLocalY;
+    }
+
+    /// <summary>
+    /// Three distinct TWR quantities needed to describe an engine ablation.
+    /// The minimum nonzero command differs from the all-engine minimum whenever
+    /// engines have independent command channels.
+    /// </summary>
+    public readonly struct ThrustAuthoritySnapshot
+    {
+        public ThrustAuthoritySnapshot(
+            float minimumCommandableNonzeroTwr,
+            float allActiveEnginesMinimumThrottleTwr,
+            float allActiveEnginesMaximumTwr)
+        {
+            MinimumCommandableNonzeroTwr = minimumCommandableNonzeroTwr;
+            AllActiveEnginesMinimumThrottleTwr = allActiveEnginesMinimumThrottleTwr;
+            AllActiveEnginesMaximumTwr = allActiveEnginesMaximumTwr;
+        }
+
+        public float MinimumCommandableNonzeroTwr { get; }
+        public float AllActiveEnginesMinimumThrottleTwr { get; }
+        public float AllActiveEnginesMaximumTwr { get; }
+    }
+
+    /// <summary>
+    /// Computes thrust authority without implying a target throttle. Values use
+    /// the supplied instantaneous mass and local gravity magnitude.
+    /// </summary>
+    public static class ThrustAuthorityMetrics
+    {
+        public static ThrustAuthoritySnapshot Calculate(
+            float vehicleMassKg,
+            float gravityMps2,
+            int activeEngineCount,
+            float maximumThrustPerEngineN,
+            float minimumThrottle01,
+            bool independentEngineControl)
+        {
+            float weightN = Mathf.Max(1f, vehicleMassKg) * Mathf.Max(0.001f, Mathf.Abs(gravityMps2));
+            int engines = Mathf.Max(0, activeEngineCount);
+            float perEngineMaximumN = Mathf.Max(0f, maximumThrustPerEngineN);
+            float throttle = Mathf.Clamp01(minimumThrottle01);
+            float allEngineMaximumN = engines * perEngineMaximumN;
+            int smallestCommandedEngineCount = independentEngineControl ? Mathf.Min(1, engines) : engines;
+
+            return new ThrustAuthoritySnapshot(
+                smallestCommandedEngineCount * perEngineMaximumN * throttle / weightN,
+                allEngineMaximumN * throttle / weightN,
+                allEngineMaximumN / weightN);
+        }
     }
 }

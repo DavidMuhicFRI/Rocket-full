@@ -8,6 +8,9 @@
 .plastic/
 RunFolder/
 results/
+.codex-remote-attachments/
+Assets/RocketSim/Resources/Models/*.onnx
+Assets/RocketSim/Resources/Models/*.onnx.meta
 UIElementsSchema/
 Assets/_Recovery/
 Assets/ML-Agents/Timers/

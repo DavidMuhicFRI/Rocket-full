@@ -40,7 +40,10 @@ namespace RocketSim
         public float learningRate = 2e-4f;
         public float beta = 1e-2f;
         public float epsilon = 0.20f;
-        public float lambd = 0.95f;
+        // At the canonical 33.3 Hz decision rate, 0.98 carries advantage
+        // information farther through a landing burn without the variance of
+        // values extremely close to one.
+        public float lambd = 0.98f;
         public int numEpoch = 6;
         public LRSchedule lrSchedule = LRSchedule.Linear;
 
@@ -55,21 +58,27 @@ namespace RocketSim
         public int hiddenUnits = 512;
         public int numLayers = 3;
 
-        public float extrinsicGamma = 0.99f;
+        // Gamma is applied once per ML-Agents decision, not once per second.
+        // 0.995 retains about 19% of a terminal signal across ten simulated
+        // seconds at DecisionPeriod=3 and a 0.01 s physics timestep.
+        public float extrinsicGamma = 0.995f;
         public float extrinsicStrength = 1.0f;
-        // Kept on for PPO landing training to improve exploration. Curriculum
-        // experiments must hold these values constant across comparison groups.
-        public bool curiosityEnabled = true;
+        // Disabled for the curriculum baseline: novelty rewards depend on the
+        // state distribution and would interact with the curriculum treatment.
+        public bool curiosityEnabled = false;
         public float curiosityGamma = 0.99f;
         public float curiosityStrength = 0.01f;
         public float curiosityLR = 1e-4f;
 
         public int maxSteps = 10_000_000;
-        public int timeHorizon = 512;
+        // 1024 decisions cover 30.72 simulated seconds at the canonical control
+        // rate. Reaching this value bootstraps from the critic; it does not end
+        // the Unity episode.
+        public int timeHorizon = 1024;
         public int summaryFreq = 20_000;
         public bool threaded = true;
         public int checkpointInterval = 500_000;
-        public int keepCheckpoints = 5;
+        public int keepCheckpoints = 20;
         public int trainerSeed = 1;
 
         /// <summary>

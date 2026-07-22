@@ -72,6 +72,9 @@ namespace RocketSim
         float[] engineStateTimers;
         float[] engineRunTimes;
         float[] engineOffTimes;
+        int[] engineIgnitionCounts;
+        int _engineRestartsThisStep;
+        int _episodeEngineRestartCount;
 
         // Fins 
         float[] finAngles;
@@ -108,15 +111,53 @@ namespace RocketSim
         float _hoverTrackStableTime;
         float _hoverTrackSegmentStartDistance;
         float _hoverTrackSegmentElapsedTime;
-        LandingPlatformComponent _landingPlatform;
+        ChopstickCatchPlatform _chopstickPlatform;
         bool _landingPlatformInsideCapture;
         bool _landingPlatformStable;
+        bool _landingPlatformBecameStable;
         float _landingPlatformStableTime;
+        LandingLegAssembly _landingLegs;
+        LandingPadSurface _landingPadSurface;
+        int _legPendingFootMask;
+        int _legFootMask;
+        bool _legPendingFootOutsidePad;
+        bool _legFootOutsidePad;
+        bool _legPendingStructuralStrike;
+        bool _legStructuralStrike;
+        bool _legPendingFirstContact;
+        bool _legFirstContactThisStep;
+        bool _legTouchdownStarted;
+        bool _legStable;
+        bool _legBecameStable;
+        float _legStableTime;
+        float _legTouchdownTime;
+        float _legFirstContactSpeed;
+        float _legFirstContactVerticalSpeed;
+        float _legFirstContactHorizontalSpeed;
+        float _legFirstContactTiltDeg;
+        float _legFirstContactAngularRateDegS;
+        float _legMaximumContactImpulseNs;
+        float _legMaximumReboundHeightM;
+        int _defaultSolverIterations = 6;
+        int _defaultSolverVelocityIterations = 1;
+        CollisionDetectionMode _defaultCollisionDetectionMode = CollisionDetectionMode.Discrete;
         LandingCurriculumProfile _landingEpisodeProfile;
         bool _landingEpisodeProfileInitialized;
         bool _landingEpisodeUsesEasierReplay;
         float _landingEpisodeStartAltitude;
         float _landingEpisodeFlyawayAltitude;
+        float _episodeInitialPlanarDistance;
+        float _episodeInitialYawErrorDeg;
+        float _episodeInitialSpeed;
+        float _episodeInitialVerticalSpeed;
+        float _episodeInitialHorizontalSpeed;
+        float _episodeInitialTiltDeg;
+        float _episodeInitialAngularRateDegS;
+        float _episodeInitialFuelKg;
+        float _episodeInitialVehicleMassKg;
+        float _episodeMinimumCommandableNonzeroThrustToWeight;
+        float _episodeAllEnginesMinimumThrustToWeight;
+        float _episodeAllEnginesMaximumThrustToWeight;
 
         const float Rho0 = 1.225f; // ISA sea-level density (kg/m³)
         const float HScale = 8500f; // ISA scale height (m)
@@ -174,7 +215,7 @@ namespace RocketSim
         LandingCurriculumProfile ActiveLandingProfile =>
             _landingEpisodeProfileInitialized
                 ? _landingEpisodeProfile
-                : envConfig.GetLandingCurriculumProfile(envConfig.landingCurriculumProgress);
+                : envConfig.GetActiveLandingCurriculumProfile(envConfig.ActiveLandingCurriculumProgress);
 
         /// <summary>
         /// Freezes one task difficulty for the whole episode and independently
@@ -184,7 +225,7 @@ namespace RocketSim
         {
             _landingEpisodeProfileInitialized = false;
             _landingEpisodeUsesEasierReplay = false;
-            if (envConfig == null || envConfig.scenario != ScenarioType.Landing)
+            if (envConfig == null || !envConfig.scenario.IsLanding())
                 return;
 
             // Use a separate deterministic stream so enabling replay does not
@@ -196,11 +237,11 @@ namespace RocketSim
                 stream: 1));
             _landingEpisodeUsesEasierReplay =
                 envConfig.behaviorType == BehaviorType.Training &&
-                envConfig.landingCurriculumEnabled &&
-                envConfig.landingCurriculumProgress > 0f &&
-                curriculumRandom.Chance(envConfig.landingCurriculumEasierReplayProbability);
+                envConfig.ActiveLandingCurriculumEnabled &&
+                envConfig.ActiveLandingCurriculumProgress > 0f &&
+                curriculumRandom.Chance(envConfig.ActiveLandingReplayProbability);
             float difficulty = envConfig.LandingEpisodeDifficulty(_landingEpisodeUsesEasierReplay);
-            _landingEpisodeProfile = envConfig.GetLandingCurriculumProfile(difficulty);
+            _landingEpisodeProfile = envConfig.GetActiveLandingCurriculumProfile(difficulty);
             _landingEpisodeProfileInitialized = true;
         }
 

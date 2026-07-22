@@ -12,6 +12,11 @@ namespace RocketSim
 {
     public static partial class RocketRewardModel
     {
+        // One restart costs less than one second of accurate hover shaping and
+        // far less than a terminal failure. It therefore discourages needless
+        // cycling without preventing pulse control when minimum thrust is too high.
+        public const float HoverEngineRestartPenalty = 0.25f;
+
         /// <summary>
         /// Scores fixed-position hover by rewarding altitude hold, centering,
         /// uprightness, low speed, and calm attitude until a terminal condition occurs.
@@ -19,15 +24,20 @@ namespace RocketSim
         static RewardDecision Hover(RewardTerms t, RewardRuntimeContext ctx, ScenarioRewardFactors f)
         {
             float reward = HoverBaselineReward(t, f);
+            float restartEvent = HoverRestartEvent(ctx, f);
 
-            if (ctx.altitude < ctx.terminalAltitude ||
-                t.upDot < 0.45f ||
-                ctx.fuelKg <= 0f ||
-                t.planarDistance > 80f ||
-                ctx.altitude > 200f)
-                return RewardDecision.Terminate(reward, Terminal(-10f, f));
+            if (ctx.altitude < ctx.terminalAltitude)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverGroundImpact);
+            if (t.upDot < 0.45f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverUnsafeAttitude);
+            if (ctx.fuelKg <= 0f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverFuelDepleted);
+            if (t.planarDistance > 80f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverTooFarFromTarget);
+            if (ctx.altitude > 200f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverAboveAltitudeLimit);
 
-            return RewardDecision.Continue(reward);
+            return RewardDecision.Continue(reward, restartEvent);
         }
 
         /// <summary>
@@ -40,6 +50,7 @@ namespace RocketSim
             bool hoverPhase = t.planarDistance <= settleRadius;
 
             float reward = HoverBaselineReward(t, f);
+            float restartEvent = HoverRestartEvent(ctx, f);
             if (hoverPhase)
             {
                 float tightCenter01 = Exp01(t.planarDistance, Mathf.Max(2f, settleRadius * 0.5f));
@@ -77,15 +88,39 @@ namespace RocketSim
                     0.020f * f.speed * overspeedPenalty;
             }
 
-            if (ctx.altitude < ctx.terminalAltitude ||
-                t.upDot < 0.45f ||
-                ctx.fuelKg <= 0f ||
-                t.planarDistance > 90f ||
-                ctx.altitude > 200f)
-                return RewardDecision.Terminate(reward, Terminal(-10f, f));
+            if (ctx.altitude < ctx.terminalAltitude)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverGroundImpact);
+            if (t.upDot < 0.45f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverUnsafeAttitude);
+            if (ctx.fuelKg <= 0f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverFuelDepleted);
+            if (t.planarDistance > 90f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverTooFarFromTarget);
+            if (ctx.altitude > 200f)
+                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverAboveAltitudeLimit);
 
-            return RewardDecision.Continue(reward);
+            return RewardDecision.Continue(reward, restartEvent);
         }
+
+        /// <summary>
+        /// Applies an instantaneous cost only when an engine ignites after a
+        /// previous shutdown. The initial hover ignition is supplied by the
+        /// scenario and does not count as a restart.
+        /// </summary>
+        static float HoverRestartEvent(RewardRuntimeContext ctx, ScenarioRewardFactors f) =>
+            -HoverEngineRestartPenalty * f.engineRestart * Mathf.Max(0, ctx.engineRestartsThisStep);
+
+        /// <summary>Builds one categorized fixed/tracking-hover failure.</summary>
+        static RewardDecision HoverFailure(
+            float shapingReward,
+            float restartEvent,
+            ScenarioRewardFactors factors,
+            EpisodeTerminationReason reason) =>
+            RewardDecision.Terminate(
+                shapingReward,
+                Terminal(-10f, factors),
+                eventReward: restartEvent,
+                terminationReason: reason);
 
         /// <summary>
         /// Calculates the shared hover shaping terms used by both stationary

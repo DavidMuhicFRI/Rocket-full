@@ -97,13 +97,19 @@ namespace RocketSim
         /// <summary>
         /// Creates the active training or inference rocket areas from the current config.
         /// </summary>
-        public void SpawnAreas()
+        public bool SpawnAreas()
         {
             ClearSpawnedAreas();
+            if (!trainingAreaPrefab)
+            {
+                Debug.LogError("[TrainingAreaManager] Cannot start: training area prefab is missing.");
+                return false;
+            }
+
             ApplyCurrentScenarioHardwareDefaults();
             ConfigureTelemetrySlots();
             envConfig.ApplyHoverTrackCurriculum();
-            envConfig.ApplyLandingCurriculum();
+            envConfig.ApplyActiveLandingCurriculum();
 
             // Inference should not trigger ML-Agents' editor trainer handshake
             // on port 5004. This must be set before the Agent enables and the
@@ -131,6 +137,16 @@ namespace RocketSim
                     {
                         _assemblies.Add(asm);
                         asm.ApplyPartsConfig(partsConfig); // sync initial config
+
+                        // Only objective errors returned by the validator stop
+                        // startup. Conservative reachability findings remain
+                        // warnings and therefore do not block an experiment.
+                        if (idx == 0 && !SimulatorPreflightValidator.ValidateAndLog(asm.GetPhysicsConfig(), envConfig))
+                        {
+                            Debug.LogError("[TrainingAreaManager] Objective preflight errors prevented agent startup.");
+                            ClearSpawnedAreas();
+                            return false;
+                        }
                     }
 
                     if (agent)
@@ -157,27 +173,41 @@ namespace RocketSim
                 {
                     _assemblies.Add(asm);
                     asm.ApplyPartsConfig(partsConfig);
+                    if (!SimulatorPreflightValidator.ValidateAndLog(asm.GetPhysicsConfig(), envConfig))
+                    {
+                        Debug.LogError("[TrainingAreaManager] Objective preflight errors prevented inference startup.");
+                        ClearSpawnedAreas();
+                        return false;
+                    }
                 }
 
                 if (agent)
                 {
                     ModelAsset modelAsset = ModelRepository.LoadModel(envConfig.runId);
+                    if (!modelAsset)
+                    {
+                        Debug.LogError(ModelRepository.MissingModelMessage(envConfig.runId));
+                        ClearSpawnedAreas();
+                        return false;
+                    }
                     ConfigureAgent(agent, 0, modelAsset);
 
-                    if (modelAsset)
-                        Debug.Log($"[InferenceEngine] Loaded model: {ModelRepository.ResourcePath(envConfig.runId)}");
-                    else
-                        Debug.LogError(ModelRepository.MissingModelMessage(envConfig.runId));
+                    Debug.Log($"[InferenceEngine] Loaded model: {ModelRepository.ResourcePath(envConfig.runId)}");
                 }
                 go.SetActive(true);
             }
 
-            if (_assemblies.Count > 0 && _assemblies[0])
-                SimulatorPreflightValidator.ValidateAndLog(_assemblies[0].GetPhysicsConfig(), envConfig);
+            if (_assemblies.Count == 0 || _agents.Count == 0)
+            {
+                Debug.LogError("[TrainingAreaManager] Cannot start: the area prefab must contain both RocketAssembly and FalconAgent.");
+                ClearSpawnedAreas();
+                return false;
+            }
 
             var cam = FindAnyObjectByType<RocketCameraController>();
             if (cam) cam.OnAgentsReady(); // call RefreshLabel + snap to first rocket
             _activeRunSpawned = _agents.Count > 0;
+            return _activeRunSpawned;
         }
 
         /// <summary>
@@ -348,7 +378,7 @@ namespace RocketSim
         /// </summary>
         public void ApplyCurrentScenarioHardwareDefaults()
         {
-            partsConfig?.ApplyScenarioHardwareDefaults(envConfig?.scenario ?? ScenarioType.Landing);
+            partsConfig?.ApplyScenarioHardwareDefaults(envConfig?.scenario ?? ScenarioType.ChopstickLanding);
         }
 
         /// <summary>
@@ -368,7 +398,7 @@ namespace RocketSim
                 return;
             }
 
-            if (envConfig.scenario == ScenarioType.Landing)
+            if (envConfig.scenario.IsLanding())
             {
                 if (includeInCurriculumEstimate)
                     envConfig.RecordLandingCurriculumEpisode(successfulEpisode, instanceCount);
@@ -445,6 +475,7 @@ namespace RocketSim
                 partsConfig,
                 behaviorOverride ?? envConfig.behaviorType,
                 modelAsset);
+            RocketAgentSchema.ConfigureDecisionRequester(agent.GetComponent<DecisionRequester>());
         }
 
         /// <summary>
@@ -463,6 +494,7 @@ namespace RocketSim
                     partsConfig,
                     envConfig.behaviorType,
                     behavior ? behavior.Model : null);
+                RocketAgentSchema.ConfigureDecisionRequester(agent.GetComponent<DecisionRequester>());
             }
 
             agent.RefreshHardwareConfig();

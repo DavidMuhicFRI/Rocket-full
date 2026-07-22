@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/LandingPlatformComponent.cs
-// Purpose: Builds and updates the runtime chopstick target, including its visible
+// File: Assets/RocketSim/Scripts/Core/Landing/ChopstickCatchPlatform.cs
+// Purpose: Builds and updates the runtime chopstick-catch target, including its visible
 // non-colliding geometry and logical capture trigger.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
@@ -11,11 +11,11 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// Generated chopstick/catch target for the landing scenario.
+    /// Generated non-physical target for the chopstick-catch scenario.
     /// The object is built at runtime so every cloned training area gets a
     /// deterministic platform without hand-wiring a Unity prefab.
     /// </summary>
-    public sealed class LandingPlatformComponent : MonoBehaviour
+    public sealed class ChopstickCatchPlatform : MonoBehaviour
     {
         public const float CaptureHalfHeight = 3f;
 
@@ -125,7 +125,7 @@ namespace RocketSim
 
             var triggerGo = new GameObject("CatchEnvelope_Trigger");
             triggerGo.transform.SetParent(transform, false);
-            var marker = triggerGo.AddComponent<LandingPlatformPart>();
+            var marker = triggerGo.AddComponent<ChopstickPlatformPart>();
             marker.platform = this;
             marker.captureTrigger = true;
             _captureTrigger = triggerGo.AddComponent<BoxCollider>();
@@ -150,7 +150,7 @@ namespace RocketSim
             if (go.TryGetComponent(out MeshRenderer renderer))
                 renderer.sharedMaterial = material;
 
-            var marker = go.AddComponent<LandingPlatformPart>();
+            var marker = go.AddComponent<ChopstickPlatformPart>();
             marker.platform = this;
 
             return go.transform;
@@ -185,9 +185,9 @@ namespace RocketSim
         }
     }
 
-    public sealed class LandingPlatformPart : MonoBehaviour
+    public sealed class ChopstickPlatformPart : MonoBehaviour
     {
-        public LandingPlatformComponent platform;
+        public ChopstickCatchPlatform platform;
         public bool captureTrigger;
     }
 }

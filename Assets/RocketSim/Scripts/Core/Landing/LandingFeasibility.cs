@@ -175,13 +175,19 @@ namespace RocketSim
                 checkUsableDistance + 0.1f)
                 errors.Add("landing recoverable-speed solver exceeded its reserved distance");
 
-            if (env != null && env.scenario == ScenarioType.Landing)
+            if (env != null && env.scenario.IsLanding())
             {
-                float captureRootAltitude = env.landingCatchAltitude - cfg.finLocalY;
-                if (captureRootAltitude < 1f)
-                    errors.Add(
-                        $"catch altitude {env.landingCatchAltitude:F1} m places the engine plane " +
-                        $"at {captureRootAltitude:F1} m during capture");
+                float terminalAltitude = env.scenario == ScenarioType.ChopstickLanding
+                    ? env.landingCatchAltitude
+                    : 0f;
+                if (env.scenario == ScenarioType.ChopstickLanding)
+                {
+                    float captureRootAltitude = env.landingCatchAltitude - cfg.finLocalY;
+                    if (captureRootAltitude < 1f)
+                        errors.Add(
+                            $"catch altitude {env.landingCatchAltitude:F1} m places the engine plane " +
+                            $"at {captureRootAltitude:F1} m during capture");
+                }
 
                 float netAcceleration = LandingFeasibility.NetUpwardAcceleration(
                     cfg.maxThrust,
@@ -193,10 +199,10 @@ namespace RocketSim
 
                 float initialAvailableAltitude = Mathf.Max(
                     0f,
-                    SimEnvironmentConfig.LandingInitialSpawnAltitudeMin - env.landingCatchAltitude);
+                    SimEnvironmentConfig.LandingInitialSpawnAltitudeMin - terminalAltitude);
                 float fullAvailableAltitude = Mathf.Max(
                     0f,
-                    SimEnvironmentConfig.LandingFullSpawnAltitudeMin - env.landingCatchAltitude);
+                    SimEnvironmentConfig.LandingFullSpawnAltitudeMin - terminalAltitude);
                 float initialRecoverableSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
                     initialAvailableAltitude,
                     netAcceleration,
@@ -220,13 +226,18 @@ namespace RocketSim
                 float deltaV = cfg.specificImpulse > 0f && startMass > cfg.dryMass
                     ? cfg.specificImpulse * G0 * Mathf.Log(startMass / Mathf.Max(1f, cfg.dryMass + cfg.rcsPropellantMass))
                     : 0f;
+                string guidanceFrame = env.scenario == ScenarioType.LegLanding ? "feetFrame" : "catchFrame";
+                float guidanceFrameLocalY = env.scenario == ScenarioType.LegLanding
+                    ? LandingLegAssembly.ReferenceFootPlaneLocalY *
+                      cfg.radius / LandingLegAssembly.ReferenceBodyRadiusM
+                    : cfg.finLocalY;
                 Debug.Log(
                     $"[SimulatorPreflight] landing capability: startMass={startMass:F0} kg, " +
                     $"maxTWR={maxTwr:F2}, minThrottleTWR={minThrottleTwr:F2}, " +
                     $"netDeceleration={netAcceleration:F2} m/s^2, idealDeltaV={deltaV:F0} m/s, " +
                     $"recoverableDownwardSpeed=[initialMinAltitude:{initialRecoverableSpeed:F1}, " +
                     $"fullMinAltitude:{fullRecoverableSpeed:F1}] m/s, " +
-                    $"catchFrameY={cfg.finLocalY:F1} m, catchAltitude={env.landingCatchAltitude:F1} m, " +
+                    $"{guidanceFrame}Y={guidanceFrameLocalY:F1} m, targetAltitude={terminalAltitude:F1} m, " +
                     $"fixedDeltaTime={Time.fixedDeltaTime:F4} s.");
             }
 

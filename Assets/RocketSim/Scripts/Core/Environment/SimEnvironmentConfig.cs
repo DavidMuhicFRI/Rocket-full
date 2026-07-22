@@ -110,8 +110,10 @@ namespace RocketSim
         [Header("Environment Domain Randomization")] public WeatherType weather = WeatherType.Clear;
         [Range(0.5f, 1.5f)] public float airDensityMultiplier = 1f;
 
-        [Header("Scenario")] public ScenarioType scenario = ScenarioType.Landing;
+        [Header("Scenario")] public ScenarioType scenario = ScenarioType.ChopstickLanding;
         [HideInInspector] public InferenceScenarioConfig inferenceScenarios = new();
+        [HideInInspector] public InferencePurpose inferencePurpose = InferencePurpose.StandardEvaluation;
+        [HideInInspector] public EvaluationConfig evaluation = new();
         [Header("Reward Model")] public RewardModelConfig rewardModel = new();
         [Header("Faults")] public RocketFaultConfig faults = new();
 
@@ -122,6 +124,9 @@ namespace RocketSim
 
         public float AirDensityMultiplier => Mathf.Clamp(airDensityMultiplier, 0.5f, 1.5f);
         public float EffectiveGustAmp => Mathf.Max(0f, windGustAmplitude);
+        public bool IsStandardEvaluation =>
+            behaviorType == BehaviorType.Inference &&
+            inferencePurpose == InferencePurpose.StandardEvaluation;
 
         /// <summary>
         /// Applies a named environment preset by writing the same explicit wind
@@ -242,6 +247,65 @@ namespace RocketSim
         {
             inferenceScenarios ??= new InferenceScenarioConfig();
             return inferenceScenarios.ForScenario(scenarioType);
+        }
+
+        /// <summary>
+        /// Returns initialized evaluator settings for old saved environment
+        /// files that predate the standard/manual inference split.
+        /// </summary>
+        public EvaluationConfig EnsureEvaluationConfig()
+        {
+            evaluation ??= new EvaluationConfig();
+            evaluation.Clamp();
+            return evaluation;
+        }
+
+        /// <summary>
+        /// Applies common deterministic evaluator settings. Landing tasks are
+        /// additionally forced to their independent full-difficulty profiles;
+        /// hover retains its natural fuel/failure endpoint for trajectory analysis.
+        /// </summary>
+        public void PrepareStandardEvaluation()
+        {
+            if (!IsStandardEvaluation) return;
+
+            EvaluationConfig cfg = EnsureEvaluationConfig();
+            environmentSeed = cfg.seed;
+            ApplyWeatherPreset(WeatherType.Clear);
+            airDensityMultiplier = 1f;
+
+            faults ??= new RocketFaultConfig();
+            faults.evaluationFaultEnabled = false;
+            faults.allowDuringTraining = false;
+
+            if (!scenario.IsLanding())
+            {
+                // Hover evaluation intentionally keeps the natural fuel/failure
+                // endpoint, but its initial-state distribution must still be
+                // fixed rather than inherited from Manual Inference edits.
+                if (scenario == ScenarioType.Hover || scenario == ScenarioType.HoverTracking)
+                    GetInferenceSpawnProfile(scenario).ResetToDefaults(scenario);
+                return;
+            }
+
+            if (scenario == ScenarioType.ChopstickLanding)
+            {
+                landingCatchAltitude = DefaultLandingCatchAltitude;
+                landingTargetYawDeg = 0f;
+                landingPlatformEnabled = true;
+                landingPlatformHalfSizeFull = LandingDefaultPlatformHalfSizeFull;
+                landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
+                landingCurriculumMode = LandingCurriculumMode.FixedFullDifficulty;
+                landingCurriculumLinearProgress = 1f;
+                landingCurriculumPeakLinearProgress = 1f;
+            }
+            else
+            {
+                legLandingCurriculumMode = LandingCurriculumMode.FixedFullDifficulty;
+                legLandingCurriculumLinearProgress = 1f;
+                legLandingCurriculumPeakLinearProgress = 1f;
+            }
+            ApplyActiveLandingCurriculum();
         }
 
         /// <summary>

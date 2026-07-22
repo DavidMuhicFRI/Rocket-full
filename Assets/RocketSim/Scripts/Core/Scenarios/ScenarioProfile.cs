@@ -15,7 +15,9 @@ namespace RocketSim
     /// </summary>
     public static class ScenarioProfile
     {
-        public const float LandingStartFuelFraction = ScenarioCatalog.LandingStartFuelFraction;
+        public const float ChopstickLandingStartFuelFraction = ScenarioCatalog.ChopstickLandingStartFuelFraction;
+        public const float LegLandingStartFuelFraction = ScenarioCatalog.LegLandingStartFuelFraction;
+        public const float LandingStartFuelFraction = ChopstickLandingStartFuelFraction;
         public const float HoverStartFuelFraction = ScenarioCatalog.HoverStartFuelFraction;
         public const float HoverTrackingStartFuelFraction = ScenarioCatalog.HoverTrackingStartFuelFraction;
         public const float TakeoffStartFuelFraction = ScenarioCatalog.TakeoffStartFuelFraction;
@@ -58,7 +60,7 @@ namespace RocketSim
         public static float GoalAltitude(ScenarioType scenario, SimEnvironmentConfig envConfig)
         {
             ScenarioDefinition definition = ScenarioCatalog.Get(scenario);
-            return definition.Type == ScenarioType.Landing
+            return definition.Type == ScenarioType.ChopstickLanding
                 ? LandingCatchAltitude(envConfig)
                 : definition.DefaultGoalAltitude;
         }
@@ -78,6 +80,10 @@ namespace RocketSim
         /// </summary>
         public static Vector3 GoalPosition(ScenarioType scenario, Transform targetPad, SimEnvironmentConfig envConfig)
         {
+            if (scenario == ScenarioType.LegLanding &&
+                LandingPadSurface.TryGetLocalTopCenter(targetPad, out Vector3 padTopCenter))
+                return padTopCenter;
+
             Vector3 target = targetPad ? targetPad.localPosition : Vector3.zero;
             return new Vector3(target.x, GoalAltitude(scenario, envConfig), target.z);
         }
@@ -87,7 +93,7 @@ namespace RocketSim
         /// </summary>
         public static float TerminalAltitude(ScenarioType scenario, SimEnvironmentConfig envConfig)
         {
-            return ScenarioCatalog.Get(scenario).Type == ScenarioType.Landing
+            return ScenarioCatalog.Get(scenario).Type == ScenarioType.ChopstickLanding
                 ? LandingCatchAltitude(envConfig)
                 : ScenarioCatalog.DefaultTerminalAltitude;
         }

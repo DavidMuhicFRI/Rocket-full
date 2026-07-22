@@ -10,10 +10,45 @@ using UnityEngine;
 
 namespace RocketSim
 {
+    /// <summary>
+    /// Separates reproducible thesis evaluation from the editable visual
+    /// sandbox. StandardEvaluation deliberately ignores manual spawn ranges.
+    /// </summary>
+    public enum InferencePurpose
+    {
+        StandardEvaluation,
+        ManualInference
+    }
+
+    /// <summary>
+    /// Settings owned by the evaluator rather than by a trained run. Keeping
+    /// the seed and episode count here lets the panel reuse one common test
+    /// suite while it loads different trained models.
+    /// </summary>
+    [Serializable]
+    public class EvaluationConfig
+    {
+        public const int DefaultEpisodeCount = 200;
+        public const int DefaultEvaluationSeed = 20257;
+
+        [Min(1)] public int episodeCount = DefaultEpisodeCount;
+        [Min(0)] public int seed = DefaultEvaluationSeed;
+
+        /// <summary>Clamps evaluator inputs before a session starts.</summary>
+        public void Clamp()
+        {
+            episodeCount = Mathf.Clamp(episodeCount, 1, 10_000);
+            seed = Mathf.Max(0, seed);
+        }
+    }
+
     [Serializable]
     public class InferenceScenarioConfig
     {
+        // The old `landing` field is kept for serialized-data compatibility;
+        // its behavior was always the chopstick-catch task.
         public InferenceSpawnProfile landing = new();
+        public InferenceSpawnProfile legLanding = new();
         public InferenceSpawnProfile hover = new();
         public InferenceSpawnProfile hoverTracking = new();
         public InferenceSpawnProfile takeoff = new();
@@ -26,6 +61,7 @@ namespace RocketSim
         public InferenceSpawnProfile ForScenario(ScenarioType scenario)
         {
             landing ??= new InferenceSpawnProfile();
+            legLanding ??= new InferenceSpawnProfile();
             hover ??= new InferenceSpawnProfile();
             hoverTracking ??= new InferenceSpawnProfile();
             takeoff ??= new InferenceSpawnProfile();
@@ -34,7 +70,8 @@ namespace RocketSim
             ScenarioType resolvedScenario = ScenarioCatalog.Get(scenario).Type;
             InferenceSpawnProfile profile = resolvedScenario switch
             {
-                ScenarioType.Landing => landing,
+                ScenarioType.ChopstickLanding => landing,
+                ScenarioType.LegLanding => legLanding,
                 ScenarioType.Hover => hover,
                 ScenarioType.HoverTracking => hoverTracking,
                 ScenarioType.Takeoff => takeoff,
@@ -72,6 +109,17 @@ namespace RocketSim
         {
             if (initialized) return;
 
+            ApplyDefaults(ScenarioCatalog.Get(scenario).InferenceSpawn);
+            initialized = true;
+        }
+
+        /// <summary>
+        /// Restores the catalog's immutable spawn distribution. Standard
+        /// evaluation calls this so prior manual-inference edits cannot leak
+        /// into a controlled benchmark.
+        /// </summary>
+        public void ResetToDefaults(ScenarioType scenario)
+        {
             ApplyDefaults(ScenarioCatalog.Get(scenario).InferenceSpawn);
             initialized = true;
         }

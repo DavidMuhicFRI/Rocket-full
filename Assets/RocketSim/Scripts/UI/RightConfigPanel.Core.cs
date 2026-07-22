@@ -248,6 +248,7 @@ namespace RocketSim
             }
 
             launcher.resumeIfExists = canResumeLoadedRun;
+            launcher.initializeFromRunId = canResumeLoadedRun ? string.Empty : _initializeFromRunId;
             _runActive = true;
             SetConfigurationLocked(true);
             ShowNotification(string.IsNullOrEmpty(warning) ? "Settings are locked until the run stops." : warning, false);
@@ -291,6 +292,17 @@ namespace RocketSim
                 SetConfigurationLocked(false);
                 ShowNotification("Training could not start. Check the Unity console and trainer environment.", true);
             }
+            else if (state == TrainingLauncher.TrainingState.Completed)
+            {
+                _runActive = false;
+                SetConfigurationLocked(false);
+                string summary = launcher != null ? launcher.LastEvaluationSummaryPath : null;
+                ShowNotification(
+                    string.IsNullOrWhiteSpace(summary)
+                        ? "Evaluation completed."
+                        : $"Evaluation completed. Summary: {summary}",
+                    false);
+            }
         }
 
         /// <summary>
@@ -299,7 +311,11 @@ namespace RocketSim
         void RefreshStartButton()
         {
             if (_startBtn == null) return;
-            _startBtn.text = envConfig.behaviorType == BehaviorType.Training ? "Start Training" : "Start Inference";
+            _startBtn.text = envConfig.behaviorType == BehaviorType.Training
+                ? "Start Training"
+                : envConfig.inferencePurpose == InferencePurpose.StandardEvaluation
+                    ? "Start Evaluation"
+                    : "Start Manual Inference";
 
             bool canStart = launcher != null && trainingAreaManager != null && HasValidRunId(envConfig.runId);
 
@@ -330,13 +346,43 @@ namespace RocketSim
                 error = "ML buffer size must be at least as large as batch size.";
                 return false;
             }
+            if (mlConfig.checkpointInterval <= 0 || mlConfig.keepCheckpoints <= 0)
+            {
+                error = "Checkpoint interval and retained checkpoint count must be positive.";
+                return false;
+            }
+            if (envConfig.behaviorType == BehaviorType.Training &&
+                !TrainingRunRepository.TryValidateRunDestination(
+                    envConfig.runId,
+                    _resumeRun,
+                    out string destinationError))
+            {
+                error = destinationError;
+                return false;
+            }
+            if (envConfig.behaviorType == BehaviorType.Training &&
+                !_resumeRun &&
+                !TrainingRunRepository.TryValidateInitializationSource(
+                    _initializeFromRunId,
+                    partsConfig,
+                    mlConfig,
+                    out string initializationError))
+            {
+                error = initializationError;
+                return false;
+            }
             if (envConfig.behaviorType == BehaviorType.Inference && !CanStartLoadedInferenceRun())
             {
                 error = "Select a saved run that has both configs and an ONNX model.";
                 return false;
             }
+            if (envConfig.IsStandardEvaluation && !envConfig.scenario.SupportsStandardEvaluation())
+            {
+                error = "Standard evaluation supports fixed hover and the two landing tasks.";
+                return false;
+            }
 
-            if (envConfig.scenario == ScenarioType.Landing)
+            if (envConfig.scenario == ScenarioType.ChopstickLanding)
             {
                 float catchFrameY = partsConfig.bodyHeight - 1.2f;
                 float enginePlaneAltitudeAtCapture = envConfig.landingCatchAltitude - catchFrameY;
@@ -351,13 +397,25 @@ namespace RocketSim
 
             float mass = Mathf.Max(1f, partsConfig.baseDryMass + partsConfig.startFuelMass);
             float thrustToWeight = partsConfig.GetActiveEngineCount() * partsConfig.maxThrustPerEngine / (mass * 9.80665f);
-            if (envConfig.scenario == ScenarioType.Landing && thrustToWeight <= 1f)
+            if (envConfig.scenario.IsLanding() && thrustToWeight <= 1f)
             {
                 error = $"Landing-burn thrust-to-weight ratio is only {thrustToWeight:F2}; the vehicle cannot decelerate upward.";
                 return false;
             }
             if (envConfig.scenario == ScenarioType.Takeoff && thrustToWeight <= 1f)
                 warning = $"Warning: takeoff thrust-to-weight ratio is only {thrustToWeight:F2}.";
+
+            int generatedCheckpoints = Mathf.CeilToInt(
+                mlConfig.maxSteps / (float)Mathf.Max(1, mlConfig.checkpointInterval));
+            if (mlConfig.keepCheckpoints < generatedCheckpoints)
+            {
+                string checkpointWarning =
+                    $"Warning: this run can create {generatedCheckpoints} checkpoints, but only " +
+                    $"{mlConfig.keepCheckpoints} will be retained; early learning-curve models will be deleted.";
+                warning = string.IsNullOrEmpty(warning)
+                    ? checkpointWarning
+                    : $"{warning}\n{checkpointWarning}";
+            }
             return true;
         }
 

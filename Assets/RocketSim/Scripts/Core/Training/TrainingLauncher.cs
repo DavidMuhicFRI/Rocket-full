@@ -24,25 +24,48 @@ namespace RocketSim
         public string partsConfigPath = "PartsConfig.json";
         public string envConfigPath = "EnvConfig.json";
         public bool resumeIfExists = false;
+        [Tooltip("Optional prior run used to initialize a new trainer. This is different from resuming the same run.")]
+        public string initializeFromRunId = "";
 
-        public enum TrainingState { Idle, Launching, Connected, Failed }
+        public enum TrainingState { Idle, Launching, Connected, Completed, Failed }
         public TrainingState State { get; private set; } = TrainingState.Idle;
         public event Action<TrainingState> OnStateChanged;
+        public string LastEvaluationSummaryPath { get; private set; }
 
         Process _trainerProcess;
+        EvaluationSession _evaluationSession;
+        TrainingAreaManager _evaluationManager;
+        bool _evaluationCompleting;
 
         /// <summary>
         /// Starts the requested training or inference workflow.
         /// </summary>
         public void Launch(TrainingAreaManager manager)
         {
+            if (State == TrainingState.Launching || State == TrainingState.Connected) return;
+
             if (manager.envConfig.behaviorType == BehaviorType.Training)
             {
+                if (!TrainingRunRepository.TryValidateRunDestination(
+                        manager.envConfig.runId,
+                        resumeIfExists,
+                        out string destinationError))
+                {
+                    UnityEngine.Debug.LogError($"[TrainingLauncher] {destinationError}");
+                    SetState(TrainingState.Failed);
+                    return;
+                }
+
                 // We are training
-                if (State == TrainingState.Launching || State == TrainingState.Connected) return;
                 CommunicatorFactory.Enabled = true;
 
                 runId = manager.envConfig.runId;
+                const string torchDevice = "cuda";
+                TrainingEnvironmentProvenance trainingEnvironment =
+                    TrainingProcessLauncher.ProbeEnvironment(condaEnvName);
+                if (!trainingEnvironment.probeSucceeded)
+                    UnityEngine.Debug.LogWarning(
+                        $"[TrainingLauncher] Trainer provenance probe failed: {trainingEnvironment.probeError}");
                 TelemetryLogger.Instance?.Initialize(manager.telemetryConfig, runId);
                 string runRoot = TrainingRunRepository.SaveTrainingConfigs(
                     runId,
@@ -51,7 +74,12 @@ namespace RocketSim
                     manager.partsConfig,
                     mlConfigPath,
                     envConfigPath,
-                    partsConfigPath);
+                    partsConfigPath,
+                    manager.telemetryConfig,
+                    resumeIfExists,
+                    initializeFromRunId,
+                    trainingEnvironment,
+                    torchDevice);
             
                 try {
                     _trainerProcess = TrainingProcessLauncher.LaunchCondaMlAgents(new TrainingLaunchRequest
@@ -60,7 +88,8 @@ namespace RocketSim
                         runId = runId,
                         mlConfigFilePath = System.IO.Path.Combine(runRoot, mlConfigPath),
                         resumeIfExists = resumeIfExists,
-                        torchDevice = "cuda",
+                        initializeFromRunId = initializeFromRunId,
+                        torchDevice = torchDevice,
                         trainerSeed = manager.mlConfig.trainerSeed
                     });
                     SetState(TrainingState.Launching);
@@ -76,8 +105,42 @@ namespace RocketSim
             {
                 CommunicatorFactory.Enabled = false;
                 runId = manager.envConfig.runId;
+                manager.envConfig.PrepareStandardEvaluation();
+                if (manager.envConfig.IsStandardEvaluation && TelemetryLogger.Instance == null)
+                {
+                    // The evaluator advances from completed telemetry outcomes;
+                    // starting without its logger would otherwise run forever.
+                    UnityEngine.Debug.LogError(
+                        "[Evaluator] Cannot start standard evaluation because no TelemetryLogger exists in the scene.");
+                    SetState(TrainingState.Failed);
+                    return;
+                }
                 TelemetryLogger.Instance?.InitializeEvaluation(manager.telemetryConfig, runId);
-                manager.SpawnAreas();
+
+                if (manager.envConfig.IsStandardEvaluation)
+                {
+                    EvaluationConfig evaluation = manager.envConfig.EnsureEvaluationConfig();
+                    _evaluationManager = manager;
+                    _evaluationSession = new EvaluationSession(
+                        runId,
+                        evaluation.seed,
+                        evaluation.episodeCount,
+                        TelemetryLogger.Instance?.EpisodeFilePath,
+                        manager.envConfig.scenario);
+                    LastEvaluationSummaryPath = null;
+                    if (TelemetryLogger.Instance != null)
+                        TelemetryLogger.Instance.EpisodeCompleted += OnEvaluationEpisodeCompleted;
+                }
+
+                if (!manager.SpawnAreas())
+                {
+                    CancelEvaluationSession(writePartialSummary: false);
+                    TelemetryLogger.Instance?.DisableLogging();
+                    SetState(TrainingState.Failed);
+                    return;
+                }
+
+                SetState(TrainingState.Connected);
             }
         }
 
@@ -103,7 +166,13 @@ namespace RocketSim
                 if (TrainingProcessLauncher.TcpPortIsOpen(port))
                 {
                     UnityEngine.Debug.Log("[TrainingLauncher] Python is ready. Spawning Agents...");
-                    manager.SpawnAreas();
+                    if (!manager.SpawnAreas())
+                    {
+                        StopTraining();
+                        TelemetryLogger.Instance?.DisableLogging();
+                        SetState(TrainingState.Failed);
+                        yield break;
+                    }
                     SetState(TrainingState.Connected);
                     yield break;
                 }
@@ -121,6 +190,8 @@ namespace RocketSim
         /// </summary>
         public void StopTraining()
         {
+            CancelEvaluationSession(writePartialSummary: true);
+
             if (_trainerProcess != null)
             {
                 if (!_trainerProcess.HasExited)
@@ -152,6 +223,84 @@ namespace RocketSim
             }
             StopAllCoroutines();
             SetState(TrainingState.Idle);
+        }
+
+        /// <summary>
+        /// Consumes one evaluation outcome, logs progress, and schedules a safe
+        /// end-of-frame teardown after the configured suite reaches its target.
+        /// </summary>
+        void OnEvaluationEpisodeCompleted(TelemetryEpisodeOutcome outcome)
+        {
+            if (_evaluationSession == null || _evaluationCompleting) return;
+
+            bool complete = _evaluationSession.Record(outcome);
+            string successProgress = _evaluationSession.SuccessMetricDefined
+                ? _evaluationSession.SuccessfulEpisodes.ToString()
+                : "n/a (trajectory endpoint task)";
+            UnityEngine.Debug.Log(
+                $"[Evaluator] {_evaluationSession.CompletedEpisodes}/{_evaluationSession.TargetEpisodes} episodes, " +
+                $"successes={successProgress}.");
+            if (!complete) return;
+
+            _evaluationCompleting = true;
+            try
+            {
+                LastEvaluationSummaryPath = _evaluationSession.Finish(aborted: false);
+            }
+            catch (Exception exception)
+            {
+                UnityEngine.Debug.LogError($"[Evaluator] Could not write final summary: {exception.Message}");
+                LastEvaluationSummaryPath = null;
+            }
+            if (TelemetryLogger.Instance != null)
+            {
+                TelemetryLogger.Instance.EpisodeCompleted -= OnEvaluationEpisodeCompleted;
+                // The target episode has already been written. Disabling now
+                // prevents the immediate ML-Agents reset from opening episode N+1.
+                TelemetryLogger.Instance.DisableLogging();
+            }
+            StartCoroutine(FinishEvaluationAtEndOfFrame());
+        }
+
+        /// <summary>
+        /// Removes the evaluated agent outside its EndEpisode call stack, then
+        /// reports completion so the panel can unlock itself automatically.
+        /// </summary>
+        IEnumerator FinishEvaluationAtEndOfFrame()
+        {
+            yield return null;
+            _evaluationManager?.StopActiveRunAndShowPreview();
+            _evaluationManager = null;
+            _evaluationSession = null;
+            _evaluationCompleting = false;
+            UnityEngine.Debug.Log($"[Evaluator] Complete. Summary: {LastEvaluationSummaryPath}");
+            SetState(TrainingState.Completed);
+        }
+
+        /// <summary>
+        /// Unsubscribes evaluator callbacks and optionally preserves an aborted
+        /// partial summary when the user stops before the target episode count.
+        /// </summary>
+        void CancelEvaluationSession(bool writePartialSummary)
+        {
+            if (TelemetryLogger.Instance != null)
+                TelemetryLogger.Instance.EpisodeCompleted -= OnEvaluationEpisodeCompleted;
+
+            if (_evaluationSession != null && writePartialSummary)
+            {
+                try
+                {
+                    LastEvaluationSummaryPath = _evaluationSession.Finish(aborted: true);
+                }
+                catch (Exception exception)
+                {
+                    UnityEngine.Debug.LogError($"[Evaluator] Could not write partial summary: {exception.Message}");
+                }
+            }
+
+            _evaluationSession = null;
+            _evaluationManager = null;
+            _evaluationCompleting = false;
         }
 
         /// <summary>

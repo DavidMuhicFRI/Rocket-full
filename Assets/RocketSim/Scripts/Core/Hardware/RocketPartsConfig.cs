@@ -225,7 +225,8 @@ namespace RocketSim
 
             switch (scenario)
             {
-                case ScenarioType.Landing:
+                case ScenarioType.ChopstickLanding:
+                case ScenarioType.LegLanding:
                     octawebBurnGroup = OctawebBurnGroup.CenterPlusTwo;
                     break;
                 case ScenarioType.Takeoff:

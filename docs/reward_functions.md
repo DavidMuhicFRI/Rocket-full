@@ -7,12 +7,15 @@ The detailed Unity-visible reward narrative is currently stored at:
 The executable source of truth is:
 
 - `../Assets/RocketSim/Scripts/Core/Rewards/RocketRewardModel.cs`
-- `../Assets/RocketSim/Scripts/Core/Rewards/LandingRewardModel.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/ChopstickLandingRewardModel.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/LegLandingRewardModel.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/HoverRewardModel.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/TakeoffRewardModel.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/BellyFlopRewardModel.cs`
 
-Known documentation drift is tracked in [`codebase-audit.md`](codebase-audit.md). Before using formulas in the thesis, generate the narrative/table from named reward components or cover every documented formula and terminal threshold with tests.
+The guide distinguishes the logical chopstick catch from physical leg landing and
+documents the current baseline coefficients. Treat executable code and regression
+tests as authoritative if a reward is changed during experiment development.
 
 The landing curriculum design and comparison modes are documented in
 [`landing_curriculum.md`](landing_curriculum.md).

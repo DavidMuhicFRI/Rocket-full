@@ -102,6 +102,37 @@ namespace RocketSim
             resumeRow.Add(resumeToggle);
             c.Add(resumeRow);
 
+            DropdownField initializeFromField = null;
+            if (envConfig.behaviorType == BehaviorType.Training)
+            {
+                var initializationChoices = new List<string> { "None" };
+                foreach (string existingRun in existingRuns)
+                    if (!RunIdsEqual(existingRun, envConfig.runId))
+                        initializationChoices.Add(existingRun);
+
+                int selectedInitialization = 0;
+                for (int i = 1; i < initializationChoices.Count; i++)
+                    if (RunIdsEqual(initializationChoices[i], _initializeFromRunId))
+                        selectedInitialization = i;
+
+                initializeFromField = new DropdownField(
+                    "Initialize From",
+                    initializationChoices,
+                    selectedInitialization);
+                initializeFromField.tooltip =
+                    "Starts a new run from a prior checkpoint. Use this for Hover -> Landing transfer; Resume continues the same run instead. Keep the hardware preset matched for the thesis comparison.";
+                initializeFromField.SetEnabled(!_resumeRun);
+                initializeFromField.RegisterValueChangedCallback(evt =>
+                {
+                    _initializeFromRunId = evt.newValue == "None" ? string.Empty : evt.newValue;
+                    Dirty();
+                    RefreshStartButton();
+                });
+                c.Add(initializeFromField);
+                c.Add(BuildGroupDetail(
+                    "Transfer requires the canonical policy dimensions and matching PPO network settings. The launcher checks technical compatibility; the experiment protocol also requires the same hardware preset."));
+            }
+
             var banner = new VisualElement();
             banner.name = "run-loaded-banner";
             banner.AddToClassList("rs-info-banner");
@@ -151,6 +182,7 @@ namespace RocketSim
                 _loadedConfigRunId = null;
                 _showLoadedRunBanner = false;
                 resumeToggle.SetValueWithoutNotify(false);
+                initializeFromField?.SetEnabled(true);
                 banner.style.display = DisplayStyle.None;
             }
 
@@ -185,7 +217,9 @@ namespace RocketSim
                 if (string.IsNullOrWhiteSpace(id))
                     SetValidation("Run ID cannot be empty", new Color(1f, 0.45f, 0.25f));
                 else if (RunExists(id))
-                    SetValidation("Existing run - resume available", new Color(0.35f, 0.85f, 0.45f));
+                    SetValidation(
+                        _resumeRun ? "Existing run - Resume enabled" : "Existing run - enable Resume to continue",
+                        _resumeRun ? new Color(0.35f, 0.85f, 0.45f) : new Color(1f, 0.65f, 0.25f));
                 else if (FindExistingRun(id) != null)
                     SetValidation("Existing run is missing configs", new Color(1f, 0.65f, 0.25f));
                 else
@@ -249,8 +283,12 @@ namespace RocketSim
             resumeToggle.RegisterValueChangedCallback(evt =>
             {
                 _resumeRun = evt.newValue;
+                UpdateValidation(envConfig.runId);
+                initializeFromField?.SetEnabled(!evt.newValue);
                 if (evt.newValue)
                 {
+                    _initializeFromRunId = string.Empty;
+                    initializeFromField?.SetValueWithoutNotify("None");
                     try
                     {
                         if (!TrainingRunRepository.HasCompleteRunConfig(envConfig.runId))
@@ -335,7 +373,7 @@ namespace RocketSim
             if (root == null) return;
 
             root.Clear();
-            if (envConfig.scenario != ScenarioType.Landing &&
+            if (!envConfig.scenario.IsLanding() &&
                 envConfig.scenario != ScenarioType.HoverTracking)
             {
                 root.style.display = DisplayStyle.None;
@@ -346,13 +384,13 @@ namespace RocketSim
             ApplyActiveCurriculumFromUI();
 
             root.Add(UIHelper.SectionLabel("Curriculum"));
-            if (envConfig.scenario == ScenarioType.Landing)
+            if (envConfig.scenario.IsLanding())
             {
-                var modeField = new EnumField("Landing Progression", envConfig.landingCurriculumMode);
+                var modeField = new EnumField("Landing Progression", envConfig.ActiveLandingCurriculumMode);
                 modeField.RegisterValueChangedCallback(evt =>
                 {
-                    envConfig.landingCurriculumMode = (LandingCurriculumMode)evt.newValue;
-                    envConfig.ResetLandingCurriculum();
+                    envConfig.ActiveLandingCurriculumMode = (LandingCurriculumMode)evt.newValue;
+                    envConfig.ResetActiveLandingCurriculum();
                     Dirty();
                     BuildCurriculumSection(root);
                 });
@@ -376,8 +414,8 @@ namespace RocketSim
                     Dirty();
                 }, "Scales how quickly difficulty rises after the recent success rate is high enough."));
 
-            if (envConfig.scenario == ScenarioType.Landing &&
-                envConfig.landingCurriculumMode == LandingCurriculumMode.Adaptive)
+            if (envConfig.scenario.IsLanding() &&
+                envConfig.ActiveLandingCurriculumMode == LandingCurriculumMode.Adaptive)
             {
                 root.Add(UIHelper.ReadOnly(
                     "Adaptive Rule",
@@ -402,8 +440,8 @@ namespace RocketSim
             VisualElement root = _panel.Q<VisualElement>("curriculum-section");
             if (root == null) return;
 
-            if (envConfig.scenario == ScenarioType.Landing)
-                envConfig.ApplyLandingCurriculum();
+            if (envConfig.scenario.IsLanding())
+                envConfig.ApplyActiveLandingCurriculum();
             else if (envConfig.scenario == ScenarioType.HoverTracking)
                 envConfig.ApplyHoverTrackCurriculum();
         }
@@ -419,8 +457,8 @@ namespace RocketSim
                 return;
             }
 
-            if (envConfig.scenario == ScenarioType.Landing)
-                envConfig.ApplyLandingCurriculum();
+            if (envConfig.scenario.IsLanding())
+                envConfig.ApplyActiveLandingCurriculum();
         }
 
         /// <summary>
@@ -456,7 +494,10 @@ namespace RocketSim
         /// </summary>
         void BuildInferenceModeContent(VisualElement c)
         {
-            c.Add(UIHelper.SectionLabel("Saved Runs"));
+            c.Add(UIHelper.SectionLabel(
+                envConfig.inferencePurpose == InferencePurpose.StandardEvaluation
+                    ? "Models To Evaluate"
+                    : "Saved Runs"));
 
             var gridContainer = new VisualElement();
             gridContainer.name = "inference-grid-container";
@@ -582,7 +623,15 @@ namespace RocketSim
 
             if (preserveBehaviorType)
             {
+                // Evaluation-suite settings belong to the evaluator, not to a
+                // trained model. Preserve them while model-specific training,
+                // vehicle, reward, and environment configs are restored.
+                InferencePurpose preservedPurpose = envConfig.inferencePurpose;
+                EvaluationConfig preservedEvaluation = JsonUtility.FromJson<EvaluationConfig>(
+                    JsonUtility.ToJson(envConfig.EnsureEvaluationConfig()));
                 loaded.envConfig.behaviorType = envConfig.behaviorType;
+                loaded.envConfig.inferencePurpose = preservedPurpose;
+                loaded.envConfig.evaluation = preservedEvaluation;
             }
             loaded.envConfig.runId = runId;
 

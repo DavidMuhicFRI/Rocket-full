@@ -54,6 +54,31 @@ namespace RocketSim
                     ApplySandboxEngineTiming(cfg);
                     cfg.engineSpacing = 0.9f;
                     break;
+
+                // Thesis ablation presets deliberately keep Falcon 9 engine
+                // timing and throttle limits. Each non-baseline preset changes
+                // exactly one hardware family relative to AblationFull.
+                case RocketHardwarePreset.AblationFull:
+                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
+                    break;
+
+                case RocketHardwarePreset.AblationNoFins:
+                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
+                    cfg.finsEnabled = false;
+                    break;
+
+                case RocketHardwarePreset.AblationNoRcs:
+                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
+                    cfg.rcsEnabled = false;
+                    break;
+
+                case RocketHardwarePreset.AblationTripleEngine:
+                    ConfigureAblationEngineSet(cfg, EngineLayout.Triple, OctawebBurnGroup.CenterPlusTwo);
+                    break;
+
+                case RocketHardwarePreset.AblationSingleEngine:
+                    ConfigureAblationEngineSet(cfg, EngineLayout.Single, OctawebBurnGroup.CenterOnly);
+                    break;
             }
 
             cfg.ClampPhysicalRanges();
@@ -70,7 +95,7 @@ namespace RocketSim
             cfg.baseDryMass = Falcon9Reference.BoosterDryMassKg;
             cfg.baseFuelMass = RocketPartsConfig.ReferenceFuelCapacityKg;
             cfg.useScenarioRecommendedFuel = true;
-            cfg.startFuelFraction = ScenarioProfile.StartFuelFraction(ScenarioType.Landing);
+            cfg.startFuelFraction = ScenarioProfile.StartFuelFraction(ScenarioType.ChopstickLanding);
             cfg.startFuelMass = cfg.startFuelFraction * RocketPartsConfig.ReferenceFuelCapacityKg;
 
             cfg.engineLayout = EngineLayout.Octaweb;
@@ -115,6 +140,20 @@ namespace RocketSim
             cfg.engineShutdownTransient = RocketPartsConfig.SandboxEngineShutdownTransientS;
             cfg.engineMinimumRunTime = RocketPartsConfig.SandboxEngineMinimumRunTimeS;
             cfg.engineRestartCooldown = RocketPartsConfig.SandboxEngineRestartCooldownS;
+        }
+
+        /// <summary>
+        /// Selects the installed/available engine set for an ablation condition
+        /// while retaining the common Falcon 9 actuator parameters.
+        /// </summary>
+        static void ConfigureAblationEngineSet(
+            RocketPartsConfig cfg,
+            EngineLayout layout,
+            OctawebBurnGroup burnGroup)
+        {
+            cfg.engineLayout = layout;
+            cfg.independentEngines = true;
+            cfg.octawebBurnGroup = burnGroup;
         }
     }
 }

@@ -1,13 +1,16 @@
-# RocketSim architecture documentation
+# RocketSim documentation index
 
-This Unity-visible documentation asset now points to the maintained project documentation:
+The maintained project documentation lives under the repository-level `docs/` directory:
 
-- `../../docs/README.md` — documentation index
-- `../../docs/codebase-map.md` — current ownership and dependency map
-- `../../docs/runtime-flows.md` — runtime sequence and interaction flows
-- `../../docs/codebase-audit.md` — prioritized bugs and refactoring backlog
-- `../../docs/experiment-protocol.md` — reproducible thesis experiment design
+- `../../docs/ablation_study_protocol.md` - experimental design, presets, controls, metrics, and statistical reporting
+- `../../docs/evaluation_protocol.md` - deterministic standard-evaluation contract and output artifacts
+- `../../TrainingConfig.yaml` - synchronized manual-CLI PPO reference; UI launches use the generated run-local copy
+- `../../docs/landing_curriculum.md` - independent continuous curricula for chopstick and physical leg landing
+- `../../docs/reward_functions.md` - index of reward implementations and the detailed Unity-visible reward guide
+- `../../docs/rocket_sim_architecture_overview.puml` - compact ownership/dependency diagram source
+- `../../docs/rocket_sim_architecture_visual.puml` - detailed file-level architecture diagram source
 
-- `../../docs/right-config-panel-changes.md` — current panel behavior and implementation notes
-
-The previous content described an older refactor and referenced files that no longer exist. Update the files under `docs/` whenever runtime responsibilities, schemas, experiment metadata, or flows change.
+The executable reward narrative is `Scripts/Core/Rewards/reward_functions.md`.
+Generated PNG/SVG architecture diagrams sit beside their PlantUML sources. Update
+both diagram sources and renderings whenever runtime ownership or major data flow
+changes.

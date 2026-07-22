@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.LandingCapture.cs
+// File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.ChopstickLanding.cs
 // Purpose: Tracks the generated non-physical chopstick target, capture envelope,
 // and stable kinematic capture state.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -47,9 +47,11 @@ namespace RocketSim
         /// <summary>Returns the active scenario guidance point in world space.</summary>
         Vector3 ScenarioReferenceWorldPosition()
         {
-            return envConfig != null && envConfig.scenario == ScenarioType.Landing && catchFrame
-                ? catchFrame.position
-                : transform.position;
+            if (envConfig != null && envConfig.scenario == ScenarioType.ChopstickLanding && catchFrame)
+                return catchFrame.position;
+            if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding && _landingLegs && _landingLegs.FeetFrame)
+                return _landingLegs.FeetFrame.position;
+            return transform.position;
         }
 
         /// <summary>Returns the active scenario guidance point in training-area local space.</summary>
@@ -60,13 +62,16 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns velocity at the active guidance point. For landing this adds
-        /// the rotational velocity of the upper catch frame to root translation.
+        /// Returns velocity at the active guidance point. Landing scenarios use
+        /// point velocity at CatchFrame or FeetFrame, including body rotation.
         /// </summary>
         Vector3 ScenarioReferenceVelocity()
         {
-            if (envConfig != null && envConfig.scenario == ScenarioType.Landing && catchFrame && rb)
+            if (envConfig != null && envConfig.scenario == ScenarioType.ChopstickLanding && catchFrame && rb)
                 return rb.GetPointVelocity(catchFrame.position);
+            if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding &&
+                _landingLegs && _landingLegs.FeetFrame && rb)
+                return rb.GetPointVelocity(_landingLegs.FeetFrame.position);
             return rb ? rb.linearVelocity : Vector3.zero;
         }
 
@@ -85,36 +90,36 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Creates or finds the generated landing capture platform near the
-        /// target pad when landing mode needs it.
+        /// Creates or finds the generated chopstick capture platform near the
+        /// target pad when the catch scenario needs it.
         /// </summary>
-        void EnsureLandingPlatform()
+        void EnsureChopstickPlatform()
         {
-            if (_landingPlatform || !targetPad)
+            if (_chopstickPlatform || !targetPad)
                 return;
 
             Transform parent = targetPad.parent ? targetPad.parent : transform.parent;
             if (!parent)
                 return;
 
-            _landingPlatform = LandingPlatformFactory.Ensure(parent);
+            _chopstickPlatform = ChopstickCatchPlatformFactory.Ensure(parent);
         }
 
         /// <summary>
         /// Reconfigures the generated visual platform and logical capture box
         /// from the episode's frozen curriculum profile.
         /// </summary>
-        void UpdateLandingPlatformGeometry()
+        void UpdateChopstickPlatformGeometry()
         {
-            if (envConfig == null || envConfig.scenario != ScenarioType.Landing || !envConfig.landingPlatformEnabled)
+            if (envConfig == null || envConfig.scenario != ScenarioType.ChopstickLanding || !envConfig.landingPlatformEnabled)
             {
-                if (_landingPlatform)
-                    _landingPlatform.DisablePlatform();
+                if (_chopstickPlatform)
+                    _chopstickPlatform.DisablePlatform();
                 return;
             }
 
-            EnsureLandingPlatform();
-            if (!_landingPlatform || !targetPad)
+            EnsureChopstickPlatform();
+            if (!_chopstickPlatform || !targetPad)
                 return;
 
             Vector3 localCenter = new(
@@ -122,17 +127,18 @@ namespace RocketSim
                 ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
                 targetPad.localPosition.z);
 
-            _landingPlatform.Configure(
+            _chopstickPlatform.Configure(
                 localCenter,
                 envConfig.landingTargetYawDeg,
                 ActiveLandingProfile.platformHalfSize);
         }
 
         /// <summary>Clears per-episode capture and stability state.</summary>
-        void ResetLandingPlatformState()
+        void ResetChopstickPlatformState()
         {
             _landingPlatformInsideCapture = false;
             _landingPlatformStable = false;
+            _landingPlatformBecameStable = false;
             _landingPlatformStableTime = 0f;
             _landingEpisodeStartAltitude = 0f;
             _landingEpisodeFlyawayAltitude = 0f;
@@ -144,7 +150,7 @@ namespace RocketSim
         /// </summary>
         void CaptureLandingEpisodeStartAltitude()
         {
-            if (envConfig == null || envConfig.scenario != ScenarioType.Landing)
+            if (envConfig == null || !envConfig.scenario.IsLanding())
             {
                 _landingEpisodeStartAltitude = 0f;
                 _landingEpisodeFlyawayAltitude = 0f;
@@ -159,12 +165,13 @@ namespace RocketSim
         /// Updates capture-envelope membership and stable-hold time using only
         /// kinematics. The target never applies collision forces to the rocket.
         /// </summary>
-        void UpdateLandingPlatformState(float dt)
+        void UpdateChopstickPlatformState(float dt)
         {
+            _landingPlatformBecameStable = false;
             if (envConfig == null ||
-                envConfig.scenario != ScenarioType.Landing ||
+                envConfig.scenario != ScenarioType.ChopstickLanding ||
                 !envConfig.landingPlatformEnabled ||
-                !_landingPlatform)
+                !_chopstickPlatform)
             {
                 _landingPlatformInsideCapture = false;
                 _landingPlatformStable = false;
@@ -172,8 +179,9 @@ namespace RocketSim
                 return;
             }
 
-            _landingPlatformInsideCapture = _landingPlatform.ContainsWorldPoint(ScenarioReferenceWorldPosition());
-            bool platformReady = LandingPlatformKinematicsReady();
+            bool wasStable = _landingPlatformStable;
+            _landingPlatformInsideCapture = _chopstickPlatform.ContainsWorldPoint(ScenarioReferenceWorldPosition());
+            bool platformReady = ChopstickPlatformKinematicsReady();
 
             if (platformReady)
                 _landingPlatformStableTime += Mathf.Max(0f, dt);
@@ -182,13 +190,14 @@ namespace RocketSim
 
             _landingPlatformStable = platformReady &&
                 _landingPlatformStableTime >= Mathf.Max(0f, ActiveLandingProfile.platformStableHoldTime);
+            _landingPlatformBecameStable = !wasStable && _landingPlatformStable;
         }
 
         /// <summary>
         /// Returns whether the rocket currently satisfies all capture-platform
         /// kinematic limits while inside the logical platform envelope.
         /// </summary>
-        bool LandingPlatformKinematicsReady()
+        bool ChopstickPlatformKinematicsReady()
         {
             if (!_landingPlatformInsideCapture)
                 return false;
@@ -200,7 +209,7 @@ namespace RocketSim
                 landing.successMaxTiltDeg,
                 Mathf.Acos(0.94f) * Mathf.Rad2Deg);
 
-            return LandingCaptureEvaluator.IsKinematicallyReady(
+            return ChopstickCaptureEvaluator.IsKinematicallyReady(
                 terms,
                 Vector3.Angle(transform.up, Vector3.up),
                 tiltLimitDeg,

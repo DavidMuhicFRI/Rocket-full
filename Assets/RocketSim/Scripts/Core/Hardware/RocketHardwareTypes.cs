@@ -26,10 +26,15 @@ namespace RocketSim
 
     public enum RocketHardwarePreset
     {
-        Falcon9,
-        SimpleSingle,
-        Octaweb,
-        Custom
+        Falcon9 = 0,
+        SimpleSingle = 1,
+        Octaweb = 2,
+        Custom = 3,
+        AblationFull = 4,
+        AblationNoFins = 5,
+        AblationNoRcs = 6,
+        AblationTripleEngine = 7,
+        AblationSingleEngine = 8
     }
 
     public enum FinLayout

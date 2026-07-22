@@ -24,7 +24,8 @@ namespace RocketSim
 
             return scenario switch
             {
-                ScenarioType.Landing => Landing(t, ctx, factors),
+                ScenarioType.ChopstickLanding => ChopstickLanding(t, ctx, factors),
+                ScenarioType.LegLanding => LegLanding(t, ctx, factors),
                 ScenarioType.Hover => Hover(t, ctx, factors),
                 ScenarioType.HoverTracking => HoverTracking(t, ctx, factors),
                 ScenarioType.Takeoff => Takeoff(t, ctx, factors),

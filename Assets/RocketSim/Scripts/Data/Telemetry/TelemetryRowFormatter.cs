@@ -56,8 +56,22 @@ namespace RocketSim
                 "Success", "TerminationReason", "EnvironmentSeed", "EpisodeSeed",
                 "CurriculumGlobalDifficulty01", "CurriculumEpisodeDifficulty01",
                 "CurriculumReplay01", "LandingStartAltitude_m", "LandingFlyawayAltitude_m",
+                "Scenario", "InitialPlanarDistance_m", "InitialYawError_deg",
+                "InitialSpeed_mps", "InitialVerticalSpeed_mps", "InitialHorizontalSpeed_mps",
+                "InitialTilt_deg", "InitialAngularRate_deg_s", "InitialFuel_kg",
+                "InitialVehicleMass_kg", "MinimumCommandableNonzeroThrustToWeight",
+                "AllActiveEnginesMinimumThrottleThrustToWeight", "AllActiveEnginesMaximumThrustToWeight",
                 "LoggedRewardSum", "DurationSeconds",
-                "FixedDeltaTimeSeconds", "DecisionPeriod"
+                "FixedDeltaTimeSeconds", "DecisionPeriod",
+                "FinalPlanarDistance_m", "FinalYawError_deg", "FinalSpeed_mps",
+                "FinalVerticalSpeed_mps", "FinalHorizontalSpeed_mps",
+                "FinalTilt_deg", "FinalAngularRate_deg_s", "FuelUsed_kg",
+                "RcsPropellantUsed_kg", "EngineRestartCount",
+                "LegTouchdownOccurred01", "LegFeetOnPad", "LegFootOutsidePad01",
+                "LegStructuralStrike01", "LegTouchdownTime_s", "LegFirstContactSpeed_mps",
+                "LegFirstContactVerticalSpeed_mps", "LegFirstContactHorizontalSpeed_mps",
+                "LegFirstContactTilt_deg", "LegFirstContactAngularRate_deg_s",
+                "LegStableHold_s", "LegMaximumContactImpulse_Ns", "LegMaximumReboundHeight_m"
             };
             foreach (string metric in _metricNames)
             {
@@ -108,10 +122,46 @@ namespace RocketSim
             Append(acc.Outcome.curriculumReplay ? 1 : 0);
             Append(acc.Outcome.landingStartAltitude);
             Append(acc.Outcome.landingFlyawayAltitude);
+            Append(acc.Outcome.scenario.ToString());
+            Append(acc.Outcome.initialPlanarDistanceM);
+            Append(acc.Outcome.initialYawErrorDeg);
+            Append(acc.Outcome.initialSpeedMps);
+            Append(acc.Outcome.initialVerticalSpeedMps);
+            Append(acc.Outcome.initialHorizontalSpeedMps);
+            Append(acc.Outcome.initialTiltDeg);
+            Append(acc.Outcome.initialAngularRateDegS);
+            Append(acc.Outcome.initialFuelKg);
+            Append(acc.Outcome.initialVehicleMassKg);
+            Append(acc.Outcome.minimumCommandableNonzeroThrustToWeight);
+            Append(acc.Outcome.allEnginesMinimumThrustToWeight);
+            Append(acc.Outcome.allEnginesMaximumThrustToWeight);
             Append(acc.LoggedRewardSum);
             Append(acc.Outcome.durationSeconds);
             Append(acc.Outcome.fixedDeltaTimeSeconds);
             Append(acc.Outcome.decisionPeriod);
+            Append(acc.Outcome.finalPlanarDistanceM);
+            Append(acc.Outcome.finalYawErrorDeg);
+            Append(acc.Outcome.finalSpeedMps);
+            Append(acc.Outcome.finalVerticalSpeedMps);
+            Append(acc.Outcome.finalHorizontalSpeedMps);
+            Append(acc.Outcome.finalTiltDeg);
+            Append(acc.Outcome.finalAngularRateDegS);
+            Append(acc.Outcome.fuelUsedKg);
+            Append(acc.Outcome.rcsPropellantUsedKg);
+            Append(acc.Outcome.engineRestartCount);
+            Append(acc.Outcome.legTouchdownOccurred ? 1 : 0);
+            Append(acc.Outcome.legFeetOnPad);
+            Append(acc.Outcome.legFootOutsidePad ? 1 : 0);
+            Append(acc.Outcome.legStructuralStrike ? 1 : 0);
+            Append(acc.Outcome.legTouchdownTimeSeconds);
+            Append(acc.Outcome.legFirstContactSpeedMps);
+            Append(acc.Outcome.legFirstContactVerticalSpeedMps);
+            Append(acc.Outcome.legFirstContactHorizontalSpeedMps);
+            Append(acc.Outcome.legFirstContactTiltDeg);
+            Append(acc.Outcome.legFirstContactAngularRateDegS);
+            Append(acc.Outcome.legStableHoldSeconds);
+            Append(acc.Outcome.legMaximumContactImpulseNs);
+            Append(acc.Outcome.legMaximumReboundHeightM);
 
             foreach (var stat in acc.Stats)
             {

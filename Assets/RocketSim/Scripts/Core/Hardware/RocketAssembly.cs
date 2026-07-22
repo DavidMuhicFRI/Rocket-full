@@ -108,13 +108,12 @@ namespace RocketSim
             float rcsDryMass = hasRcs ? rcs.dryMass : 0f;
             float rcsPropellantMass = hasRcs ? rcs.propellantMass : 0f;
 
-            float defaultHardwareMass = ReferenceEngineCount * EngineDryMassKg +
-                                        ReferenceFinCount * GridFinDryMassKg +
-                                        RocketPartsConfig.DefaultRcsDryMassKg;
-            float selectedHardwareMass = engineDryMass + finDryMass + rcsDryMass;
-            float adjustedDryMass = Mathf.Max(
-                body.DryMass * 0.35f,
-                body.DryMass + selectedHardwareMass - defaultHardwareMass);
+            float adjustedDryMass = AdjustDryMassForInstalledHardware(
+                body.DryMass,
+                engineCount,
+                finCount,
+                hasRcs,
+                rcsDryMass);
         
             return new RocketPhysicsConfig {
                 radius        = body.radius,
@@ -166,6 +165,50 @@ namespace RocketSim
                 rcsPropellantMass = rcsPropellantMass,
                 rcsLocalY   = rcs ? rcs.transform.localPosition.y : body.height - 0.2f,
             };
+        }
+
+        /// <summary>
+        /// Estimates the runtime dry mass directly from a parts configuration.
+        /// Run manifests use this before a scene rocket exists so their initial
+        /// mass and TWR values match the assembly calculation.
+        /// </summary>
+        public static float EstimateAdjustedDryMass(RocketPartsConfig cfg)
+        {
+            if (cfg == null) return 0f;
+
+            float currentSurfaceArea = 2f * Mathf.PI * cfg.bodyRadius * (cfg.bodyHeight + cfg.bodyRadius);
+            float referenceSurfaceArea = 2f * Mathf.PI *
+                                         RocketPartsConfig.ReferenceBodyRadiusM *
+                                         (RocketPartsConfig.ReferenceBodyHeightM + RocketPartsConfig.ReferenceBodyRadiusM);
+            float scaledBodyDryMass = cfg.baseDryMass * currentSurfaceArea / Mathf.Max(0.001f, referenceSurfaceArea);
+            return AdjustDryMassForInstalledHardware(
+                scaledBodyDryMass,
+                cfg.GetEngineCount(),
+                cfg.GetFinCount(),
+                cfg.rcsEnabled,
+                cfg.rcsDryMass);
+        }
+
+        /// <summary>
+        /// Replaces the reference hardware contribution in the configured body
+        /// mass with the hardware that is actually installed for this ablation.
+        /// </summary>
+        static float AdjustDryMassForInstalledHardware(
+            float scaledBodyDryMass,
+            int engineCount,
+            int finCount,
+            bool hasRcs,
+            float rcsDryMass)
+        {
+            float defaultHardwareMass = ReferenceEngineCount * EngineDryMassKg +
+                                        ReferenceFinCount * GridFinDryMassKg +
+                                        RocketPartsConfig.DefaultRcsDryMassKg;
+            float selectedHardwareMass = Mathf.Max(0, engineCount) * EngineDryMassKg +
+                                         Mathf.Max(0, finCount) * GridFinDryMassKg +
+                                         (hasRcs ? Mathf.Max(0f, rcsDryMass) : 0f);
+            return Mathf.Max(
+                scaledBodyDryMass * 0.35f,
+                scaledBodyDryMass + selectedHardwareMass - defaultHardwareMass);
         }
 
         // ── Fallback in case body is not assigned ─────────────────────────────
