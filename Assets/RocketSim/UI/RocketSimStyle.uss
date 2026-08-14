@@ -56,23 +56,25 @@
     width: 76px;
     height: 30px;
     margin-right: 3px;
-    background-color: rgba(28, 38, 58, 0.8);
+    background-color: rgb(28, 42, 68);
     border-width: 1px;
-    border-color: rgba(90, 120, 165, 0.3);
-    color: rgb(145, 165, 195);
+    border-color: rgba(105, 145, 205, 0.72);
+    color: rgb(180, 205, 238);
     font-size: 10px;
 }
-.rs-mode-btn-active { background-color: rgba(28, 86, 190, 0.65); border-color: rgba(75, 145, 255, 0.7); color: rgb(220, 235, 255); }
+.rs-mode-btn-active { background-color: rgb(30, 92, 195); border-color: rgb(90, 165, 255); color: rgb(235, 245, 255); }
 
 .rs-panel-footer {
-    padding: 7px 9px 8px;
-    border-top-width: 1px;
-    border-color: rgba(70, 130, 255, 0.20);
+    min-height: 46px;
+    padding: 8px 10px 9px;
+    background-color: rgb(15, 25, 47);
+    border-top-width: 2px;
+    border-color: rgba(75, 145, 255, 0.78);
 }
 .rs-panel-notification { color: rgb(145, 190, 235); font-size: 10px; white-space: normal; margin-bottom: 5px; }
 .rs-panel-notification-error { color: rgb(255, 125, 105); }
-.rs-footer-actions { flex-direction: row; }
-.rs-footer-actions .rs-action-btn { flex-grow: 1; margin: 0; }
+.rs-footer-actions { flex-direction: row; min-height: 30px; }
+.rs-footer-actions .rs-action-btn { flex-grow: 1; margin: 0; background-color: rgb(27, 82, 185); border-width: 2px; border-color: rgb(78, 150, 255); color: rgb(235, 245, 255); }
 .rs-footer-actions .rs-danger-btn { flex-grow: 1; height: 30px; margin: 0; }
 
 /* ══ TAB BAR ════════════════════════════════════════════════════════════════ */
@@ -159,11 +161,16 @@
 .rs-field-row {
     flex-direction: row;
     align-items: center;
-    margin-bottom: 6px;
-    min-height: 22px;
+    min-height: 28px;
+    margin-bottom: 5px;
+    padding: 3px 5px;
+    background-color: rgba(16, 23, 39, 0.48);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(90, 125, 175, 0.22);
+    border-radius: 4px;
 }
 .rs-field-label {
-    color: rgb(155, 180, 210);
+    color: rgb(178, 202, 230);
     font-size: 9px;
     width: 150px;
     flex-shrink: 0;
@@ -172,26 +179,148 @@
 }
 .rs-slider         { flex-grow: 1; margin-left: 4px; margin-right: 4px; }
 .rs-field-value    { color: rgb(80, 200, 120); font-size: 10px; width: 62px; -unity-text-align: middle-right; flex-shrink: 0; }
-.rs-field-readonly { color: rgb(130, 175, 130); font-size: 10px; flex-grow: 1; -unity-text-align: middle-right; overflow: hidden; white-space: normal; }
+.rs-field-readonly { color: rgb(145, 195, 150); font-size: 10px; flex-grow: 1; -unity-text-align: middle-right; overflow: hidden; white-space: normal; }
 .rs-toggle         { margin-left: auto; flex-shrink: 0; }
-.rs-described-control { margin-bottom: 3px; }
-.rs-described-control > .rs-field-row { margin-bottom: 1px; }
+.rs-described-control {
+    margin-bottom: 5px;
+    padding: 4px 5px 5px;
+    background-color: rgba(16, 23, 39, 0.48);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(90, 125, 175, 0.22);
+    border-radius: 4px;
+}
+.rs-described-control > .rs-field-row {
+    min-height: 22px;
+    margin-bottom: 1px;
+    padding: 0;
+    background-color: transparent;
+    border-width: 0;
+}
 .rs-control-description {
-    color: rgb(107, 128, 158);
+    color: rgb(132, 156, 187);
     font-size: 9px;
     margin-left: 154px;
     margin-right: 62px;
     margin-bottom: 3px;
     white-space: normal;
 }
+.rs-group-detail {
+    color: rgb(132, 156, 187);
+    font-size: 10px;
+    margin-left: 20px;
+    margin-bottom: 4px;
+    white-space: normal;
+}
+.rs-ml-detail {
+    font-size: 9px;
+    margin-left: 154px;
+    margin-right: 62px;
+    margin-bottom: 3px;
+}
+
+/* Keyboard-editable numeric slider. The classes intentionally separate sign
+   and parameter category so reward, event, terminal, and threshold rows can be
+   themed independently without changing the control implementation. */
+.rs-numeric-slider-control {
+    border-left-width: 2px;
+    border-left-color: rgba(90, 115, 150, 0.20);
+    padding-left: 3px;
+}
+.rs-numeric-slider-row { min-height: 26px; }
+.rs-numeric-slider-label { width: 118px; }
+.rs-numeric-sign {
+    width: 16px;
+    min-width: 16px;
+    flex-shrink: 0;
+    font-size: 12px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+.rs-numeric-sign-positive { color: rgb(80, 205, 125); }
+.rs-numeric-sign-negative { color: rgb(240, 105, 95); }
+.rs-numeric-sign-neutral  { color: rgb(105, 130, 165); }
+.rs-numeric-slider { min-width: 55px; }
+.rs-numeric-input {
+    width: 80px;
+    min-width: 80px;
+    height: 22px;
+    margin: 0 0 0 3px;
+    flex-shrink: 0;
+    color: rgb(205, 225, 250);
+    --unity-cursor-color: rgb(125, 185, 255);
+    --unity-selection-color: rgba(50, 115, 210, 0.55);
+}
+.rs-numeric-input > .unity-base-field__input,
+.rs-numeric-input .unity-base-text-field__input {
+    background-color: rgba(10, 15, 32, 0.90);
+    border-width: 1px;
+    border-color: rgba(80, 125, 190, 0.42);
+    border-radius: 4px;
+    padding: 0 5px;
+    color: rgb(205, 225, 250);
+}
+.rs-numeric-input > .unity-base-field__input:focus,
+.rs-numeric-input .unity-base-text-field__input:focus {
+    border-color: rgba(105, 165, 255, 0.78);
+}
+.rs-numeric-input .unity-text-element,
+.rs-numeric-input .unity-base-text-field__input > .unity-text-element,
+.rs-numeric-input .unity-text-element--inner-input-field-component {
+    color: rgb(225, 238, 255);
+    font-size: 10px;
+    -unity-text-align: middle-right;
+}
+.rs-numeric-input-corrected > .unity-base-field__input,
+.rs-numeric-input-corrected .unity-base-text-field__input {
+    border-color: rgba(255, 170, 65, 0.85);
+}
+.rs-numeric-unit {
+    width: 44px;
+    min-width: 44px;
+    margin-left: 3px;
+    flex-shrink: 0;
+    color: rgb(115, 145, 180);
+    font-size: 9px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.rs-numeric-unit-empty { opacity: 0; }
+.rs-numeric-reset {
+    width: 36px;
+    min-width: 36px;
+    height: 21px;
+    margin-left: 3px;
+    padding-left: 2px;
+    padding-right: 2px;
+    flex-shrink: 0;
+    background-color: rgba(28, 38, 58, 0.82);
+    border-width: 1px;
+    border-color: rgba(90, 120, 165, 0.34);
+    border-radius: 4px;
+    color: rgb(140, 165, 198);
+    font-size: 8px;
+}
+.rs-numeric-reset:hover { border-color: rgba(120, 165, 225, 0.60); }
+.rs-numeric-slider-control > .rs-control-description {
+    margin-left: 137px;
+    margin-right: 163px;
+}
+.rs-numeric-category-event {
+    border-left-color: rgba(90, 155, 235, 0.55);
+}
+.rs-numeric-category-terminal {
+    border-left-color: rgba(215, 140, 60, 0.65);
+}
+.rs-numeric-category-threshold {
+    border-left-color: rgba(140, 115, 220, 0.55);
+}
 
 /* ── Section description (path display, etc.) ────────────────────────────── */
 .rs-section-desc {
-    color: rgb(100, 130, 165);
+    color: rgb(130, 157, 190);
     font-size: 10px;
     white-space: normal;
     overflow: hidden;
-    word-wrap: break-word;
 }
 
 /* ══ ENUM FIELDS — Fix invisible PPO / SAC text ══════════════════════════════
@@ -203,14 +332,20 @@
    document's stylesheet, so .unity-base-dropdown__* rules apply.           */
 
 .rs-enum-field {
+    min-height: 30px;
     margin-bottom: 7px;
+    padding: 4px 5px;
+    background-color: rgba(16, 23, 39, 0.48);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(90, 125, 175, 0.22);
+    border-radius: 4px;
     color: rgb(165, 190, 215);
     font-size: 11px;
 }
 
 /* Label part of the enum row */
 .rs-enum-field > .unity-base-field__label {
-    color: rgb(155, 180, 210);
+    color: rgb(178, 202, 230);
     font-size: 11px;
     min-width: 118px;
     flex-shrink: 0;
@@ -245,6 +380,29 @@
 /* Dropdown arrow */
 .rs-enum-field .unity-enum-field__arrow {
     -unity-background-image-tint-color: rgba(140, 175, 230, 0.80);
+}
+.rs-enum-field .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: rgba(140, 175, 230, 0.80);
+}
+.rs-initialize-from-field {
+    margin-top: 3px;
+}
+
+/* Disabled parameters remain clearly legible while their controls still look
+   inactive. Unity's default disabled opacity was too low against this panel. */
+.rs-field-row.unity-disabled,
+.rs-field-row:disabled,
+.rs-described-control.unity-disabled,
+.rs-described-control:disabled,
+.rs-enum-field.unity-disabled,
+.rs-enum-field:disabled {
+    opacity: 0.78;
+}
+.rs-action-btn.unity-disabled,
+.rs-action-btn:disabled,
+.rs-footer-mode-btn.unity-disabled,
+.rs-footer-mode-btn:disabled {
+    opacity: 0.72;
 }
 
 /* ── Popup dropdown overlay (EnumField options list) ─────────────────────── */
@@ -344,7 +502,6 @@
     padding: 4px 8px;
     border-bottom-width: 1px;
     border-color: rgba(70, 130, 255, 0.08);
-    cursor: default;
     min-height: 26px;
 }
 .rs-run-item:hover { background-color: rgba(35, 70, 170, 0.38); }
@@ -470,7 +627,6 @@
     border-color: rgba(70, 130, 255, 0.20);
     border-radius: 8px;
     align-items: center;
-    cursor: default;
     overflow: hidden;
 }
 .rs-engine-card:hover        { border-color: rgba(90, 150, 255, 0.50); }
@@ -508,7 +664,6 @@
     border-color: rgba(70, 130, 255, 0.20);
     border-radius: 8px;
     align-items: center;
-    cursor: default;
     overflow: hidden;
 }
 .rs-fin-card:hover     { border-color: rgba(90, 150, 255, 0.50); }
@@ -606,7 +761,6 @@
     border-width: 1px;
     border-color: rgba(70, 130, 255, 0.20);
     border-radius: 7px;
-    cursor: default;
     overflow: hidden;
 }
 .rs-scenario-card:hover  { border-color: rgba(90, 150, 255, 0.50); }
@@ -659,6 +813,145 @@
     color: rgb(255, 205, 120);
 }
 
+/* == COMPLETE TRAINING OBJECTIVE =========================================== */
+.rs-objective-scenario {
+    color: rgb(255, 195, 120);
+    font-size: 12px;
+    -unity-font-style: bold;
+    margin-bottom: 3px;
+}
+.rs-objective-validation {
+    margin-top: 6px;
+    margin-bottom: 5px;
+    padding: 6px 7px;
+    border-width: 1px;
+    border-radius: 5px;
+    white-space: normal;
+    font-size: 9px;
+}
+.rs-objective-validation-ok {
+    color: rgb(105, 210, 145);
+    background-color: rgba(20, 105, 65, 0.18);
+    border-color: rgba(65, 190, 120, 0.35);
+}
+.rs-objective-validation-warning {
+    color: rgb(245, 190, 90);
+    background-color: rgba(145, 90, 20, 0.20);
+    border-color: rgba(230, 155, 55, 0.42);
+}
+.rs-objective-validation-error {
+    color: rgb(255, 125, 110);
+    background-color: rgba(150, 40, 35, 0.22);
+    border-color: rgba(235, 85, 75, 0.52);
+}
+.rs-objective-preset-status-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 2px;
+    margin-bottom: 4px;
+}
+.rs-objective-preset-status {
+    flex-grow: 1;
+    color: rgb(150, 180, 215);
+    font-size: 10px;
+}
+.rs-objective-preset-custom { color: rgb(245, 180, 85); }
+.rs-objective-reset-btn {
+    height: 22px;
+    padding-left: 7px;
+    padding-right: 7px;
+    background-color: rgba(65, 45, 25, 0.75);
+    border-width: 1px;
+    border-color: rgba(210, 135, 55, 0.45);
+    border-radius: 4px;
+    color: rgb(230, 175, 105);
+    font-size: 9px;
+}
+.rs-objective-reset-btn:hover { border-color: rgba(245, 175, 85, 0.75); }
+
+.rs-termination-group-heading {
+    color: rgb(140, 160, 195);
+    font-size: 9px;
+    -unity-font-style: bold;
+    letter-spacing: 0.8px;
+    margin-top: 9px;
+    margin-bottom: 4px;
+}
+.rs-termination-rule {
+    margin-bottom: 6px;
+    padding: 6px;
+    background-color: rgba(15, 20, 36, 0.76);
+    border-width: 1px;
+    border-left-width: 3px;
+    border-color: rgba(85, 110, 150, 0.28);
+    border-radius: 6px;
+}
+.rs-termination-success { border-left-color: rgba(65, 195, 120, 0.72); }
+.rs-termination-outcome { border-left-color: rgba(80, 155, 235, 0.72); }
+.rs-termination-failure { border-left-color: rgba(225, 85, 75, 0.72); }
+.rs-termination-limit   { border-left-color: rgba(220, 150, 60, 0.68); }
+.rs-termination-rule-disabled {
+    background-color: rgba(13, 17, 29, 0.60);
+    border-top-color: rgba(70, 85, 115, 0.20);
+    border-right-color: rgba(70, 85, 115, 0.20);
+    border-bottom-color: rgba(70, 85, 115, 0.20);
+}
+.rs-termination-rule-header {
+    flex-direction: row;
+    align-items: center;
+    min-height: 23px;
+}
+.rs-termination-rule-toggle {
+    flex-grow: 1;
+    color: rgb(180, 205, 235);
+    font-size: 10px;
+}
+.rs-termination-kind {
+    width: 50px;
+    margin-left: 4px;
+    color: rgb(125, 150, 185);
+    font-size: 8px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-right;
+}
+.rs-termination-reset {
+    width: 39px;
+    height: 20px;
+    margin-left: 5px;
+    padding-left: 2px;
+    padding-right: 2px;
+    background-color: rgba(28, 38, 58, 0.82);
+    border-width: 1px;
+    border-color: rgba(90, 120, 165, 0.34);
+    border-radius: 4px;
+    color: rgb(140, 165, 198);
+    font-size: 8px;
+}
+.rs-termination-description {
+    color: rgb(110, 135, 165);
+    font-size: 9px;
+    white-space: normal;
+    margin-top: 2px;
+}
+.rs-termination-outcomes {
+    color: rgb(135, 165, 205);
+    font-size: 8px;
+    white-space: normal;
+    margin-top: 2px;
+}
+.rs-termination-thresholds { margin-top: 5px; }
+.rs-termination-shared-note {
+    color: rgb(125, 145, 175);
+    font-size: 8px;
+    -unity-font-style: italic;
+    white-space: normal;
+    margin-top: 3px;
+}
+.rs-termination-boolean > .rs-control-description {
+    margin-left: 154px;
+    margin-right: 4px;
+}
+
 /* ══ WEATHER BUTTONS ════════════════════════════════════════════════════════ */
 .rs-btn-group { flex-direction: row; flex-wrap: wrap; margin-bottom: 5px; }
 .rs-weather-btn {
@@ -693,7 +986,6 @@
     border-width: 1px;
     border-color: rgba(70, 130, 255, 0.20);
     border-radius: 7px;
-    cursor: default;
     overflow: hidden;
 }
 .rs-inference-card:hover {

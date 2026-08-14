@@ -21,6 +21,8 @@ namespace RocketSim
         {
             c.Clear();
             var tc = telemetryConfig ?? new TelemetryConfig();
+            if (envConfig != null)
+                tc.scenario = envConfig.scenario;
 
             BuildTelemetryLogGroups(c, tc);
             BuildTelemetrySamplingSection(c, tc);
@@ -77,7 +79,10 @@ namespace RocketSim
             root.Add(BuildGroupDetail("Wind speed - planar wind speed - wind alignment - normalized dynamic pressure"));
 
             root.Add(UIHelper.Toggle("Reward Metrics", tc.logRewardMetrics, v => { tc.logRewardMetrics = v; RefreshTelemetryColumnCount(root, tc); }));
-            root.Add(BuildGroupDetail("Scalar reward accumulated this step"));
+            root.Add(BuildGroupDetail("Step reward plus shaping-rate, event, and terminal totals"));
+
+            root.Add(UIHelper.Toggle("Reward Breakdown", tc.logRewardBreakdown, v => { tc.logRewardBreakdown = v; RefreshTelemetryColumnCount(root, tc); }));
+            root.Add(BuildGroupDetail("For every reward parameter in this scenario: raw feature, signed coefficient, and signed contribution. This can add many columns."));
         }
 
         /// <summary>

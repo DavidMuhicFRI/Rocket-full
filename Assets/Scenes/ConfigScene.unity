@@ -502,9 +502,11 @@ MonoBehaviour:
     logAeroLoadMetrics: 1
     logEnvironmentMetrics: 0
     logRewardMetrics: 1
+    logRewardBreakdown: 0
     activeEngineCount: 1
     independentEngines: 1
     activeFinCount: 4
+    scenario: 0
   envConfig:
     windEnabled: 0
     windSpeed: 0
@@ -518,10 +520,6 @@ MonoBehaviour:
     moveTargetEnabled: 0
     targetMoveInterval: 35
     targetMoveRadius: 16
-    hoverTrackSettleRadius: 6
-    hoverTrackSuccessHoldTime: 1
-    hoverTrackSuccessMaxSpeed: 1.5
-    hoverTrackSuccessMaxTiltDeg: 8
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
     landingTargetYawDeg: 0
@@ -543,7 +541,7 @@ MonoBehaviour:
     normalize: 1
     hiddenUnits: 512
     numLayers: 3
-    extrinsicGamma: 0.995
+    extrinsicGamma: 0.9995
     extrinsicStrength: 1
     curiosityEnabled: 0
     curiosityGamma: 0.99
@@ -673,9 +671,11 @@ MonoBehaviour:
     logAeroLoadMetrics: 1
     logEnvironmentMetrics: 0
     logRewardMetrics: 1
+    logRewardBreakdown: 0
     activeEngineCount: 1
     independentEngines: 1
     activeFinCount: 4
+    scenario: 0
   envConfig:
     windEnabled: 0
     windSpeed: 0
@@ -689,10 +689,6 @@ MonoBehaviour:
     moveTargetEnabled: 0
     targetMoveInterval: 35
     targetMoveRadius: 16
-    hoverTrackSettleRadius: 6
-    hoverTrackSuccessHoldTime: 1
-    hoverTrackSuccessMaxSpeed: 1.5
-    hoverTrackSuccessMaxTiltDeg: 8
     hoverTrackCurriculumSuccesses: 0
     hoverTrackCurriculumProgress: 0
     landingTargetYawDeg: 0
@@ -714,7 +710,7 @@ MonoBehaviour:
     normalize: 1
     hiddenUnits: 512
     numLayers: 3
-    extrinsicGamma: 0.995
+    extrinsicGamma: 0.9995
     extrinsicStrength: 1
     curiosityEnabled: 0
     curiosityGamma: 0.99

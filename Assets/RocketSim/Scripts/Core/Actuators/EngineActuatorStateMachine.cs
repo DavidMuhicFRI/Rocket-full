@@ -23,14 +23,11 @@ namespace RocketSim
             int runningEngineCount,
             float minimumThrottle)
         {
-            float availableThrust = Mathf.Max(0f, effectiveMaxThrustPerEngineN) *
-                                    Mathf.Max(0, runningEngineCount);
+            float availableThrust = Mathf.Max(0f, effectiveMaxThrustPerEngineN) * Mathf.Max(0, runningEngineCount);
             if (availableThrust <= 0f)
                 return 0f;
 
-            float requiredThrottle = Mathf.Max(0f, vehicleMassKg) *
-                                     Mathf.Max(0f, gravityMagnitude) /
-                                     availableThrust;
+            float requiredThrottle = Mathf.Max(0f, vehicleMassKg) * Mathf.Max(0f, gravityMagnitude) / availableThrust;
             return Mathf.Clamp(requiredThrottle, Mathf.Clamp01(minimumThrottle), 1f);
         }
     }

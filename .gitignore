@@ -28,3 +28,5 @@ Assets/ML-Agents/Timers/
 *.opendb
 *.VC.db
 *.tmp
+__pycache__/
+*.py[cod]

@@ -87,7 +87,7 @@ namespace RocketSim
             {
                 var direction = UIHelper.Slider("Wind Direction", envConfig.windDirectionDeg, 0f, 359f,
                     v => envConfig.windDirectionDeg = v,
-                    "Sets the compass direction toward which the wind pushes.", 0, "Â°");
+                    "Sets the compass direction toward which the wind pushes.", 0, "deg");
                 direction.SetEnabled(envConfig.windEnabled);
                 root.Add(direction);
                 root.Add(BuildWindCompass(envConfig.windDirectionDeg));
@@ -135,7 +135,7 @@ namespace RocketSim
             {
                 envConfig.airDensityMultiplier = value;
                 RefreshEnvironmentReadouts(root);
-            }, "Domain-randomization scale for aerodynamic drag and fin forces; it is not a literal weather density model.", 2, "Ã—"));
+            }, "Domain-randomization scale for aerodynamic drag and fin forces; it is not a literal weather density model.", 2, "x"));
 
             var densityRow = UIHelper.ReadOnly("Air Density Multiplier", envConfig.AirDensityMultiplier.ToString("F3"));
             densityRow.name = "label-air-density";

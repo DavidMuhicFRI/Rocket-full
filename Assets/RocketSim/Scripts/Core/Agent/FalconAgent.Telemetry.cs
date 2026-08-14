@@ -47,6 +47,7 @@ namespace RocketSim
                 upDot = upDot,
                 upright01 = Mathf.Clamp01((upDot + 1f) * 0.5f),
                 angularRateDegS = localAngularVelocity.magnitude,
+                yawRateDegS = localAngularVelocity.y,
                 yawErrorDeg = Mathf.Abs(SignedHeadingErrorDeg()),
                 controlEffort = Mean(throttle) +
                                 0.05f * MeanAbs(gimbal) +
@@ -86,7 +87,12 @@ namespace RocketSim
                 ? -Vector3.Dot(guidanceVelocity, error.normalized)
                 : 0f;
             bool isHoverTracking = envConfig.scenario == ScenarioType.HoverTracking;
-            float hoverTrackSettleRadius = Mathf.Max(envConfig.hoverTrackSettleRadius, 0.5f);
+            float hoverTrackSettleRadius = isHoverTracking
+                ? Mathf.Max(
+                    envConfig.GetTrainingObjective(ScenarioType.HoverTracking)
+                        .terminations.trackingCaptureRadiusM.At(_objectiveDifficulty01),
+                    0.01f)
+                : 0f;
             bool hoverTrackHoverPhase = isHoverTracking && horizontalError.magnitude <= hoverTrackSettleRadius;
             bool hoverTrackReady = isHoverTracking && IsHoverTrackHoverReady();
             float horizontalClosureRate = horizontalError.sqrMagnitude > 0.0001f
@@ -146,14 +152,16 @@ namespace RocketSim
                 track_stableTime      = isHoverTracking ? _hoverTrackStableTime : 0f,
                 track_targetReached01 = _hoverTrackTargetReachedThisStep ? 1f : 0f,
                 track_settleRadius    = isHoverTracking ? hoverTrackSettleRadius : 0f,
-                track_curriculumProgress = isHoverTracking ? envConfig.hoverTrackCurriculumProgress : 0f,
+                track_curriculumProgress = isHoverTracking ? _objectiveDifficulty01 : 0f,
                 track_segmentStartDistance = isHoverTracking ? _hoverTrackSegmentStartDistance : 0f,
                 track_segmentElapsedTime = isHoverTracking ? _hoverTrackSegmentElapsedTime : 0f,
                 track_travelProgress01 = travelProgress01,
                 track_travelProgressRate = travelProgressRate,
                 track_directionEfficiency01 = isHoverTracking ? directionEfficiency01 : 0f,
                 track_settleQuality01 = settleQuality01,
-                chopstick_platformRequired01 = isChopstickLanding && envConfig.CurrentLandingPlatformRequired ? 1f : 0f,
+                chopstick_platformRequired01 = isChopstickLanding &&
+                    envConfig.GetTrainingObjective(ScenarioType.ChopstickLanding)
+                        .terminations.chopstickRequireStablePlatform ? 1f : 0f,
                 chopstick_platformInsideCapture01 = isChopstickLanding && _landingPlatformInsideCapture ? 1f : 0f,
                 chopstick_platformStable01 = isChopstickLanding && _landingPlatformStable ? 1f : 0f,
                 chopstick_platformStableTime = isChopstickLanding ? _landingPlatformStableTime : 0f,
@@ -221,7 +229,8 @@ namespace RocketSim
                     ? Vector3.Dot(effVel.normalized, wind.normalized)
                     : 0f,
 
-                stepReward = _stepReward
+                stepReward = _stepReward,
+                rewardContributions = _rewardContributions
             };
 
             TelemetryLogger.Instance.Log(row, forceStepWrite);

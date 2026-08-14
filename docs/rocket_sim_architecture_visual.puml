@@ -25,7 +25,7 @@ skinparam note {
   FontColor #E6EDF3
 }
 
-title RocketSim architecture — file connection graph
+title RocketSim architecture - file connection graph
 
 package "Unity Scene / Prefabs" as ScenePkg {
   [ConfigScene.unity\nTrainingArea prefabs] as Scene
@@ -64,14 +64,13 @@ package "Manager / launch / repositories" as ManagerPkg {
 
 package "Configuration domain" as ConfigPkg {
   [SimEnvironmentConfig.cs] as EnvConfig
-  [ScenarioCatalog.cs\nscenario enum + metadata] as ScenarioTypes
+  [ScenarioCatalog.cs\nChopstick / Leg / Hover / Hover Track] as ScenarioTypes
   [ScenarioProfile.cs] as ScenarioProfile
   [InferenceScenarioConfig.cs] as InferenceConfig
   [LandingCurriculumState.cs] as LandingCurriculum
   [LegLandingCurriculumState.cs] as LegLandingCurriculum
   [HoverTrackCurriculumConfig.cs] as HoverCurriculum
   [MLAgentsConfig.cs] as MLConfig
-  [RewardModelConfig.cs] as RewardConfig
 
   [RocketPartsConfig.cs] as PartsConfig
   [RocketPhysicsConfig.cs] as PhysicsConfig
@@ -121,19 +120,24 @@ package "FalconAgent runtime" as AgentPkg {
 }
 
 package "Reward system" as RewardPkg {
+  [TrainingObjectiveConfig.cs\nroot + four task objectives] as ObjectiveConfig
+  [RewardPresetCatalog.cs\ncomplete reward vectors] as RewardPresets
+  [RewardParameterCatalog.cs] as RewardCatalog
+  [ShapingParameterCatalog.cs] as ShapingCatalog
+  [TerminationRuleCatalog.cs] as TerminationCatalog
+  [ObjectiveValidator.cs] as ObjectiveValidator
+  [RewardContributionBuffer.cs] as RewardBreakdown
   [RocketRewardModel.cs\ndispatcher] as RewardDispatcher
   [ChopstickLandingRewardModel.cs] as LandingReward
   [LegLandingRewardModel.cs] as LegLandingReward
   [HoverRewardModel.cs] as HoverReward
-  [TakeoffRewardModel.cs] as TakeoffReward
-  [BellyFlopRewardModel.cs] as BellyReward
   [RewardRuntimeContext.cs] as RewardContext
   [RewardTerms.cs] as RewardTerms
   [RewardDecision.cs] as RewardDecision
 }
 
 package "Telemetry system" as TelemetryPkg {
-  [TelemetryConfig.cs] as TelemetryConfig
+  [TelemetryConfig.cs\nmetric groups + reward breakdown toggle] as TelemetryConfig
   [RocketSensorPackage.cs] as SensorPackage
   [TelemetryLogger.cs] as TelemetryLogger
   [TelemetryRow\ninside TelemetryLogger.cs] as TelemetryRow
@@ -152,7 +156,6 @@ package "Hardware tests" as TestsPkg {
   [IRocketHardwareTest.cs] as HardwareTestInterface
   [FinAxisHardwareTest.cs] as FinAxisTest
   [AerodynamicsHardwareTest.cs] as AeroTest
-  [TakeoffHardwareTest.cs] as TakeoffTest
   [LandingHardwareTest.cs] as LandingTest
   [RcsVacuumHardwareTest.cs] as RcsVacTest
   [RcsSeparationHardwareTest.cs] as RcsSepTest
@@ -182,7 +185,7 @@ RCPCore --> UIHelper : creates common widgets
 RCPVehicle --> UIHelper : creates vehicle controls
 RCPTask --> UIHelper : creates task/spawn controls
 RCPEnv --> UIHelper : creates weather controls
-RCPRewards --> UIHelper : creates reward sliders
+RCPRewards --> UIHelper : keyboard-editable numeric sliders
 RCPRun --> UIHelper : creates run/curriculum controls
 RCPML --> UIHelper : creates ML controls
 RCPFaults --> UIHelper : creates fault controls
@@ -197,7 +200,12 @@ RCP --> Manager : writes shared configs + apply changes
 RCPVehicle --> PartsConfig : mutates hardware config
 RCPTask --> EnvConfig : mutates scenario/spawn settings
 RCPEnv --> EnvConfig : mutates weather/wind
-RCPRewards --> RewardConfig : mutates reward factors
+RCPRewards --> ObjectiveConfig : edits selected task objective
+RCPRewards --> RewardPresets : applies complete reward vector
+RCPRewards --> RewardCatalog : rows by sign/cadence/scenario
+RCPRewards --> ShapingCatalog : advanced shaping rows
+RCPRewards --> TerminationCatalog : applicable termination cards
+RCPRewards --> ObjectiveValidator : live warnings/errors
 RCPRun --> LandingCurriculum : displays/updates landing curriculum
 RCPRun --> HoverCurriculum : displays/updates hover curriculum
 RCPML --> MLConfig : mutates trainer settings
@@ -216,10 +224,11 @@ EnvConfig --> InferenceConfig : inference spawn profile
 EnvConfig --> LandingCurriculum : landing progression fields
 EnvConfig --> LegLandingCurriculum : independent leg-landing progress
 EnvConfig --> HoverCurriculum : hover progression fields
-EnvConfig --> RewardConfig : scenario reward factors
+EnvConfig --> ObjectiveConfig : owns complete four-task objective
 
 ' Training/inference repositories
 Launcher --> TrainingRunRepo : writes YAML/JSON run config
+TrainingRunRepo --> ObjectiveConfig : serializes + fingerprints objective
 Launcher --> LaunchRequest : packages trainer args
 Launcher --> ProcessLauncher : launches mlagents-learn
 Launcher --> Manager : spawns areas after trainer ready
@@ -227,6 +236,7 @@ Launcher --> EvaluationSession : aggregate fixed evaluation suite
 Manager --> ModelRepo : loads inference ONNX
 Launcher --> MLConfig : serializes trainer YAML
 Manager --> AgentSchema : configures ML-Agents behavior
+Manager --> ObjectiveValidator : blocks invalid objectives
 AgentSchema --> PartsConfig : missing hardware becomes zero/no-op slots
 
 ' Area spawning / assembly
@@ -300,28 +310,28 @@ AgentScen --> LegLandingEnvelope : common ablation spawn envelope
 RewardDispatcher --> LandingReward : landing scenario
 RewardDispatcher --> LegLandingReward : leg-landing scenario
 RewardDispatcher --> HoverReward : hover/hover-tracking
-RewardDispatcher --> TakeoffReward : takeoff
-RewardDispatcher --> BellyReward : belly-flop
+RewardDispatcher --> ObjectiveConfig : reads selected task configuration
 LandingReward --> RewardContext : reads context
 LegLandingReward --> RewardContext : reads contact context
 HoverReward --> RewardContext : reads context
-TakeoffReward --> RewardContext : reads context
-BellyReward --> RewardContext : reads context
 RewardContext --> RewardTerms : measured state terms
 LandingReward --> RewardDecision : returns reward/termination
 LegLandingReward --> RewardDecision : returns reward/termination
 HoverReward --> RewardDecision : returns reward/termination
-TakeoffReward --> RewardDecision : returns reward/termination
-BellyReward --> RewardDecision : returns reward/termination
+LandingReward --> RewardBreakdown : records term contributions
+LegLandingReward --> RewardBreakdown : records term contributions
+HoverReward --> RewardBreakdown : records term contributions
 
 ' Telemetry
 AgentTelem --> SensorPackage : samples sensor/load data
 AgentTelem --> TelemetryRow : builds per-step row
+AgentTelem --> RewardBreakdown : attaches current snapshot
 AgentTelem --> TelemetryLogger : logs step/episode
 TelemetryLogger --> TelemetryConfig : chooses enabled families
 TelemetryLogger --> TelemetryRunContext : output paths/run id
 TelemetryLogger --> TelemetryMetricCatalog : metric list/order
 TelemetryMetricCatalog --> TelemetryMetricDescriptor : name + row extractor
+TelemetryMetricCatalog --> RewardCatalog : scenario-specific term columns
 TelemetryLogger --> TelemetryFormatter : CSV headers/rows
 TelemetryLogger --> TelemetryAccumulator : episode summaries
 TelemetryAccumulator --> RunningStats : online mean/stddev
@@ -334,7 +344,6 @@ HardwareTestController --> HardwareTestOrchestrator : active test orchestration
 HardwareTestOrchestrator --> HardwareTestInterface : lifecycle contract
 HardwareTestInterface --> FinAxisTest : implementation
 HardwareTestInterface --> AeroTest : implementation
-HardwareTestInterface --> TakeoffTest : implementation
 HardwareTestInterface --> LandingTest : implementation
 HardwareTestInterface --> RcsVacTest : implementation
 HardwareTestInterface --> RcsSepTest : implementation
@@ -342,7 +351,6 @@ HardwareTestInterface --> ThrusterTest : implementation
 HardwareTestInterface --> TopStabTest : implementation
 FinAxisTest --> AgentAct : manual fin commands
 AeroTest --> AgentPhys : observes aero response
-TakeoffTest --> AgentAct : manual throttle commands
 LandingTest --> AgentCore : landing scenario diagnostics
 RcsVacTest --> AgentAct : manual RCS commands
 RcsSepTest --> AgentAct : manual RCS commands
@@ -357,9 +365,9 @@ HUD --> AgentAnchor : reads public flight getters
 
 note bottom
   Main ownership rule:
-  UI mutates shared config objects on TrainingAreaManager.
+  UI edits only the selected task's objective through shared descriptor catalogs.
   RocketAssembly converts RocketPartsConfig into hardware + RocketPhysicsConfig.
-  FalconAgent owns per-episode runtime state and calls actuators, physics, rewards, landing capture, and telemetry.
+  FalconAgent owns per-episode state; reward evaluation fills one reusable contribution buffer for telemetry.
 end note
 
 @enduml

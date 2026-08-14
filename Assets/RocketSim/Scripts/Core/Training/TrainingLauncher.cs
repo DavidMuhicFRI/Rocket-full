@@ -42,14 +42,33 @@ namespace RocketSim
         /// </summary>
         public void Launch(TrainingAreaManager manager)
         {
-            if (State == TrainingState.Launching || State == TrainingState.Connected) return;
+            if (State is TrainingState.Launching or TrainingState.Connected) return;
+            if (!manager)
+            {
+                UnityEngine.Debug.LogError("[TrainingLauncher] Cannot launch without a TrainingAreaManager.");
+                SetState(TrainingState.Failed);
+                return;
+            }
+
+            if (!ValidateObjective(manager.envConfig))
+            {
+                SetState(TrainingState.Failed);
+                return;
+            }
+
+            // The logger freezes its columns during Initialize, so scenario and
+            // hardware-dependent telemetry must be resolved before that call.
+            manager.PrepareTelemetrySchema();
 
             if (manager.envConfig.behaviorType == BehaviorType.Training)
             {
                 if (!TrainingRunRepository.TryValidateRunDestination(
                         manager.envConfig.runId,
                         resumeIfExists,
-                        out string destinationError))
+                        manager.envConfig,
+                        manager.partsConfig,
+                        manager.mlConfig,
+                        out var destinationError))
                 {
                     UnityEngine.Debug.LogError($"[TrainingLauncher] {destinationError}");
                     SetState(TrainingState.Failed);
@@ -61,8 +80,7 @@ namespace RocketSim
 
                 runId = manager.envConfig.runId;
                 const string torchDevice = "cuda";
-                TrainingEnvironmentProvenance trainingEnvironment =
-                    TrainingProcessLauncher.ProbeEnvironment(condaEnvName);
+                TrainingEnvironmentProvenance trainingEnvironment = TrainingProcessLauncher.ProbeEnvironment(condaEnvName);
                 if (!trainingEnvironment.probeSucceeded)
                     UnityEngine.Debug.LogWarning(
                         $"[TrainingLauncher] Trainer provenance probe failed: {trainingEnvironment.probeError}");
@@ -106,7 +124,7 @@ namespace RocketSim
                 CommunicatorFactory.Enabled = false;
                 runId = manager.envConfig.runId;
                 manager.envConfig.PrepareStandardEvaluation();
-                if (manager.envConfig.IsStandardEvaluation && TelemetryLogger.Instance == null)
+                if (manager.envConfig.IsStandardEvaluation && !TelemetryLogger.Instance)
                 {
                     // The evaluator advances from completed telemetry outcomes;
                     // starting without its logger would otherwise run forever.
@@ -142,6 +160,40 @@ namespace RocketSim
 
                 SetState(TrainingState.Connected);
             }
+        }
+
+        /// <summary>
+        /// Enforces the same objective validation for UI, scripted, and
+        /// headless launches. Warnings remain advisory so deliberate zero-value
+        /// experiments are possible; errors stop before files or processes are
+        /// created.
+        /// </summary>
+        static bool ValidateObjective(SimEnvironmentConfig envConfig)
+        {
+            if (envConfig == null)
+            {
+                UnityEngine.Debug.LogError("[TrainingLauncher] Environment configuration is missing.");
+                return false;
+            }
+            if (!Enum.IsDefined(typeof(ScenarioType), envConfig.scenario))
+            {
+                UnityEngine.Debug.LogError(
+                    $"[TrainingLauncher] Scenario value {(int)envConfig.scenario} is not part of the current schema.");
+                return false;
+            }
+
+            ObjectiveValidationResult validation = ObjectiveValidator.Validate(envConfig.scenario, envConfig.GetTrainingObjective(envConfig.scenario));
+            for (int i = 0; i < validation.issues.Count; i++)
+            {
+                ObjectiveValidationIssue issue = validation.issues[i];
+                string message = $"[TrainingLauncher] Objective {issue.code}: {issue.message}";
+                if (issue.severity == ObjectiveValidationSeverity.Error)
+                    UnityEngine.Debug.LogError(message);
+                else
+                    UnityEngine.Debug.LogWarning(message);
+            }
+
+            return validation.IsValid;
         }
 
         /// <summary>

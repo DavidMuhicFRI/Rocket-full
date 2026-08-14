@@ -117,47 +117,6 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Builds training scenario cards plus the scenario-specific reward section.
-        /// </summary>
-        VisualElement BuildTrainingScenarioSection(VisualElement c)
-        {
-            c.Add(UIHelper.SectionLabel("Training Scenario"));
-
-            var grid = new VisualElement();
-            grid.AddToClassList("rs-scenario-grid");
-            var rewardModelRoot = new VisualElement { name = "reward-model-section" };
-            var curriculumRoot = new VisualElement { name = "curriculum-section" };
-
-            foreach (var (type, scenarioName, desc) in Scenarios)
-            {
-                var card = CreateScenarioCard(type, scenarioName, desc, selectedScenario =>
-                {
-                    envConfig.scenario = selectedScenario;
-                    envConfig.moveTargetEnabled = ScenarioProfile.UsesMovingTarget(selectedScenario);
-                    ApplyCurrentScenarioHardwareDefaults();
-                    if (selectedScenario == ScenarioType.HoverTracking)
-                        envConfig.ResetHoverTrackCurriculum();
-                    if (selectedScenario.IsLanding())
-                        envConfig.ResetActiveLandingCurriculum();
-                    Dirty();
-                    BuildVehicleTab(_tabContents[VehicleTab]);
-                    RefreshScenarioCards(grid);
-                    BuildRewardModelSection(rewardModelRoot);
-                    BuildCurriculumSection(curriculumRoot);
-                });
-                grid.Add(card);
-            }
-
-            c.Add(grid);
-            RefreshScenarioCards(grid);
-
-            c.Add(rewardModelRoot);
-            BuildRewardModelSection(rewardModelRoot);
-
-            return curriculumRoot;
-        }
-
-        /// <summary>
         /// Builds scenario cards and spawn controls for the selected inference run.
         /// </summary>
         void BuildInferenceScenarioSection(VisualElement root)
@@ -262,11 +221,18 @@ namespace RocketSim
             root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{full.spawnAltitudeMin:F0}..{full.spawnAltitudeMax:F0} m"));
             root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {full.spawnRadius:F0} m"));
             root.Add(UIHelper.ReadOnly("Downward Speed", $"{full.verticalSpeedMin:F0}..{full.verticalSpeedMax:F0} m/s before feasibility clipping"));
+            TerminationParameters termination =
+                envConfig.GetTrainingObjective(envConfig.scenario).terminations;
             string limits = envConfig.scenario == ScenarioType.ChopstickLanding
                 ? $"{full.successRadius:F1} m radius, {full.successMaxVerticalSpeed:F1} m/s vertical, {full.successMaxYawErrorDeg:F0} deg yaw"
-                : $"3/4 feet, {full.successMaxVerticalSpeed:F1} m/s vertical, {full.successMaxTiltDeg:F0} deg tilt, {full.platformStableHoldTime:F2} s hold";
+                : $"{termination.legMinimumStableFeet}/4 feet, {full.successMaxVerticalSpeed:F1} m/s vertical, " +
+                  $"{full.successMaxTiltDeg:F0} deg tilt, {full.platformStableHoldTime:F2} s hold";
             root.Add(UIHelper.ReadOnly("Success Limits", limits));
-            root.Add(UIHelper.ReadOnly("Emergency Limit", $"{SimEnvironmentConfig.LandingDefaultMaxEpisodeSeconds:F0} simulated seconds"));
+            root.Add(UIHelper.ReadOnly(
+                "Emergency Limit",
+                termination.timeLimitEnabled
+                    ? $"{termination.maximumEpisodeSeconds:F0} simulated seconds (edit in Reward tab)"
+                    : "disabled (edit in Reward tab)"));
         }
 
         /// <summary>
@@ -297,7 +263,7 @@ namespace RocketSim
                 ? "Each episode samples independently from the configured ranges."
                 : "Range midpoints are used; offset and horizontal motion use the +X direction."));
 
-            float altitudeMax = envConfig.scenario == ScenarioType.Takeoff ? 200f : 1500f;
+            const float altitudeMax = 1500f;
             AddProfileSlider(root, profile, "Altitude Min (m)", profile.altitudeMin, 0f, altitudeMax,
                 value => profile.altitudeMin = value,
                 "Lowest altitude from which an inference episode can start.");
@@ -362,7 +328,7 @@ namespace RocketSim
                 BuildMovingTargetControls(root);
         }
 
-        /// <summary>Builds inference catch height/yaw controls and capture-limit readouts.</summary>
+        /// <summary>Builds catch height/yaw controls and objective-derived capture readouts.</summary>
         void BuildLandingTargetControls(VisualElement root)
         {
             root.Add(UIHelper.SectionLabel("Tower Capture Target"));
@@ -374,11 +340,13 @@ namespace RocketSim
                 "Sets the heading the rocket should match when reaching the catch point."));
             root.Add(UIHelper.ReadOnly(
                 "Catch Limits",
-                $"catch @ {envConfig.landingCatchAltitude:F1} m, {envConfig.CurrentLandingSuccessRadius:F1} m, {envConfig.CurrentLandingSuccessMaxYawErrorDeg:F0} deg yaw"));
+                $"catch @ {envConfig.landingCatchAltitude:F1} m, {envConfig.CurrentLandingSuccessRadius:F1} m, " +
+                $"{envConfig.CurrentLandingSuccessMaxYawErrorDeg:F0} deg yaw (edit in Reward tab)"));
             root.Add(UIHelper.ReadOnly(
                 "Catch Platform",
                 envConfig.landingPlatformEnabled
-                    ? $"{envConfig.CurrentLandingPlatformHalfSize:F1} m half-size, hold {envConfig.CurrentLandingPlatformStableHoldTime:F2} s"
+                    ? $"{envConfig.CurrentLandingPlatformHalfSize:F1} m half-size, hold " +
+                      $"{envConfig.CurrentLandingPlatformStableHoldTime:F2} s (edit hold in Reward tab)"
                     : "disabled"));
         }
 
@@ -387,24 +355,41 @@ namespace RocketSim
         {
             LandingCurriculumProfile profile = envConfig.GetActiveLandingCurriculumProfile(
                 envConfig.ActiveLandingCurriculumProgress);
+            TerminationParameters termination =
+                envConfig.GetTrainingObjective(ScenarioType.LegLanding).terminations;
             root.Add(UIHelper.SectionLabel("Physical Landing Target"));
             root.Add(UIHelper.ReadOnly("Pad", "Existing 20 x 20 m Landing_Pad collider"));
-            root.Add(UIHelper.ReadOnly("Stable Contact", $"at least 3 of 4 feet for {profile.platformStableHoldTime:F2} s"));
+            root.Add(UIHelper.ReadOnly(
+                "Stable Contact",
+                $"at least {termination.legMinimumStableFeet} of 4 feet for " +
+                $"{profile.platformStableHoldTime:F2} s (edit in Reward tab)"));
             root.Add(UIHelper.ReadOnly("Touchdown Limits",
-                $"vertical < {profile.successMaxVerticalSpeed:F1} m/s, horizontal < {profile.successMaxHorizontalSpeed:F1} m/s, tilt < {profile.successMaxTiltDeg:F0} deg"));
+                $"vertical < {profile.successMaxVerticalSpeed:F1} m/s, horizontal < " +
+                $"{profile.successMaxHorizontalSpeed:F1} m/s, tilt < {profile.successMaxTiltDeg:F0} deg " +
+                "(edit in Reward tab)"));
         }
 
-        /// <summary>Builds hover-target movement and settling controls.</summary>
+        /// <summary>
+        /// Builds hover-target movement controls. Capture criteria are read-only
+        /// here because the Reward tab is their single editable source of truth.
+        /// </summary>
         void BuildMovingTargetControls(VisualElement root)
         {
+            TerminationParameters termination =
+                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            float difficulty = envConfig.hoverTrackCurriculumProgress;
             root.Add(UIHelper.SectionLabel("Moving Target"));
             root.Add(UIHelper.ReadOnly("Move Interval", $"{envConfig.targetMoveInterval:F1} s (curriculum)"));
             root.Add(UIHelper.Slider("Move Radius (m)", envConfig.targetMoveRadius, 2f, 80f,
                 value => envConfig.targetMoveRadius = value,
                 "Sets how far the hover target can move from its previous position."));
-            root.Add(UIHelper.Slider("Settle Radius (m)", envConfig.hoverTrackSettleRadius, 1f, 20f,
-                value => envConfig.hoverTrackSettleRadius = value,
-                "Sets how close the rocket must be before precise settling rewards begin."));
+            root.Add(UIHelper.ReadOnly(
+                "Capture Criteria",
+                $"{termination.trackingCaptureRadiusM.At(difficulty):F1} m radius, " +
+                $"{termination.trackingCaptureMaxHorizontalSpeedMps.At(difficulty):F1} m/s, " +
+                $"{termination.trackingCaptureMaxTiltDeg.At(difficulty):F0} deg, " +
+                $"hold {termination.trackingCaptureHoldSeconds.At(difficulty):F2} s " +
+                "(edit in Reward tab)"));
         }
 
         /// <summary>

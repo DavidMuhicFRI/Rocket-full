@@ -1,9 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Rewards/HoverRewardModel.cs
-// Purpose: Defines fixed-hover and moving-target hover rewards, sharing one
-// stability baseline and adding approach/settle terms for target tracking.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
+// Purpose: Scores fixed and moving-target hover from explicit objective values,
+// including capture events and an optional capture-count success terminal.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -12,132 +10,271 @@ namespace RocketSim
 {
     public static partial class RocketRewardModel
     {
-        // One restart costs less than one second of accurate hover shaping and
-        // far less than a terminal failure. It therefore discourages needless
-        // cycling without preventing pulse control when minimum thrust is too high.
-        public const float HoverEngineRestartPenalty = 0.25f;
-
-        /// <summary>
-        /// Scores fixed-position hover by rewarding altitude hold, centering,
-        /// uprightness, low speed, and calm attitude until a terminal condition occurs.
-        /// </summary>
-        static RewardDecision Hover(RewardTerms t, RewardRuntimeContext ctx, ScenarioRewardFactors f)
+        static RewardDecision Hover(
+            RewardTerms t,
+            RewardRuntimeContext ctx,
+            ScenarioObjectiveConfig objective,
+            RewardContributionBuffer contributions)
         {
-            float reward = HoverBaselineReward(t, f);
-            float restartEvent = HoverRestartEvent(ctx, f);
+            float shapingRate = HoverBaselineRate(t, objective, contributions);
+            float eventReward = HoverRestartEvent(ctx, objective.rewards, contributions);
 
-            if (ctx.altitude < ctx.terminalAltitude)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverGroundImpact);
-            if (t.upDot < 0.45f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverUnsafeAttitude);
-            if (ctx.fuelKg <= 0f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverFuelDepleted);
-            if (t.planarDistance > 80f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverTooFarFromTarget);
-            if (ctx.altitude > 200f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverAboveAltitudeLimit);
+            if (TryHoverSafetyTermination(t, ctx, objective, contributions, shapingRate, eventReward, out RewardDecision failure))
+                return failure;
 
-            return RewardDecision.Continue(reward, restartEvent);
+            if (objective.terminations.timeLimitEnabled &&
+                ctx.episodeElapsedSeconds >= objective.terminations.maximumEpisodeSeconds)
+                return RewardDecision.Terminate(
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.HoverTimeLimitCost,
+                        objective.rewards.hoverTimeLimitCost),
+                    eventReward: eventReward,
+                    terminationReason: EpisodeTerminationReason.HoverTimeLimit);
+
+            return RewardDecision.Continue(shapingRate, eventReward);
         }
 
-        /// <summary>
-        /// Scores moving-target hover by combining baseline hover stability with
-        /// approach shaping before capture and settle shaping inside the hover radius.
-        /// </summary>
-        static RewardDecision HoverTracking(RewardTerms t, RewardRuntimeContext ctx, ScenarioRewardFactors f)
+        static RewardDecision HoverTracking(
+            RewardTerms t,
+            RewardRuntimeContext ctx,
+            ScenarioObjectiveConfig objective,
+            RewardContributionBuffer contributions)
         {
-            float settleRadius = Mathf.Max(ctx.hoverTrackSettleRadius, 1f);
-            bool hoverPhase = t.planarDistance <= settleRadius;
+            RewardParameters r = objective.rewards;
+            RewardShapingParameters s = objective.shaping;
+            TerminationParameters end = objective.terminations;
+            float captureRadius = SafeScale(
+                end.trackingCaptureRadiusM.At(ctx.curriculumDifficulty01));
+            bool settlePhase = t.planarDistance <= captureRadius;
 
-            float reward = HoverBaselineReward(t, f);
-            float restartEvent = HoverRestartEvent(ctx, f);
-            if (hoverPhase)
+            float shapingRate = HoverBaselineRate(t, objective, contributions);
+            if (settlePhase)
             {
-                float tightCenter01 = Exp01(t.planarDistance, Mathf.Max(2f, settleRadius * 0.5f));
-                float horizontalCalm01 = Exp01(t.planarSpeed, 1.8f);
-                float verticalCalm01 = Exp01(Mathf.Abs(t.verticalSpeed), 1.4f);
-                float rotationalCalm01 = Exp01(t.angularRateDegS, 28f);
+                float tightCenterFalloff = Mathf.Max(
+                    SafeScale(s.trackingTightCenterMinimumFalloffM),
+                    captureRadius * s.trackingTightCenterRadiusFraction);
+                float tightCenter01 = Exp01(t.planarDistance, tightCenterFalloff);
+                float horizontalCalm01 = Exp01(
+                    t.planarSpeed, s.trackingHorizontalCalmFalloffMps);
+                float verticalCalm01 = Exp01(
+                    t.verticalSpeed, s.trackingVerticalCalmFalloffMps);
+                float rotationCalm01 = Exp01(
+                    t.angularRateDegS, s.trackingRotationCalmFalloffDegS);
 
-                reward +=
-                    0.045f * f.settle * tightCenter01 +
-                    0.035f * f.speed * horizontalCalm01 +
-                    0.025f * f.verticalSpeed * verticalCalm01 +
-                    0.020f * f.rotation * rotationalCalm01 +
-                    0.020f * f.settle * tightCenter01 * horizontalCalm01 * verticalCalm01 * t.upright01 -
-                    0.0005f * f.speed * t.planarSpeed -
-                    0.0004f * f.verticalSpeed * Mathf.Abs(t.verticalSpeed);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingSettleCenterRewardRate,
+                    r.trackingSettleCenterRewardRate, tightCenter01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingSettleHorizontalCalmRewardRate,
+                    r.trackingSettleHorizontalCalmRewardRate, horizontalCalm01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingSettleVerticalCalmRewardRate,
+                    r.trackingSettleVerticalCalmRewardRate, verticalCalm01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingSettleRotationCalmRewardRate,
+                    r.trackingSettleRotationCalmRewardRate, rotationCalm01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingSettleCompositeRewardRate,
+                    r.trackingSettleCompositeRewardRate,
+                    tightCenter01 * horizontalCalm01 * verticalCalm01 * t.upright01);
+                shapingRate += CostRate(contributions,
+                    RewardParameterId.TrackingSettlePlanarSpeedCostRate,
+                    r.trackingSettlePlanarSpeedCostRate, t.planarSpeed);
+                shapingRate += CostRate(contributions,
+                    RewardParameterId.TrackingSettleVerticalSpeedCostRate,
+                    r.trackingSettleVerticalSpeedCostRate, Mathf.Abs(t.verticalSpeed));
             }
             else
             {
-                float distanceBeyondHover = Mathf.Max(0f, t.planarDistance - settleRadius);
-                float approachSpeed01 = Mathf.Clamp01(t.horizontalClosureRate / 5f);
+                float distanceBeyondCapture = Mathf.Max(0f, t.planarDistance - captureRadius);
+                float approachSpeed01 = Mathf.Clamp01(
+                    t.horizontalClosureRate / SafeScale(s.trackingApproachSpeedScaleMps));
                 float movingAwaySpeed = Mathf.Max(0f, -t.horizontalClosureRate);
-                float direction01 = t.planarSpeed > 0.1f
-                    ? Mathf.Clamp01((t.horizontalClosureRate / Mathf.Max(t.planarSpeed, 0.001f) + 1f) * 0.5f)
+                float direction01 = t.planarSpeed > s.trackingDirectionMinimumSpeedMps
+                    ? Mathf.Clamp01(
+                        (t.horizontalClosureRate / SafeScale(t.planarSpeed) + 1f) * 0.5f)
                     : 0f;
-                float usefulSpeed01 = Mathf.Clamp01(t.planarSpeed / 5f);
-                float farFromHover01 = Mathf.Clamp01(distanceBeyondHover / Mathf.Max(settleRadius, 1f));
-                float overspeedPenalty = Mathf.Clamp01(Mathf.Max(0f, t.planarSpeed - 8f) / 6f);
+                float usefulSpeed01 = Mathf.Clamp01(
+                    t.planarSpeed / SafeScale(s.trackingUsefulSpeedScaleMps));
+                float farDistanceScale = SafeScale(
+                    captureRadius * s.trackingFarDistanceScaleMultiplier);
+                float farFromCapture01 = Mathf.Clamp01(distanceBeyondCapture / farDistanceScale);
+                float overspeed01 = Mathf.Clamp01(
+                    Mathf.Max(0f, t.planarSpeed - s.trackingOverspeedThresholdMps) /
+                    SafeScale(s.trackingOverspeedRangeMps));
 
-                reward +=
-                    0.085f * f.tracking * approachSpeed01 +
-                    0.040f * f.tracking * direction01 +
-                    0.020f * f.speed * usefulSpeed01 -
-                    0.045f * f.tracking * Mathf.Clamp01(movingAwaySpeed / 4f) -
-                    0.025f * f.tracking * farFromHover01 * (1f - usefulSpeed01) -
-                    0.020f * f.speed * overspeedPenalty;
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingApproachClosureRewardRate,
+                    r.trackingApproachClosureRewardRate, approachSpeed01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingApproachDirectionRewardRate,
+                    r.trackingApproachDirectionRewardRate, direction01);
+                shapingRate += RewardRate(contributions,
+                    RewardParameterId.TrackingUsefulSpeedRewardRate,
+                    r.trackingUsefulSpeedRewardRate, usefulSpeed01);
+                shapingRate += CostRate(contributions,
+                    RewardParameterId.TrackingMovingAwayCostRate,
+                    r.trackingMovingAwayCostRate,
+                    Mathf.Clamp01(movingAwaySpeed /
+                                  SafeScale(s.trackingMovingAwaySpeedScaleMps)));
+                shapingRate += CostRate(contributions,
+                    RewardParameterId.TrackingLoiteringCostRate,
+                    r.trackingLoiteringCostRate, farFromCapture01 * (1f - usefulSpeed01));
+                shapingRate += CostRate(contributions,
+                    RewardParameterId.TrackingOverspeedCostRate,
+                    r.trackingOverspeedCostRate, overspeed01);
             }
 
-            if (ctx.altitude < ctx.terminalAltitude)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverGroundImpact);
-            if (t.upDot < 0.45f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverUnsafeAttitude);
-            if (ctx.fuelKg <= 0f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverFuelDepleted);
-            if (t.planarDistance > 90f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverTooFarFromTarget);
-            if (ctx.altitude > 200f)
-                return HoverFailure(reward, restartEvent, f, EpisodeTerminationReason.HoverAboveAltitudeLimit);
+            float eventReward = HoverRestartEvent(ctx, r, contributions);
+            eventReward += EventReward(
+                contributions,
+                RewardParameterId.TrackingTargetCaptureReward,
+                r.trackingTargetCaptureReward,
+                ctx.hoverTrackTargetCapturedThisStep ? 1f : 0f);
 
-            return RewardDecision.Continue(reward, restartEvent);
+            if (TryHoverSafetyTermination(
+                    t, ctx, objective, contributions, shapingRate, eventReward,
+                    out RewardDecision failure))
+                return failure;
+
+            // A capture goal is evaluated only on a new capture event. Safety
+            // failures above intentionally take precedence on the same step.
+            if (end.trackingCaptureGoalEnabled &&
+                ctx.hoverTrackTargetCapturedThisStep &&
+                end.trackingRequiredCaptures > 0 &&
+                ctx.hoverTrackEpisodeCaptures >= end.trackingRequiredCaptures)
+                return RewardDecision.Terminate(
+                    shapingRate,
+                    TerminalReward(contributions, RewardParameterId.TrackingCaptureGoalReward,
+                        r.trackingCaptureGoalReward),
+                    successTerminal: true,
+                    eventReward: eventReward,
+                    terminationReason: EpisodeTerminationReason.HoverTrackingCaptureGoal);
+
+            // A success on the exact limit boundary wins over the time limit.
+            if (end.timeLimitEnabled && ctx.episodeElapsedSeconds >= end.maximumEpisodeSeconds)
+                return RewardDecision.Terminate(
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.HoverTimeLimitCost,
+                        r.hoverTimeLimitCost),
+                    eventReward: eventReward,
+                    terminationReason: EpisodeTerminationReason.HoverTimeLimit);
+
+            return RewardDecision.Continue(shapingRate, eventReward);
         }
 
-        /// <summary>
-        /// Applies an instantaneous cost only when an engine ignites after a
-        /// previous shutdown. The initial hover ignition is supplied by the
-        /// scenario and does not count as a restart.
-        /// </summary>
-        static float HoverRestartEvent(RewardRuntimeContext ctx, ScenarioRewardFactors f) =>
-            -HoverEngineRestartPenalty * f.engineRestart * Mathf.Max(0, ctx.engineRestartsThisStep);
+        static float HoverBaselineRate(
+            RewardTerms t,
+            ScenarioObjectiveConfig objective,
+            RewardContributionBuffer contributions)
+        {
+            RewardParameters r = objective.rewards;
+            RewardShapingParameters s = objective.shaping;
+            float rate = 0f;
+            rate += RewardRate(contributions, RewardParameterId.HoverAltitudeProximityRewardRate,
+                r.hoverAltitudeProximityRewardRate,
+                Exp01(t.verticalError, s.hoverAltitudeFalloffM));
+            rate += RewardRate(contributions, RewardParameterId.HoverPlanarProximityRewardRate,
+                r.hoverPlanarProximityRewardRate,
+                Exp01(t.planarDistance, s.hoverPlanarFalloffM));
+            rate += RewardRate(contributions, RewardParameterId.HoverUprightRewardRate,
+                r.hoverUprightRewardRate, t.upright01);
+            rate += RewardRate(contributions, RewardParameterId.HoverSpeedCalmRewardRate,
+                r.hoverSpeedCalmRewardRate,
+                Exp01(t.speed, s.hoverSpeedFalloffMps));
+            rate += RewardRate(contributions, RewardParameterId.HoverRotationCalmRewardRate,
+                r.hoverRotationCalmRewardRate,
+                Exp01(t.angularRateDegS, s.hoverAngularRateFalloffDegS));
+            rate += CostRate(contributions, RewardParameterId.HoverLinearSpeedCostRate,
+                r.hoverLinearSpeedCostRate, t.speed);
+            rate += CostRate(contributions, RewardParameterId.HoverAngularRateCostRate,
+                r.hoverAngularRateCostRate, t.angularRateDegS);
+            rate += CostRate(contributions, RewardParameterId.ControlEffortCostRate,
+                r.controlEffortCostRate, t.controlEffort);
+            return rate;
+        }
 
-        /// <summary>Builds one categorized fixed/tracking-hover failure.</summary>
+        static float HoverRestartEvent(
+            RewardRuntimeContext ctx,
+            RewardParameters rewards,
+            RewardContributionBuffer contributions) =>
+            EventCost(
+                contributions,
+                RewardParameterId.EngineRestartCost,
+                rewards.engineRestartCost,
+                Mathf.Max(0, ctx.engineRestartsThisStep));
+
+        /// <summary>
+        /// Evaluates shared hover safety rules in stable priority order:
+        /// ground, attitude, fuel, horizontal escape, then altitude escape.
+        /// </summary>
+        static bool TryHoverSafetyTermination(
+            RewardTerms t,
+            RewardRuntimeContext ctx,
+            ScenarioObjectiveConfig objective,
+            RewardContributionBuffer contributions,
+            float shapingRate,
+            float eventReward,
+            out RewardDecision decision)
+        {
+            RewardParameters r = objective.rewards;
+            TerminationParameters end = objective.terminations;
+
+            if (end.hoverGroundImpactEnabled && ctx.altitude <= ctx.terminalAltitude + end.hoverGroundClearanceM)
+            {
+                decision = HoverFailure(shapingRate, eventReward, contributions,
+                    RewardParameterId.HoverGroundImpactCost, r.hoverGroundImpactCost,
+                    EpisodeTerminationReason.HoverGroundImpact);
+                return true;
+            }
+
+            if (end.unsafeAttitudeEnabled && TiltDegrees(t.upDot) > end.maximumTiltDeg)
+            {
+                decision = HoverFailure(shapingRate, eventReward, contributions,
+                    RewardParameterId.HoverUnsafeAttitudeCost, r.hoverUnsafeAttitudeCost,
+                    EpisodeTerminationReason.HoverUnsafeAttitude);
+                return true;
+            }
+
+            if (end.fuelDepletionEnabled && ctx.fuelKg <= end.minimumFuelKg)
+            {
+                decision = HoverFailure(shapingRate, eventReward, contributions,
+                    RewardParameterId.HoverFuelDepletedCost, r.hoverFuelDepletedCost,
+                    EpisodeTerminationReason.HoverFuelDepleted);
+                return true;
+            }
+
+            if (end.planarFlyawayEnabled && t.planarDistance > end.maximumPlanarDistanceM)
+            {
+                decision = HoverFailure(shapingRate, eventReward, contributions,
+                    RewardParameterId.HoverTooFarFromTargetCost, r.hoverTooFarFromTargetCost,
+                    EpisodeTerminationReason.HoverTooFarFromTarget);
+                return true;
+            }
+
+            if (end.altitudeCeilingEnabled && ctx.altitude > end.hoverMaximumAltitudeM)
+            {
+                decision = HoverFailure(shapingRate, eventReward, contributions,
+                    RewardParameterId.HoverAboveAltitudeLimitCost, r.hoverAboveAltitudeLimitCost,
+                    EpisodeTerminationReason.HoverAboveAltitudeLimit);
+                return true;
+            }
+
+            decision = RewardDecision.None;
+            return false;
+        }
+
         static RewardDecision HoverFailure(
-            float shapingReward,
-            float restartEvent,
-            ScenarioRewardFactors factors,
+            float shapingRate,
+            float eventReward,
+            RewardContributionBuffer contributions,
+            RewardParameterId id,
+            float magnitude,
             EpisodeTerminationReason reason) =>
             RewardDecision.Terminate(
-                shapingReward,
-                Terminal(-10f, factors),
-                eventReward: restartEvent,
+                shapingRate,
+                TerminalCost(contributions, id, magnitude),
+                eventReward: eventReward,
                 terminationReason: reason);
-
-        /// <summary>
-        /// Calculates the shared hover shaping terms used by both stationary
-        /// hover and moving-target hover scenarios.
-        /// </summary>
-        static float HoverBaselineReward(RewardTerms t, ScenarioRewardFactors f)
-        {
-            return
-                0.12f * f.altitude * Exp01(Mathf.Abs(t.verticalError), 5f) +
-                0.12f * f.targetPrecision * Exp01(t.planarDistance, 8f) +
-                0.07f * f.uprightness * t.upright01 +
-                0.06f * f.speed * Exp01(t.speed, 4f) +
-                0.04f * f.rotation * Exp01(t.angularRateDegS, 35f) -
-                0.0015f * f.speed * t.speed -
-                0.0008f * f.rotation * t.angularRateDegS -
-                0.0025f * f.controlEffort * t.controlEffort;
-        }
-
     }
 }

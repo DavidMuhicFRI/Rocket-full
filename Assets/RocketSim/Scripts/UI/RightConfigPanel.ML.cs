@@ -122,7 +122,7 @@ namespace RocketSim
             root.Add(UIHelper.SectionLabel("Reward - Extrinsic"));
 
             root.Add(UIHelper.Slider("gamma", mlConfig.extrinsicGamma, 0.80f, 0.9999f, v => mlConfig.extrinsicGamma = v,
-                "Per-decision discount factor. At the fixed 33.3 Hz control rate, 0.995 retains about 19% of a reward received ten simulated seconds later."));
+                "Per-decision discount factor. At the fixed 33.3 Hz control rate, 0.9995 retains about 85% of a reward received ten simulated seconds later."));
 
             root.Add(UIHelper.Slider("strength", mlConfig.extrinsicStrength, 0.10f, 5f, v => mlConfig.extrinsicStrength = v,
                 "Scales the task reward before it is combined with curiosity."));
@@ -191,11 +191,8 @@ namespace RocketSim
         static VisualElement BuildMlDescription(string text)
         {
             var label = new Label(text);
-            label.style.fontSize = 9;
-            label.style.color = new StyleColor(new Color(0.42f, 0.50f, 0.62f));
-            label.style.marginLeft = 154;
-            label.style.marginBottom = 3;
-            label.style.whiteSpace = WhiteSpace.Normal;
+            label.AddToClassList("rs-group-detail");
+            label.AddToClassList("rs-ml-detail");
             return label;
         }
     }

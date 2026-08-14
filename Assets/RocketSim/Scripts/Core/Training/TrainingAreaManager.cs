@@ -17,7 +17,7 @@ using UnityEngine;
 namespace RocketSim
 {
     // Spawns N copies of TrainingArea.prefab in a square grid.
-    // Holds the THREE shared config objects that ConfigBridge later passes to
+    // Holds the four shared config objects that ConfigBridge later passes to
     // RightConfigPanel.  All agents share the same SimEnvironmentConfig reference
     // — the panel writes once and every agent reads it automatically.
     //
@@ -106,8 +106,7 @@ namespace RocketSim
                 return false;
             }
 
-            ApplyCurrentScenarioHardwareDefaults();
-            ConfigureTelemetrySlots();
+            PrepareTelemetrySchema();
             envConfig.ApplyHoverTrackCurriculum();
             envConfig.ApplyActiveLandingCurriculum();
 
@@ -278,8 +277,7 @@ namespace RocketSim
 
             if (clearExisting)
                 ClearSpawnedAreas();
-            ApplyCurrentScenarioHardwareDefaults();
-            ConfigureTelemetrySlots();
+            PrepareTelemetrySchema();
             CommunicatorFactory.Enabled = false;
             TelemetryLogger.Instance?.DisableLogging();
 
@@ -321,8 +319,7 @@ namespace RocketSim
         // Pushes updated dimensions / enabled-state to every training area.
         public void ApplyPartsConfigToAll()
         {
-            ApplyCurrentScenarioHardwareDefaults();
-            ConfigureTelemetrySlots();
+            PrepareTelemetrySchema();
 
             foreach (var asm in _assemblies)
                 if (asm) asm.ApplyPartsConfig(partsConfig);
@@ -448,14 +445,22 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Updates telemetry schema counts from the current hardware config so
-        /// CSV rows match active engines, fins, and engine grouping.
+        /// Applies the selected scenario's hardware defaults and updates the
+        /// telemetry schema before a logger creates its CSV columns. Calling
+        /// this again while spawning is harmless and keeps direct manager users
+        /// on the same path as launches started through the UI.
         /// </summary>
-        void ConfigureTelemetrySlots()
+        public void PrepareTelemetrySchema()
         {
+            partsConfig ??= new RocketPartsConfig();
+            telemetryConfig ??= new TelemetryConfig();
+            envConfig ??= new SimEnvironmentConfig();
+            ApplyCurrentScenarioHardwareDefaults();
+
             telemetryConfig.activeEngineCount = partsConfig.GetActiveEngineCount();
             telemetryConfig.independentEngines = partsConfig.independentEngines;
             telemetryConfig.activeFinCount = partsConfig.GetFinCount();
+            telemetryConfig.scenario = envConfig.scenario;
         }
 
         /// <summary>

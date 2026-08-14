@@ -37,9 +37,7 @@ namespace RocketSim
         {
             var result = new TrainingEnvironmentProvenance
             {
-                condaEnvironmentName = string.IsNullOrWhiteSpace(condaEnvironmentName)
-                    ? "unknown"
-                    : condaEnvironmentName
+                condaEnvironmentName = string.IsNullOrWhiteSpace(condaEnvironmentName) ? "unknown" : condaEnvironmentName
             };
 
             try

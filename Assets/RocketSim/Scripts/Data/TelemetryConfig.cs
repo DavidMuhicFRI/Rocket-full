@@ -27,7 +27,8 @@ namespace RocketSim
         public bool logControlMetrics     = true;  // throttle, gimbal, fins, fuel
         public bool logAeroLoadMetrics    = true;  // dynamic pressure, G, heat, stress
         public bool logEnvironmentMetrics = false; // wind/gust scalars
-        public bool logRewardMetrics      = true;  // scalar reward accumulated this step
+        public bool logRewardMetrics      = true;  // scalar and cadence totals
+        public bool logRewardBreakdown    = false; // per-objective raw/coefficient/contribution diagnostics
 
         [Range(1, 100)]
         [Tooltip("Writes one detailed training trajectory row every N physics steps. Episode statistics still consume every physics step, and evaluation always logs every step.")]
@@ -37,6 +38,7 @@ namespace RocketSim
         [HideInInspector] public int  activeEngineCount   = 1;
         [HideInInspector] public bool independentEngines  = false;
         [HideInInspector] public int  activeFinCount      = 4;
+        [HideInInspector] public ScenarioType scenario    = ScenarioType.ChopstickLanding;
 
         public const int MaxEngines = 9;
         public const int MaxFins    = 4;

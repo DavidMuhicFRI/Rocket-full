@@ -25,6 +25,7 @@ namespace RocketSim
         public float upDot;
         public float upright01;
         public float angularRateDegS;
+        public float yawRateDegS;
         public float yawErrorDeg;
         public float controlEffort;
     }}

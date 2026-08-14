@@ -137,11 +137,11 @@ namespace RocketSim
             fuelRemainingRow.name = "label-fuel-remaining";
             root.Add(fuelRemainingRow);
 
-            var axialAreaRow = UIHelper.ReadOnly("Axial Area", "0 mÂ²");
+            var axialAreaRow = UIHelper.ReadOnly("Axial Area", "0 m^2");
             axialAreaRow.name = "label-axial-area";
             root.Add(axialAreaRow);
 
-            var lateralAreaRow = UIHelper.ReadOnly("Projected Side Area", "0 mÂ²");
+            var lateralAreaRow = UIHelper.ReadOnly("Projected Side Area", "0 m^2");
             lateralAreaRow.name = "label-projected-side-area";
             root.Add(lateralAreaRow);
         }
@@ -170,7 +170,7 @@ namespace RocketSim
             root.Add(UIHelper.Slider("Specific Impulse (s)", partsConfig.specificImpulse, 200f, 450f, v =>
                 EditCustomParts(() => partsConfig.specificImpulse = v, () => RefreshEngineReadouts(root)),
                 "Sets main-engine fuel efficiency; higher values burn less fuel for the same thrust."));
-            root.Add(UIHelper.Slider("Gimbal Range (Â°)", partsConfig.maxGimbalAngle, 1f, 15f, v =>
+            root.Add(UIHelper.Slider("Gimbal Range (deg)", partsConfig.maxGimbalAngle, 1f, 15f, v =>
                 EditCustomParts(() => partsConfig.maxGimbalAngle = v),
                 "Sets the maximum engine tilt used to steer the rocket."));
         }
@@ -222,7 +222,7 @@ namespace RocketSim
             if (!partsConfig.finsEnabled) return;
             root.Add(BuildFinSelector(root));
             if (partsConfig.finLayout == FinLayout.FourFins_X)
-                root.Add(BuildGroupDetail("Asymmetric layout with alternating 60Â° and 120Â° gaps. Verify these angles against the intended booster reference."));
+                root.Add(BuildGroupDetail("Asymmetric layout with alternating 60 deg and 120 deg gaps. Verify these angles against the intended booster reference."));
             root.Add(UIHelper.Slider("Radial Length (m)", partsConfig.finWidthX, 0.2f, 4f, v =>
                 EditCustomParts(() => partsConfig.finWidthX = v, () => RefreshFinReadouts(root)),
                 "Sets how far each grid fin extends outward from the body."));
@@ -232,17 +232,17 @@ namespace RocketSim
             root.Add(UIHelper.Slider("Fin Thickness (m)", partsConfig.finThickness, 0.1f, 1f, v =>
                 EditCustomParts(() => partsConfig.finThickness = v),
                 "Changes the physical thickness used for the grid-fin shape."));
-            root.Add(UIHelper.Slider("Max Angle (Â°)", partsConfig.maxFinAngle, 5f, 60f, v =>
+            root.Add(UIHelper.Slider("Max Angle (deg)", partsConfig.maxFinAngle, 5f, 60f, v =>
                 EditCustomParts(() => partsConfig.maxFinAngle = v),
                 "Sets the largest grid-fin deflection available for steering."));
-            root.Add(UIHelper.Slider("Slew Rate (Â°/s)", partsConfig.finSlewRate, 10f, 200f, v =>
+            root.Add(UIHelper.Slider("Slew Rate (deg/s)", partsConfig.finSlewRate, 10f, 200f, v =>
                 EditCustomParts(() => partsConfig.finSlewRate = v),
                 "Sets how quickly grid fins can reach a commanded angle."));
             root.Add(UIHelper.Slider("Aerodynamic Effectiveness", partsConfig.liftScale, 0.1f, 3f, v =>
                 EditCustomParts(() => partsConfig.liftScale = v),
                 "Multiplies the aerodynamic steering force produced by the fins."));
 
-            var finAreaRow = UIHelper.ReadOnly("Fin area", "0 mÂ²");
+            var finAreaRow = UIHelper.ReadOnly("Fin area", "0 m^2");
             finAreaRow.name = "label-fin-area";
             root.Add(finAreaRow);
         }
@@ -259,7 +259,7 @@ namespace RocketSim
                 BuildVehicleTab(_tabContents[VehicleTab]);
             }));
             if (!partsConfig.rcsEnabled) return;
-            root.Add(UIHelper.ReadOnly("Layout", "2 pods Ã— 4 nozzles"));
+            root.Add(UIHelper.ReadOnly("Layout", "2 pods x 4 nozzles"));
             root.Add(UIHelper.Slider("Thrust / Jet (N)", partsConfig.rcsThrust, 100f, 2000f, v =>
                 EditCustomParts(() => partsConfig.rcsThrust = v),
                 "Sets the force produced by each reaction-control jet."));
@@ -335,10 +335,10 @@ namespace RocketSim
             UpdateLabelText(root, "label-dry-mass", $"{AdjustedDryMass(partsConfig.baseDryMass * surfRatio):F0} kg");
             UpdateLabelText(root, "label-fuel-mass", $"{partsConfig.baseFuelMass * volRatio:F0} kg");
             string fuelSource = partsConfig.useScenarioRecommendedFuel ? ScenarioLabel(CurrentScenario()) : "Custom start fuel";
-            UpdateLabelText(root, "label-scenario-fuel", $"{fuelSource} Â· {partsConfig.startFuelFraction * 100f:F0}%");
+            UpdateLabelText(root, "label-scenario-fuel", $"{fuelSource} - {partsConfig.startFuelFraction * 100f:F0}%");
             UpdateLabelText(root, "label-fuel-remaining", $"{partsConfig.startFuelMass:F0} kg");
-            UpdateLabelText(root, "label-axial-area", $"{Mathf.PI * r * r:F2} mÂ²");
-            UpdateLabelText(root, "label-projected-side-area", $"{2f * r * h:F2} mÂ²");
+            UpdateLabelText(root, "label-axial-area", $"{Mathf.PI * r * r:F2} m^2");
+            UpdateLabelText(root, "label-projected-side-area", $"{2f * r * h:F2} m^2");
         }
 
         /// <summary>
@@ -359,7 +359,7 @@ namespace RocketSim
         void RefreshFinReadouts(VisualElement root)
         {
             float area = partsConfig.finWidthX * partsConfig.finWidthZ;
-            UpdateLabelText(root, "label-fin-area", $"{area:F2} mÂ²");
+            UpdateLabelText(root, "label-fin-area", $"{area:F2} m^2");
         }
 
         /// <summary>
@@ -400,8 +400,6 @@ namespace RocketSim
                 ScenarioType.LegLanding => "Leg-landing reserve",
                 ScenarioType.Hover => "Hover reserve",
                 ScenarioType.HoverTracking => "Hover-track reserve",
-                ScenarioType.Takeoff => "Takeoff load",
-                ScenarioType.BellyFlop => "Belly-flop reserve",
                 _ => scenario.ToString()
             };
         }

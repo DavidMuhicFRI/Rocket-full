@@ -27,14 +27,13 @@ namespace RocketSim
             float maxAngularRateDegS,
             float maxYawErrorDeg)
         {
-            return terms.upDot > 0.94f &&
-                   tiltDeg < tiltLimitDeg &&
-                   terms.planarDistance < successRadius &&
-                   terms.speed < maxSpeed &&
-                   Mathf.Abs(terms.verticalSpeed) < maxVerticalSpeed &&
-                   terms.planarSpeed < maxHorizontalSpeed &&
-                   terms.angularRateDegS < maxAngularRateDegS &&
-                   terms.yawErrorDeg < maxYawErrorDeg;
+            return tiltDeg <= tiltLimitDeg &&
+                   terms.planarDistance <= successRadius &&
+                   terms.speed <= maxSpeed &&
+                   Mathf.Abs(terms.verticalSpeed) <= maxVerticalSpeed &&
+                   terms.planarSpeed <= maxHorizontalSpeed &&
+                   terms.angularRateDegS <= maxAngularRateDegS &&
+                   Mathf.Abs(terms.yawErrorDeg) <= maxYawErrorDeg;
         }
     }
 }

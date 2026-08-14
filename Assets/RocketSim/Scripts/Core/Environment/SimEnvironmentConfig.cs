@@ -8,7 +8,6 @@
 
 using System;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace RocketSim
 {
@@ -114,7 +113,7 @@ namespace RocketSim
         [HideInInspector] public InferenceScenarioConfig inferenceScenarios = new();
         [HideInInspector] public InferencePurpose inferencePurpose = InferencePurpose.StandardEvaluation;
         [HideInInspector] public EvaluationConfig evaluation = new();
-        [Header("Reward Model")] public RewardModelConfig rewardModel = new();
+        [Header("Training Objective")] public TrainingObjectiveConfig trainingObjective = new();
         [Header("Faults")] public RocketFaultConfig faults = new();
 
         [Header("Run Config")] public string runId = "ReusableBoosterDefaultRun";
@@ -240,8 +239,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the scenario-specific inference spawn profile, creating and
-        /// initializing missing profile objects for older serialized configs.
+        /// Returns the scenario-specific inference spawn profile and guarantees
+        /// that the requested profile is ready for use.
         /// </summary>
         public InferenceSpawnProfile GetInferenceSpawnProfile(ScenarioType scenarioType)
         {
@@ -250,8 +249,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns initialized evaluator settings for old saved environment
-        /// files that predate the standard/manual inference split.
+        /// Returns validated evaluator settings, creating them when needed.
         /// </summary>
         public EvaluationConfig EnsureEvaluationConfig()
         {
@@ -294,7 +292,6 @@ namespace RocketSim
                 landingTargetYawDeg = 0f;
                 landingPlatformEnabled = true;
                 landingPlatformHalfSizeFull = LandingDefaultPlatformHalfSizeFull;
-                landingPlatformStableHoldFull = LandingDefaultPlatformStableHoldFull;
                 landingCurriculumMode = LandingCurriculumMode.FixedFullDifficulty;
                 landingCurriculumLinearProgress = 1f;
                 landingCurriculumPeakLinearProgress = 1f;
@@ -309,30 +306,31 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Ensures the reward model object exists and has initialized per-scenario defaults.
+        /// Ensures the complete reward, shaping, and termination objective exists.
+        /// Missing scenario objects are recreated without interpreting intentional
+        /// zero values as absent configuration.
         /// </summary>
-        public RewardModelConfig EnsureRewardModel()
+        public TrainingObjectiveConfig EnsureTrainingObjective()
         {
-            rewardModel ??= new RewardModelConfig();
-            rewardModel.EnsureDefaults();
-            return rewardModel;
+            trainingObjective ??= new TrainingObjectiveConfig();
+            trainingObjective.EnsureDefaults();
+            return trainingObjective;
         }
 
         /// <summary>
-        /// Returns the reward factor set for the requested scenario after
-        /// ensuring the reward model and defaults exist.
+        /// Returns the selected scenario's complete objective.
         /// </summary>
-        public ScenarioRewardFactors GetRewardFactors(ScenarioType scenarioType)
+        public ScenarioObjectiveConfig GetTrainingObjective(ScenarioType scenarioType)
         {
-            return EnsureRewardModel().ForScenario(scenarioType);
+            return EnsureTrainingObjective().ForScenario(scenarioType);
         }
 
         /// <summary>
-        /// Applies a named reward-weight preset to one scenario's reward factors.
+        /// Replaces one scenario's complete reward vector with a named preset.
         /// </summary>
         public void ApplyRewardPreset(ScenarioType scenarioType, string presetName)
         {
-            EnsureRewardModel().ApplyPreset(scenarioType, presetName);
+            EnsureTrainingObjective().ApplyPreset(scenarioType, presetName);
         }
     }
 

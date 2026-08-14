@@ -17,11 +17,8 @@ namespace RocketSim
     {
         public const float ChopstickLandingStartFuelFraction = ScenarioCatalog.ChopstickLandingStartFuelFraction;
         public const float LegLandingStartFuelFraction = ScenarioCatalog.LegLandingStartFuelFraction;
-        public const float LandingStartFuelFraction = ChopstickLandingStartFuelFraction;
         public const float HoverStartFuelFraction = ScenarioCatalog.HoverStartFuelFraction;
         public const float HoverTrackingStartFuelFraction = ScenarioCatalog.HoverTrackingStartFuelFraction;
-        public const float TakeoffStartFuelFraction = ScenarioCatalog.TakeoffStartFuelFraction;
-        public const float BellyFlopStartFuelFraction = ScenarioCatalog.BellyFlopStartFuelFraction;
 
         /// <summary>
         /// Returns whether the scenario uses a target pad that moves during an episode.

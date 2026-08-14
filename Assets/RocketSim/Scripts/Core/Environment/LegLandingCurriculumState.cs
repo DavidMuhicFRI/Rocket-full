@@ -21,12 +21,26 @@ namespace RocketSim
         [HideInInspector] public float legLandingCurriculumLinearProgress;
         [HideInInspector] public float legLandingCurriculumProgress;
         [HideInInspector] public float legLandingCurriculumPeakLinearProgress;
-        [HideInInspector] public float legLandingPlatformStableHoldInitial = LegLandingStableHoldInitial;
-        [HideInInspector] public float legLandingPlatformStableHoldFull = LegLandingStableHoldFull;
-
-        public const float LegLandingStableHoldInitial = 0.25f;
-        public const float LegLandingStableHoldFull = 1.00f;
         public const float LegLandingPadHalfSizeM = 10f;
+        // Leg landing starts from a terminal-descent state, not the much slower
+        // chopstick catch envelope. The altitude increase keeps the faster
+        // initial descent recoverable by the common single-engine reference.
+        public const float LegLandingInitialSpawnAltitudeMin = 250f;
+        public const float LegLandingInitialSpawnAltitudeMax = 350f;
+        public const float LegLandingFullSpawnAltitudeMin = 400f;
+        public const float LegLandingFullSpawnAltitudeMax = 1000f;
+        public const float LegLandingInitialSpawnRadius = 3f;
+        public const float LegLandingFullSpawnRadius = 60f;
+        public const float LegLandingInitialVerticalSpeedMin = 20f;
+        public const float LegLandingInitialVerticalSpeedMax = 30f;
+        public const float LegLandingFullVerticalSpeedMin = 30f;
+        public const float LegLandingFullVerticalSpeedMax = 70f;
+        public const float LegLandingInitialHorizontalSpeedMax = 0.5f;
+        public const float LegLandingFullHorizontalSpeedMax = 12f;
+        public const float LegLandingInitialSpawnTiltRangeDeg = 0.5f;
+        public const float LegLandingFullSpawnTiltRangeDeg = 8f;
+        public const float LegLandingInitialAngularSpeedMaxDegS = 0f;
+        public const float LegLandingFullAngularSpeedMaxDegS = 12f;
 
         public bool IsLandingScenario => scenario.IsLanding();
         public float ActiveLandingCurriculumProgress => scenario == ScenarioType.LegLanding
@@ -65,35 +79,37 @@ namespace RocketSim
                 : GetLandingCurriculumProfile(difficulty01);
 
         /// <summary>
-        /// Uses the same continuous spawn envelope as the catch task, but makes
-        /// heading irrelevant and increases the physical stability hold to one
-        /// second at full difficulty.
+        /// Uses a faster, calmer terminal-descent envelope than the catch task,
+        /// makes heading irrelevant, and increases the physical stability hold
+        /// to one second at full difficulty.
         /// </summary>
         public LandingCurriculumProfile GetLegLandingCurriculumProfile(float difficulty01)
         {
             float d = Mathf.Clamp01(difficulty01);
             float Value(float initialValue, float fullValue) => Mathf.Lerp(initialValue, fullValue, d);
+            TerminationParameters termination =
+                GetTrainingObjective(ScenarioType.LegLanding).terminations;
 
             return new LandingCurriculumProfile(
                 d,
-                Value(LandingInitialSpawnAltitudeMin, LandingFullSpawnAltitudeMin),
-                Value(LandingInitialSpawnAltitudeMax, LandingFullSpawnAltitudeMax),
-                Value(LandingInitialSpawnRadius, LandingFullSpawnRadius),
-                Value(LandingInitialVerticalSpeedMin, LandingFullVerticalSpeedMin),
-                Value(LandingInitialVerticalSpeedMax, LandingFullVerticalSpeedMax),
-                Value(LandingInitialHorizontalSpeedMax, LandingFullHorizontalSpeedMax),
-                Value(LandingInitialSpawnTiltRangeDeg, LandingFullSpawnTiltRangeDeg),
-                Value(LandingInitialAngularSpeedMaxDegS, LandingFullAngularSpeedMaxDegS),
+                Value(LegLandingInitialSpawnAltitudeMin, LegLandingFullSpawnAltitudeMin),
+                Value(LegLandingInitialSpawnAltitudeMax, LegLandingFullSpawnAltitudeMax),
+                Value(LegLandingInitialSpawnRadius, LegLandingFullSpawnRadius),
+                Value(LegLandingInitialVerticalSpeedMin, LegLandingFullVerticalSpeedMin),
+                Value(LegLandingInitialVerticalSpeedMax, LegLandingFullVerticalSpeedMax),
+                Value(LegLandingInitialHorizontalSpeedMax, LegLandingFullHorizontalSpeedMax),
+                Value(LegLandingInitialSpawnTiltRangeDeg, LegLandingFullSpawnTiltRangeDeg),
+                Value(LegLandingInitialAngularSpeedMaxDegS, LegLandingFullAngularSpeedMaxDegS),
                 180f,
-                Value(LandingInitialSuccessRadius, LandingFullSuccessRadius),
-                Value(LandingInitialSuccessMaxSpeed, LandingFullSuccessMaxSpeed),
-                Value(LandingInitialSuccessMaxVerticalSpeed, LandingFullSuccessMaxVerticalSpeed),
-                Value(LandingInitialSuccessMaxHorizontalSpeed, LandingFullSuccessMaxHorizontalSpeed),
-                Value(LandingInitialSuccessMaxTiltDeg, LandingFullSuccessMaxTiltDeg),
-                Value(LandingInitialSuccessMaxAngularRateDegS, LandingFullSuccessMaxAngularRateDegS),
+                termination.landingSuccessRadiusM.At(d),
+                termination.landingSuccessMaxTotalSpeedMps.At(d),
+                termination.landingSuccessMaxVerticalSpeedMps.At(d),
+                termination.landingSuccessMaxHorizontalSpeedMps.At(d),
+                termination.landingSuccessMaxTiltDeg.At(d),
+                termination.landingSuccessMaxAngularRateDegS.At(d),
                 180f,
                 LegLandingPadHalfSizeM,
-                Value(legLandingPlatformStableHoldInitial, legLandingPlatformStableHoldFull));
+                termination.landingStableHoldSeconds.At(d));
         }
 
         public void ResetActiveLandingCurriculum()
@@ -215,11 +231,6 @@ namespace RocketSim
                 landingCurriculumEasierReplayProbability = LandingDefaultEasierReplayProbability;
             if (landingCurriculumEasierReplayOffset <= 0f)
                 landingCurriculumEasierReplayOffset = LandingDefaultEasierReplayOffset;
-            if (legLandingPlatformStableHoldInitial <= 0f)
-                legLandingPlatformStableHoldInitial = LegLandingStableHoldInitial;
-            if (legLandingPlatformStableHoldFull <= 0f)
-                legLandingPlatformStableHoldFull = LegLandingStableHoldFull;
-
             legLandingCurriculumLinearProgress = Mathf.Clamp01(legLandingCurriculumLinearProgress);
             legLandingCurriculumPeakLinearProgress = Mathf.Max(
                 Mathf.Clamp01(legLandingCurriculumPeakLinearProgress),

@@ -64168,6 +64168,10 @@ PrefabInstance:
       propertyPath: assembly
       value: 
       objectReference: {fileID: 2680513703187121671}
+    - target: {fileID: 2624493599579310078, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      propertyPath: catchFrame
+      value:
+      objectReference: {fileID: 0}
     - target: {fileID: 3512797957546817633, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       propertyPath: m_Mass
       value: 22000

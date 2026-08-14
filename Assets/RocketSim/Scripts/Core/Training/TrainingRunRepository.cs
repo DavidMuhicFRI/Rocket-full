@@ -54,7 +54,15 @@ namespace RocketSim
     [Serializable]
     public sealed class TrainingRunManifest
     {
-        public int schemaVersion = 3;
+        /// <summary>
+        /// Clean-break run schema for the configurable training-objective and
+        /// immutable resume-contract framework. Runs written by another schema
+        /// are deliberately excluded from resume, transfer, and inference lists
+        /// instead of being guessed at.
+        /// </summary>
+        public const int CurrentSchemaVersion = 5;
+
+        public int schemaVersion = CurrentSchemaVersion;
         public string runId;
         public string createdUtc;
         public string lastLaunchedUtc;
@@ -95,7 +103,9 @@ namespace RocketSim
         public float minimumCommandableNonzeroThrustToWeight;
         public float allActiveEnginesMinimumThrottleThrustToWeight;
         public float allActiveEnginesMaximumThrustToWeight;
-        public string rewardModelSha256;
+        public string trainingObjectiveSha256;
+        public string partsConfigSha256;
+        public string mlAgentsConfigSha256;
         public string unityVersion;
         public string mlAgentsAssemblyVersion;
         public string operatingSystem;
@@ -147,7 +157,13 @@ namespace RocketSim
         /// The launcher uses --force only for genuinely new ids; continuing an
         /// existing id requires an explicit resume with complete saved configs.
         /// </summary>
-        public static bool TryValidateRunDestination(string runId, bool resume, out string error)
+        public static bool TryValidateRunDestination(
+            string runId,
+            bool resume,
+            SimEnvironmentConfig requestedEnvironment,
+            RocketPartsConfig requestedParts,
+            MLAgentsConfig requestedMl,
+            out string error)
         {
             error = null;
             if (string.IsNullOrWhiteSpace(runId))
@@ -160,7 +176,16 @@ namespace RocketSim
             if (resume)
             {
                 if (directoryExists && HasCompleteRunConfig(runId))
+                {
+                    if (!TryValidateResumeContract(
+                            RunRoot(runId),
+                            requestedEnvironment,
+                            requestedParts,
+                            requestedMl,
+                            out error))
+                        return false;
                     return true;
+                }
 
                 error = $"Run '{runId}' cannot be resumed because its saved configuration is incomplete.";
                 return false;
@@ -175,6 +200,128 @@ namespace RocketSim
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Prevents a resumed trainer from silently changing its active task,
+        /// environment, hardware, trainer settings, or objective under the same
+        /// run identity. Any experiment change must use a new run ID.
+        /// </summary>
+        static bool TryValidateResumeContract(
+            string runRoot,
+            SimEnvironmentConfig requestedEnvironment,
+            RocketPartsConfig requestedParts,
+            MLAgentsConfig requestedMl,
+            out string error)
+        {
+            error = null;
+            if (requestedEnvironment == null || requestedParts == null || requestedMl == null)
+            {
+                error = "The requested environment, hardware, or trainer configuration is missing.";
+                return false;
+            }
+            if (!TryLoadRunManifest(runRoot, out TrainingRunManifest manifest) ||
+                manifest.schemaVersion != TrainingRunManifest.CurrentSchemaVersion ||
+                string.IsNullOrWhiteSpace(manifest.trainingObjectiveSha256) ||
+                string.IsNullOrWhiteSpace(manifest.partsConfigSha256) ||
+                string.IsNullOrWhiteSpace(manifest.mlAgentsConfigSha256))
+            {
+                error =
+                    "The run has no complete current-schema training-contract fingerprint and cannot be resumed.";
+                return false;
+            }
+
+            string requestedScenario = requestedEnvironment.scenario.ToString();
+            if (!string.Equals(
+                    requestedScenario,
+                    manifest.scenario,
+                    StringComparison.Ordinal))
+            {
+                error =
+                    $"The requested scenario '{requestedScenario}' differs from the saved run scenario '{manifest.scenario}'. Choose a new Run ID when changing tasks.";
+                return false;
+            }
+
+            string requestedJson = JsonUtility.ToJson(
+                requestedEnvironment.EnsureTrainingObjective());
+            string requestedHash = Sha256Hex(requestedJson);
+            if (!string.Equals(
+                    requestedHash,
+                    manifest.trainingObjectiveSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                error =
+                    "The training objective differs from the saved run. Choose a new Run ID for reward, shaping, or termination changes.";
+                return false;
+            }
+
+            string savedEnvironmentPath = Path.Combine(runRoot, EnvConfigFileName);
+            SimEnvironmentConfig savedEnvironment;
+            try
+            {
+                savedEnvironment = JsonUtility.FromJson<SimEnvironmentConfig>(
+                    File.ReadAllText(savedEnvironmentPath));
+            }
+            catch
+            {
+                savedEnvironment = null;
+            }
+            if (savedEnvironment == null)
+            {
+                error =
+                    "The saved environment state is missing or malformed and cannot be resumed.";
+                return false;
+            }
+
+            if (!string.Equals(
+                    ResumeEnvironmentSha256(requestedEnvironment),
+                    ResumeEnvironmentSha256(savedEnvironment),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                error =
+                    "The environment configuration differs from the current saved run state. Choose a new Run ID for spawn, curriculum, weather, fault, or other environment changes.";
+                return false;
+            }
+
+            string requestedPartsHash = Sha256Hex(JsonUtility.ToJson(requestedParts));
+            if (!string.Equals(
+                    requestedPartsHash,
+                    manifest.partsConfigSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                error =
+                    "The hardware configuration differs from the saved run. Choose a new Run ID for vehicle or actuator changes.";
+                return false;
+            }
+
+            string requestedMlHash = Sha256Hex(requestedMl.ToYAML());
+            if (!string.Equals(
+                    requestedMlHash,
+                    manifest.mlAgentsConfigSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                error =
+                    "The ML-Agents trainer configuration differs from the saved run. Choose a new Run ID for optimizer, network, reward-signal, seed, or training-schedule changes.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Fingerprints training-relevant environment state while ignoring the
+        /// evaluator-only fields deliberately preserved by the run-loading UI.
+        /// Live curriculum counters remain included, so the current EnvConfig
+        /// snapshot is the authoritative resume point.
+        /// </summary>
+        static string ResumeEnvironmentSha256(SimEnvironmentConfig environment)
+        {
+            SimEnvironmentConfig normalized = JsonUtility.FromJson<SimEnvironmentConfig>(
+                JsonUtility.ToJson(environment));
+            normalized.behaviorType = BehaviorType.Training;
+            normalized.inferencePurpose = InferencePurpose.StandardEvaluation;
+            normalized.evaluation = new EvaluationConfig();
+            return Sha256Hex(JsonUtility.ToJson(normalized));
         }
 
         /// <summary>
@@ -195,6 +342,11 @@ namespace RocketSim
             TrainingEnvironmentProvenance trainingEnvironment,
             string configuredTorchDevice)
         {
+            if (mlConfig == null) throw new ArgumentNullException(nameof(mlConfig));
+            if (envConfig == null) throw new ArgumentNullException(nameof(envConfig));
+            if (partsConfig == null) throw new ArgumentNullException(nameof(partsConfig));
+            envConfig.EnsureTrainingObjective();
+
             string runRoot = RunRoot(runId);
             Directory.CreateDirectory(runRoot);
 
@@ -253,13 +405,13 @@ namespace RocketSim
 
             TrainingRunConfigs source = LoadRunConfigs(sourceRunId);
             if (!TryLoadRunManifest(sourceRoot, out TrainingRunManifest sourceManifest) ||
-                sourceManifest.schemaVersion < 2 ||
+                sourceManifest.schemaVersion != TrainingRunManifest.CurrentSchemaVersion ||
                 sourceManifest.vectorObservationSize <= 0 ||
                 sourceManifest.continuousActionSize <= 0)
             {
                 error =
-                    $"Initialization run '{sourceRunId}' predates the canonical policy schema. " +
-                    "Train a new hover source with the current simulator before using transfer learning.";
+                    $"Initialization run '{sourceRunId}' does not use training-objective schema " +
+                    $"{TrainingRunManifest.CurrentSchemaVersion}. Train a new source run with the current simulator.";
                 return false;
             }
 
@@ -350,7 +502,7 @@ namespace RocketSim
                 }
                 catch
                 {
-                    // A malformed old manifest should not prevent a new run.
+                    // A malformed manifest cannot provide a reusable creation timestamp.
                 }
             }
 
@@ -366,7 +518,7 @@ namespace RocketSim
                 partsConfig.maxThrustPerEngine,
                 partsConfig.minThrottle,
                 partsConfig.independentEngines);
-            string rewardModelJson = JsonUtility.ToJson(envConfig.EnsureRewardModel());
+            string trainingObjectiveJson = JsonUtility.ToJson(envConfig.EnsureTrainingObjective());
             var manifest = new TrainingRunManifest
             {
                 runId = runId,
@@ -397,7 +549,7 @@ namespace RocketSim
                     ? LandingLegAssembly.ReferenceFootRadiusM * 2f
                     : 0f,
                 landingRequiredStableFeet = envConfig.scenario == ScenarioType.LegLanding
-                    ? LegLandingContactEvaluator.MinimumStableFeet
+                    ? envConfig.GetTrainingObjective(ScenarioType.LegLanding).terminations.legMinimumStableFeet
                     : 0,
                 commonSingleEngineLandingEnvelope = envConfig.scenario == ScenarioType.LegLanding,
                 vectorObservationSize = RocketAgentSchema.ObservationSize(partsConfig),
@@ -413,7 +565,9 @@ namespace RocketSim
                 minimumCommandableNonzeroThrustToWeight = thrustAuthority.MinimumCommandableNonzeroTwr,
                 allActiveEnginesMinimumThrottleThrustToWeight = thrustAuthority.AllActiveEnginesMinimumThrottleTwr,
                 allActiveEnginesMaximumThrustToWeight = thrustAuthority.AllActiveEnginesMaximumTwr,
-                rewardModelSha256 = Sha256Hex(rewardModelJson),
+                trainingObjectiveSha256 = Sha256Hex(trainingObjectiveJson),
+                partsConfigSha256 = Sha256Hex(JsonUtility.ToJson(partsConfig)),
+                mlAgentsConfigSha256 = Sha256Hex(mlConfig.ToYAML()),
                 unityVersion = Application.unityVersion,
                 mlAgentsAssemblyVersion = typeof(Unity.MLAgents.Agent).Assembly.GetName().Version?.ToString() ?? "unknown",
                 operatingSystem = SystemInfo.operatingSystem,
@@ -543,10 +697,7 @@ namespace RocketSim
                 var valid = new List<string>();
                 foreach (string dir in Directory.GetDirectories(resultsRoot))
                 {
-                    bool hasEnv = File.Exists(Path.Combine(dir, EnvConfigFileName));
-                    bool hasParts = File.Exists(Path.Combine(dir, PartsConfigFileName));
-                    bool hasMl = File.Exists(Path.Combine(dir, MlConfigFileName));
-                    if (hasEnv && hasParts && hasMl)
+                    if (HasCurrentRunLayout(dir))
                         valid.Add(Path.GetFileName(dir));
                 }
 
@@ -567,10 +718,62 @@ namespace RocketSim
             if (string.IsNullOrWhiteSpace(runId))
                 return false;
 
-            string root = Path.Combine(GetResultsRoot(), runId);
-            return File.Exists(Path.Combine(root, EnvConfigFileName)) &&
-                   File.Exists(Path.Combine(root, PartsConfigFileName)) &&
-                   File.Exists(Path.Combine(root, MlConfigFileName));
+            return HasCurrentRunLayout(Path.Combine(GetResultsRoot(), runId));
+        }
+
+        /// <summary>
+        /// Accepts only complete runs written by this source schema. This is a
+        /// deliberate clean break: an old configuration must never be interpreted
+        /// as a partially populated configurable objective.
+        /// </summary>
+        static bool HasCurrentRunLayout(string root)
+        {
+            string environmentPath = Path.Combine(root, EnvConfigFileName);
+            string partsPath = Path.Combine(root, PartsConfigFileName);
+            string mlPath = Path.Combine(root, MlConfigFileName);
+            if (!File.Exists(environmentPath) ||
+                !File.Exists(partsPath) ||
+                !File.Exists(mlPath))
+                return false;
+
+            if (!TryLoadRunManifest(root, out TrainingRunManifest manifest) ||
+                manifest.schemaVersion != TrainingRunManifest.CurrentSchemaVersion ||
+                string.IsNullOrWhiteSpace(manifest.trainingObjectiveSha256) ||
+                string.IsNullOrWhiteSpace(manifest.partsConfigSha256) ||
+                string.IsNullOrWhiteSpace(manifest.mlAgentsConfigSha256))
+                return false;
+
+            try
+            {
+                SimEnvironmentConfig environment = JsonUtility.FromJson<SimEnvironmentConfig>(
+                    File.ReadAllText(environmentPath));
+                if (environment == null ||
+                    environment.trainingObjective == null ||
+                    !Enum.IsDefined(typeof(ScenarioType), environment.scenario) ||
+                    !string.Equals(
+                        environment.scenario.ToString(),
+                        manifest.scenario,
+                        StringComparison.Ordinal) ||
+                    !string.Equals(
+                        Sha256Hex(JsonUtility.ToJson(environment.trainingObjective)),
+                        manifest.trainingObjectiveSha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        Sha256Hex(File.ReadAllText(partsPath)),
+                        manifest.partsConfigSha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        Sha256Hex(File.ReadAllText(mlPath)),
+                        manifest.mlAgentsConfigSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -603,8 +806,9 @@ namespace RocketSim
             string partsPath = Path.Combine(root, PartsConfigFileName);
             string mlPath = Path.Combine(root, MlConfigFileName);
 
-            if (!File.Exists(envPath) || !File.Exists(partsPath) || !File.Exists(mlPath))
-                throw new FileNotFoundException($"Config files missing in: {root}");
+            if (!HasCurrentRunLayout(root))
+                throw new InvalidDataException(
+                    $"Run '{runId}' is incomplete or was created with an unsupported objective schema.");
 
             return new TrainingRunConfigs
             {

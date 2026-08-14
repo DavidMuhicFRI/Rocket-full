@@ -328,5 +328,6 @@ namespace RocketSim
         public float load_gForce, load_angularAccelDegS2;
         public float env_windSpeed, env_windPlanarSpeed, env_windAlignment;
         public float stepReward;
+        public RewardContributionBuffer rewardContributions;
     }
 }

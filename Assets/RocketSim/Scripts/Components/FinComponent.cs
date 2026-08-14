@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Components/FinComponent.cs
 // Purpose: Positions grid-fin objects around the body, stores their physical
 // dimensions and limits, and applies the deflection angles produced by the agent.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;

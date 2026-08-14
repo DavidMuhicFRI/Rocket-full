@@ -1,41 +1,33 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Rewards/RewardRuntimeContext.cs
-// Purpose: Carries scenario limits and live state that reward models need but
-// that are not generic geometric/velocity RewardTerms.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
+// Purpose: Carries live episode/contact state into the pure reward evaluator.
+// Tunable thresholds belong to ScenarioObjectiveConfig, never in this struct.
 // -----------------------------------------------------------------------------
 
 namespace RocketSim
 {
     /// <summary>
-    /// Immutable per-step context assembled by FalconAgent before reward
-    /// evaluation. It keeps reward models independent from MonoBehaviour state.
+    /// Immutable per-step state assembled by FalconAgent. It deliberately holds
+    /// measurements and event flags only; reward magnitudes, shaping scales, and
+    /// termination thresholds come exclusively from the scenario objective.
     /// </summary>
     public readonly struct RewardRuntimeContext
     {
         public readonly float altitude;
         public readonly float terminalAltitude;
+        public readonly float episodeStartAltitude;
         public readonly float gravityMagnitude;
         public readonly float episodeElapsedSeconds;
-        public readonly float landingMaxEpisodeSeconds;
+        public readonly float curriculumDifficulty01;
         public readonly float fuelKg;
-        public readonly float hoverTrackSettleRadius;
-        public readonly float landingFlyawayAltitude;
-        public readonly float landingSuccessRadius;
-        public readonly float landingSuccessMaxSpeed;
-        public readonly float landingSuccessMaxVerticalSpeed;
-        public readonly float landingSuccessMaxHorizontalSpeed;
-        public readonly float landingSuccessMaxTiltDeg;
-        public readonly float landingSuccessMaxAngularRateDegS;
-        public readonly float landingSuccessMaxYawErrorDeg;
-        public readonly bool landingPlatformRequired;
+
+        // Chopstick capture state.
         public readonly bool landingPlatformInsideCapture;
         public readonly bool landingPlatformStable;
         public readonly bool landingPlatformBecameStable;
         public readonly float landingPlatformStableTime;
-        public readonly float landingPlatformStableHoldTime;
-        public readonly float landingPlatformHalfSize;
+
+        // Physical leg-contact state.
         public readonly bool legTouchdownStarted;
         public readonly bool legFirstContactThisStep;
         public readonly int legFeetOnPad;
@@ -49,33 +41,28 @@ namespace RocketSim
         public readonly float legFirstContactHorizontalSpeed;
         public readonly float legFirstContactTiltDeg;
         public readonly float legFirstContactAngularRateDegS;
-        public readonly int engineRestartsThisStep;
+        public readonly bool legExcessiveRebound;
 
-        /// <summary>Stores the live scenario thresholds used for this evaluation.</summary>
+        // Hover events. The capture count includes a capture reported this step.
+        public readonly int engineRestartsThisStep;
+        public readonly bool hoverTrackTargetCapturedThisStep;
+        public readonly int hoverTrackEpisodeCaptures;
+
         public RewardRuntimeContext(
             float altitude,
             float terminalAltitude,
+            float episodeStartAltitude,
             float gravityMagnitude,
             float episodeElapsedSeconds,
-            float landingMaxEpisodeSeconds,
+            float curriculumDifficulty01,
             float fuelKg,
-            float hoverTrackSettleRadius,
-            float landingFlyawayAltitude,
-            float landingSuccessRadius,
-            float landingSuccessMaxSpeed,
-            float landingSuccessMaxVerticalSpeed,
-            float landingSuccessMaxHorizontalSpeed,
-            float landingSuccessMaxTiltDeg,
-            float landingSuccessMaxAngularRateDegS,
-            float landingSuccessMaxYawErrorDeg,
-            bool landingPlatformRequired,
-            bool landingPlatformInsideCapture,
-            bool landingPlatformStable,
-            bool landingPlatformBecameStable,
-            float landingPlatformStableTime,
-            float landingPlatformStableHoldTime,
-            float landingPlatformHalfSize,
+            bool landingPlatformInsideCapture = false,
+            bool landingPlatformStable = false,
+            bool landingPlatformBecameStable = false,
+            float landingPlatformStableTime = 0f,
             int engineRestartsThisStep = 0,
+            bool hoverTrackTargetCapturedThisStep = false,
+            int hoverTrackEpisodeCaptures = 0,
             bool legTouchdownStarted = false,
             bool legFirstContactThisStep = false,
             int legFeetOnPad = 0,
@@ -88,31 +75,23 @@ namespace RocketSim
             float legFirstContactVerticalSpeed = 0f,
             float legFirstContactHorizontalSpeed = 0f,
             float legFirstContactTiltDeg = 0f,
-            float legFirstContactAngularRateDegS = 0f)
+            float legFirstContactAngularRateDegS = 0f,
+            bool legExcessiveRebound = false)
         {
             this.altitude = altitude;
             this.terminalAltitude = terminalAltitude;
+            this.episodeStartAltitude = episodeStartAltitude;
             this.gravityMagnitude = gravityMagnitude;
             this.episodeElapsedSeconds = episodeElapsedSeconds;
-            this.landingMaxEpisodeSeconds = landingMaxEpisodeSeconds;
+            this.curriculumDifficulty01 = curriculumDifficulty01;
             this.fuelKg = fuelKg;
-            this.hoverTrackSettleRadius = hoverTrackSettleRadius;
-            this.landingFlyawayAltitude = landingFlyawayAltitude;
-            this.landingSuccessRadius = landingSuccessRadius;
-            this.landingSuccessMaxSpeed = landingSuccessMaxSpeed;
-            this.landingSuccessMaxVerticalSpeed = landingSuccessMaxVerticalSpeed;
-            this.landingSuccessMaxHorizontalSpeed = landingSuccessMaxHorizontalSpeed;
-            this.landingSuccessMaxTiltDeg = landingSuccessMaxTiltDeg;
-            this.landingSuccessMaxAngularRateDegS = landingSuccessMaxAngularRateDegS;
-            this.landingSuccessMaxYawErrorDeg = landingSuccessMaxYawErrorDeg;
-            this.landingPlatformRequired = landingPlatformRequired;
             this.landingPlatformInsideCapture = landingPlatformInsideCapture;
             this.landingPlatformStable = landingPlatformStable;
             this.landingPlatformBecameStable = landingPlatformBecameStable;
             this.landingPlatformStableTime = landingPlatformStableTime;
-            this.landingPlatformStableHoldTime = landingPlatformStableHoldTime;
-            this.landingPlatformHalfSize = landingPlatformHalfSize;
             this.engineRestartsThisStep = engineRestartsThisStep;
+            this.hoverTrackTargetCapturedThisStep = hoverTrackTargetCapturedThisStep;
+            this.hoverTrackEpisodeCaptures = hoverTrackEpisodeCaptures;
             this.legTouchdownStarted = legTouchdownStarted;
             this.legFirstContactThisStep = legFirstContactThisStep;
             this.legFeetOnPad = legFeetOnPad;
@@ -126,7 +105,7 @@ namespace RocketSim
             this.legFirstContactHorizontalSpeed = legFirstContactHorizontalSpeed;
             this.legFirstContactTiltDeg = legFirstContactTiltDeg;
             this.legFirstContactAngularRateDegS = legFirstContactAngularRateDegS;
+            this.legExcessiveRebound = legExcessiveRebound;
         }
     }
-
 }

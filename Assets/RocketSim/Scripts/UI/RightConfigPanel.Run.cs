@@ -68,6 +68,7 @@ namespace RocketSim
             runIdField.style.flexGrow = 1;
             runIdField.focusable = true;
             runIdField.pickingMode = PickingMode.Position;
+            UIHelper.TrackTextInputFocus(runIdField);
 
             var innerInput = runIdField.Q<VisualElement>("unity-text-input");
             if (innerInput != null)
@@ -119,6 +120,8 @@ namespace RocketSim
                     "Initialize From",
                     initializationChoices,
                     selectedInitialization);
+                initializeFromField.AddToClassList("rs-enum-field");
+                initializeFromField.AddToClassList("rs-initialize-from-field");
                 initializeFromField.tooltip =
                     "Starts a new run from a prior checkpoint. Use this for Hover -> Landing transfer; Resume continues the same run instead. Keep the hardware preset matched for the thesis comparison.";
                 initializeFromField.SetEnabled(!_resumeRun);
@@ -387,6 +390,7 @@ namespace RocketSim
             if (envConfig.scenario.IsLanding())
             {
                 var modeField = new EnumField("Landing Progression", envConfig.ActiveLandingCurriculumMode);
+                modeField.AddToClassList("rs-enum-field");
                 modeField.RegisterValueChangedCallback(evt =>
                 {
                     envConfig.ActiveLandingCurriculumMode = (LandingCurriculumMode)evt.newValue;

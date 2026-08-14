@@ -1,0 +1,35 @@
+\subsection{Vehicle Configuration in the Right-Hand Panel}
+\label{subsec:vehicle-configuration-panel}
+
+The Vehicle tab of the right-hand configuration panel is used to build a reusable, vertically controlled rocket. It ranges from a small single-engine test vehicle to a Falcon~9-inspired booster with nine engines, grid fins, and a reaction control system (RCS). The simulator is therefore configurable rather than an exact digital copy of one rocket. Read-only values---dry mass, fuel capacity, starting fuel, aerodynamic areas, total thrust, fuel flow, and fin area---show the main physical consequences of each change.
+
+Presets provide reproducible starting points. \emph{Falcon 9} uses the reference octaweb, four fins, RCS, and a centre-plus-two-engine landing burn. \emph{Simple} uses one engine without fins or RCS and faster, training-friendly timing. \emph{Octaweb Configuration} keeps the nine-engine arrangement and auxiliary controls, uses a centre-only burn group, and applies the same easier actuator limits. The ablation presets support controlled comparisons: \emph{Ablation--Full} uses all hardware, while the other variants remove only the fins, only the RCS, or use three or one engine. Any manual edit marks the build as \emph{Custom}. One custom build can be saved locally, loaded, and checked for basic fuel, thrust, and landing-feasibility errors.
+
+The editable controls are summarized below. Geometry and mass determine how the rocket moves; actuator limits determine how quickly it can correct an error.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.21\textwidth} >{\raggedright\arraybackslash}p{0.73\textwidth}}
+\toprule
+\textbf{Control group} & \textbf{Available selections and sliders} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Control group} & \textbf{Available selections and sliders} \\
+\midrule
+\endhead
+Body and fuel & \textbf{Radius} and \textbf{Height} scale the body, dry mass, tank capacity, and aerodynamic areas. Recommended fuel can follow the selected task; otherwise, \textbf{Starting Fuel} selects 1--100\% of capacity. \\
+\addlinespace
+Engine arrangement & Select \textbf{single}, \textbf{triple}, or nine-engine \textbf{octaweb}. Octaweb burn groups activate the centre, centre plus two, centre plus four, outer eight, or all nine engines; inactive engines remain installed mass. \textbf{Independent Engine Control} provides separate commands instead of one shared channel. \\
+\addlinespace
+Main engines & \textbf{Thrust per Engine} sets maximum force; \textbf{Minimum Throttle}, the lowest non-zero setting; and \textbf{Layout Spacing}, engine distance from the centreline. \textbf{Specific Impulse} represents fuel efficiency, and \textbf{Gimbal Range} limits thrust-vector tilt. \\
+\addlinespace
+Actuator dynamics & \textbf{Throttle Response} and \textbf{Gimbal Slew} limit command-following speed. \textbf{Startup Delay}, \textbf{Minimum Run Time}, \textbf{Restart Cooldown}, and \textbf{Shutdown State Delay} define ignition and shutdown timing. \\
+\addlinespace
+Grid fins & Fins can be disabled or arranged as three at $120^{\circ}$, four in ``+'', or four in asymmetric ``X''. \textbf{Radial Length}, \textbf{Tangential Width}, and \textbf{Thickness} set geometry; \textbf{Maximum Angle}, \textbf{Slew Rate}, and \textbf{Aerodynamic Effectiveness} set deflection, speed, and steering force. \\
+\addlinespace
+Reaction control system & RCS can be disabled; otherwise, it uses two four-nozzle pods. \textbf{Thrust per Jet}, \textbf{Specific Impulse}, and \textbf{Minimum Pulse} set force, efficiency, and shortest firing. \textbf{Nitrogen Mass} sets propellant, and \textbf{RCS Dry Mass} represents its hardware. \\
+\bottomrule
+\end{longtable}
+
+Each engine uses four states. A positive command moves it from \emph{Off} to \emph{Starting} after any restart cooldown; no thrust is produced during the startup delay. In \emph{Running}, throttle is at least the configured minimum, and shutdown is blocked until the minimum run time ends. The engine then enters \emph{Shutdown}, targets zero throttle, and returns to \emph{Off} after the shutdown delay and spool-down. This is a timing model rather than a detailed combustion model, but it makes the controller anticipate actuator delay.
+
+Vehicle changes alter mass, inertia, aerodynamics, fuel use, and control authority, but deliberately do \emph{not} resize the learning interface. Every build has 109 observations and 39 continuous actions: nine throttle commands, eighteen gimbal commands (two axes per engine), four fin commands, and eight RCS commands. Observations describe motion, orientation, wind, aerodynamics, fuel, landing-foot contact, and actuator state. Each engine contributes throttle, two gimbal angles, four one-hot state flags, and normalized constraint time. Slots for unavailable hardware contain zero observations, and their actions have no effect. This fixed interface keeps the neural-network architecture identical, so preset comparisons measure hardware changes rather than different network sizes.

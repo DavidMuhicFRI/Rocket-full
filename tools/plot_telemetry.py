@@ -373,7 +373,7 @@ METRIC_EXPLANATIONS = {
     "Track_TravelProgressRate_1ps": "Horizontal closure rate divided by segment start distance; useful when pad jumps get longer.",
     "Track_DirectionEfficiency01": "How well horizontal velocity points toward the pad: 0 away, 0.5 sideways/stationary, 1 directly toward.",
     "Track_SettleQuality01": "Relative stabilization score combining position, speed, tilt, vertical speed, and angular calm.",
-    "State_Altitude_m": "Altitude reveals whether the vehicle converged to the intended hover, landing, or takeoff height.",
+    "State_Altitude_m": "Altitude reveals whether the vehicle converged to the intended hover or landing height.",
     "Nav_TargetBearingDeg": "The compass-like direction from the rocket to the target pad in the XZ plane.",
     "Nav_VelocityBearingDeg": "The direction the rocket is actually moving horizontally.",
     "Nav_VelocityTargetErrorDeg": "Signed angular difference between movement direction and target direction; near zero means motion points toward the pad.",

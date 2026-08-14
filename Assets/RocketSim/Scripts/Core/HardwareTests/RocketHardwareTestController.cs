@@ -78,11 +78,6 @@ namespace RocketSim
                     rotation = Quaternion.Euler(8f, 0f, -6f);
                     velocity = new Vector3(90f, -180f, 35f);
                     break;
-                case RocketHardwareTestType.Takeoff:
-                    position = new Vector3(0f, BaseGroundClearance, 0f);
-                    rotation = Quaternion.identity;
-                    velocity = Vector3.zero;
-                    break;
                 case RocketHardwareTestType.Landing:
                     position = new Vector3(0f, Mathf.Max(1200f, cfg.length * 25f), 0f);
                     rotation = Quaternion.identity;
@@ -363,7 +358,6 @@ namespace RocketSim
                 RocketHardwareTestType.FinAxisY => "Fin Y-axis spin",
                 RocketHardwareTestType.FinAxisZ => "Fin Z-axis rotation",
                 RocketHardwareTestType.Aerodynamics => "Aerodynamics",
-                RocketHardwareTestType.Takeoff => "Takeoff",
                 RocketHardwareTestType.Landing => "Landing",
                 RocketHardwareTestType.RcsVacuum => "RCS vacuum",
                 RocketHardwareTestType.RcsSeparation => "Stage separation RCS",
@@ -407,7 +401,6 @@ namespace RocketSim
                 RocketHardwareTestType.FinAxisY or
                 RocketHardwareTestType.FinAxisZ => new FinAxisHardwareTestCase(this),
                 RocketHardwareTestType.Aerodynamics => new AerodynamicsHardwareTestCase(this),
-                RocketHardwareTestType.Takeoff => new TakeoffHardwareTestCase(this),
                 RocketHardwareTestType.Landing => new LandingHardwareTestCase(this),
                 RocketHardwareTestType.RcsVacuum => new RcsVacuumHardwareTestCase(this),
                 RocketHardwareTestType.RcsSeparation => new RcsSeparationHardwareTestCase(this),

@@ -7,7 +7,6 @@
 
 using System;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace RocketSim
 {
@@ -50,15 +49,13 @@ namespace RocketSim
         [Header("Preset")]
         public RocketHardwarePreset hardwarePreset = RocketHardwarePreset.Falcon9;
 
-        [FormerlySerializedAs("bodyRadiusZ")]
         [Header("Body")]
         [Range(0.5f, 6f)] public float bodyRadius = Falcon9Reference.BodyRadiusM;
         [Range(5f, 80f)] public float bodyHeight = Falcon9Reference.BodyHeightM;
         public float baseDryMass = Falcon9Reference.BoosterDryMassKg;
         public float baseFuelMass = Falcon9Reference.FuelCapacityKg;
         public bool useScenarioRecommendedFuel = true;
-        [Range(0f, 1f)] public float startFuelFraction = ScenarioCatalog.LandingStartFuelFraction;
-        [FormerlySerializedAs("remainingFuelMass")]
+        [Range(0f, 1f)] public float startFuelFraction = ScenarioCatalog.ChopstickLandingStartFuelFraction;
         public float startFuelMass = 32000f;
 
         [Header("Thruster")]
@@ -228,9 +225,6 @@ namespace RocketSim
                 case ScenarioType.ChopstickLanding:
                 case ScenarioType.LegLanding:
                     octawebBurnGroup = OctawebBurnGroup.CenterPlusTwo;
-                    break;
-                case ScenarioType.Takeoff:
-                    octawebBurnGroup = OctawebBurnGroup.AllNine;
                     break;
                 default:
                     octawebBurnGroup = OctawebBurnGroup.CenterOnly;

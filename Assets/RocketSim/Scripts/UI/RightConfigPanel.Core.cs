@@ -329,8 +329,8 @@ namespace RocketSim
 
         /// <summary>
         /// Runs inexpensive checks that prevent clearly invalid launches. Hard
-        /// errors stop the run; a weak takeoff thrust-to-weight ratio is reported
-        /// as a warning because it can still be a deliberate experiment.
+        /// errors stop the run, while recoverable configuration concerns are
+        /// returned as warnings so users can inspect them before launch.
         /// </summary>
         bool ValidateConfiguration(out string error, out string warning)
         {
@@ -351,10 +351,36 @@ namespace RocketSim
                 error = "Checkpoint interval and retained checkpoint count must be positive.";
                 return false;
             }
+            if (!Enum.IsDefined(typeof(ScenarioType), envConfig.scenario))
+            {
+                error = $"Scenario value {(int)envConfig.scenario} is not part of the current schema.";
+                return false;
+            }
+
+            ObjectiveValidationResult objectiveValidation = ObjectiveValidator.Validate(
+                envConfig.scenario,
+                envConfig.GetTrainingObjective(envConfig.scenario));
+            for (int i = 0; i < objectiveValidation.issues.Count; i++)
+            {
+                ObjectiveValidationIssue issue = objectiveValidation.issues[i];
+                if (issue.severity == ObjectiveValidationSeverity.Error)
+                {
+                    error = $"Objective: {issue.message}";
+                    return false;
+                }
+
+                string objectiveWarning = $"Objective: {issue.message}";
+                warning = string.IsNullOrEmpty(warning)
+                    ? objectiveWarning
+                    : $"{warning}\n{objectiveWarning}";
+            }
             if (envConfig.behaviorType == BehaviorType.Training &&
                 !TrainingRunRepository.TryValidateRunDestination(
                     envConfig.runId,
                     _resumeRun,
+                    envConfig,
+                    partsConfig,
+                    mlConfig,
                     out string destinationError))
             {
                 error = destinationError;
@@ -402,9 +428,6 @@ namespace RocketSim
                 error = $"Landing-burn thrust-to-weight ratio is only {thrustToWeight:F2}; the vehicle cannot decelerate upward.";
                 return false;
             }
-            if (envConfig.scenario == ScenarioType.Takeoff && thrustToWeight <= 1f)
-                warning = $"Warning: takeoff thrust-to-weight ratio is only {thrustToWeight:F2}.";
-
             int generatedCheckpoints = Mathf.CeilToInt(
                 mlConfig.maxSteps / (float)Mathf.Max(1, mlConfig.checkpointInterval));
             if (mlConfig.keepCheckpoints < generatedCheckpoints)
@@ -726,11 +749,7 @@ namespace RocketSim
         VisualElement BuildGroupDetail(string text)
         {
             var label = new Label(text);
-            label.style.fontSize = 10;
-            label.style.color = new StyleColor(new Color(0.55f, 0.55f, 0.55f));
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.style.marginLeft = 20;
-            label.style.marginBottom = 4;
+            label.AddToClassList("rs-group-detail");
             return label;
         }
     }

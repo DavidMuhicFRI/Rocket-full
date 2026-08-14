@@ -1,7 +1,8 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/HoverTrackCurriculumConfig.cs
 // Purpose: Tracks hover-target training success and continuously turns that
-// success into harder movement distance, settling, speed, tilt, and hold limits.
+// success into harder target movement while objective thresholds interpolate
+// independently from the same normalized difficulty value.
 // Difficulty is normalized by parallel area count so hardware does not change the experiment.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
@@ -19,14 +20,6 @@ namespace RocketSim
         public float targetMoveInterval = 35f;
         [HideInInspector]
         public float targetMoveRadius = 12f;
-        [HideInInspector]
-        public float hoverTrackSettleRadius = 6f;
-        [HideInInspector]
-        public float hoverTrackSuccessHoldTime = 1.0f;
-        [HideInInspector]
-        public float hoverTrackSuccessMaxSpeed = 1.5f;
-        [HideInInspector]
-        public float hoverTrackSuccessMaxTiltDeg = 8f;
         [HideInInspector] public bool hoverTrackCurriculumEnabled = true;
         [HideInInspector] public int hoverTrackCurriculumSuccesses;
         [HideInInspector] public int hoverTrackCurriculumEpisodeCount;
@@ -36,27 +29,11 @@ namespace RocketSim
         [HideInInspector] public float hoverTrackCurriculumProgress;
         [HideInInspector] public float hoverTrackStartMoveRadius = HoverTrackStartMoveRadius;
         [HideInInspector] public float hoverTrackEndMoveRadius = HoverTrackEndMoveRadius;
-        [HideInInspector] public float hoverTrackStartSettleRadius = HoverTrackStartSettleRadius;
-        [HideInInspector] public float hoverTrackEndSettleRadius = HoverTrackEndSettleRadius;
-        [HideInInspector] public float hoverTrackStartHoldTime = HoverTrackStartHoldTime;
-        [HideInInspector] public float hoverTrackEndHoldTime = HoverTrackEndHoldTime;
-        [HideInInspector] public float hoverTrackStartMaxSpeed = HoverTrackStartMaxSpeed;
-        [HideInInspector] public float hoverTrackEndMaxSpeed = HoverTrackEndMaxSpeed;
-        [HideInInspector] public float hoverTrackStartMaxTiltDeg = HoverTrackStartMaxTiltDeg;
-        [HideInInspector] public float hoverTrackEndMaxTiltDeg = HoverTrackEndMaxTiltDeg;
         [HideInInspector] public float hoverTrackCurriculumBatchesToMostlyHard = HoverTrackDefaultCurriculumBatchesToMostlyHard;
         [HideInInspector] public float curriculumDifficultyIncreaseSpeed = DefaultCurriculumDifficultyIncreaseSpeed;
 
         public const float HoverTrackStartMoveRadius = 16f;
         public const float HoverTrackEndMoveRadius = 50f;
-        public const float HoverTrackStartSettleRadius = 10f;
-        public const float HoverTrackEndSettleRadius = 2.5f;
-        public const float HoverTrackStartHoldTime = 0.5f;
-        public const float HoverTrackEndHoldTime = 2f;
-        public const float HoverTrackStartMaxSpeed = 3f;
-        public const float HoverTrackEndMaxSpeed = 0.8f;
-        public const float HoverTrackStartMaxTiltDeg = 15f;
-        public const float HoverTrackEndMaxTiltDeg = 5f;
         public const float HoverTrackDefaultCurriculumBatchesToMostlyHard = 120f;
         public const float DefaultCurriculumDifficultyIncreaseSpeed = 1f;
         public const float MinCurriculumDifficultyIncreaseSpeed = 0.25f;
@@ -78,16 +55,6 @@ namespace RocketSim
             hoverTrackCurriculumSuccessfulEpisodes = 0;
             hoverTrackCurriculumRecentSuccessRate = 0f;
             hoverTrackCurriculumLinearProgress = 0f;
-            ApplyHoverTrackCurriculum();
-        }
-
-        /// <summary>
-        /// Records one hover-track pad capture for HUD diagnostics. Difficulty
-        /// advances only from completed-episode success rate.
-        /// </summary>
-        public void AdvanceHoverTrackCurriculum()
-        {
-            hoverTrackCurriculumSuccesses++;
             ApplyHoverTrackCurriculum();
         }
 
@@ -122,8 +89,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Converts accumulated hover-track successes into target movement,
-        /// settle radius, hold time, speed, and tilt thresholds.
+        /// Converts accumulated hover-track success into target movement
+        /// difficulty. Capture thresholds live only in the training objective.
         /// </summary>
         public void ApplyHoverTrackCurriculum()
         {
@@ -136,43 +103,21 @@ namespace RocketSim
             hoverTrackCurriculumProgress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(hoverTrackCurriculumLinearProgress));
 
             targetMoveRadius = Mathf.Lerp(hoverTrackStartMoveRadius, hoverTrackEndMoveRadius, hoverTrackCurriculumProgress);
-            hoverTrackSettleRadius = Mathf.Lerp(hoverTrackStartSettleRadius, hoverTrackEndSettleRadius, hoverTrackCurriculumProgress);
-            hoverTrackSuccessHoldTime = Mathf.Lerp(hoverTrackStartHoldTime, hoverTrackEndHoldTime, hoverTrackCurriculumProgress);
-            hoverTrackSuccessMaxSpeed = Mathf.Lerp(hoverTrackStartMaxSpeed, hoverTrackEndMaxSpeed, hoverTrackCurriculumProgress);
-            hoverTrackSuccessMaxTiltDeg = Mathf.Lerp(hoverTrackStartMaxTiltDeg, hoverTrackEndMaxTiltDeg, hoverTrackCurriculumProgress);
         }
 
         /// <summary>
-        /// Backfills hover-track curriculum ranges for older serialized configs
+        /// Restores required hover-track ranges and clamps curriculum settings
         /// before difficulty interpolation runs.
         /// </summary>
         void EnsureHoverTrackCurriculumDefaults()
         {
-            bool missingRanges =
-                hoverTrackStartMoveRadius <= 0f &&
-                hoverTrackEndMoveRadius <= 0f &&
-                hoverTrackStartSettleRadius <= 0f &&
-                hoverTrackEndSettleRadius <= 0f &&
-                hoverTrackStartHoldTime <= 0f &&
-                hoverTrackEndHoldTime <= 0f &&
-                hoverTrackStartMaxSpeed <= 0f &&
-                hoverTrackEndMaxSpeed <= 0f &&
-                hoverTrackStartMaxTiltDeg <= 0f &&
-                hoverTrackEndMaxTiltDeg <= 0f;
+            bool missingRanges = hoverTrackStartMoveRadius <= 0f && hoverTrackEndMoveRadius <= 0f;
 
             if (missingRanges)
             {
                 hoverTrackCurriculumEnabled = true;
                 hoverTrackStartMoveRadius = HoverTrackStartMoveRadius;
                 hoverTrackEndMoveRadius = HoverTrackEndMoveRadius;
-                hoverTrackStartSettleRadius = HoverTrackStartSettleRadius;
-                hoverTrackEndSettleRadius = HoverTrackEndSettleRadius;
-                hoverTrackStartHoldTime = HoverTrackStartHoldTime;
-                hoverTrackEndHoldTime = HoverTrackEndHoldTime;
-                hoverTrackStartMaxSpeed = HoverTrackStartMaxSpeed;
-                hoverTrackEndMaxSpeed = HoverTrackEndMaxSpeed;
-                hoverTrackStartMaxTiltDeg = HoverTrackStartMaxTiltDeg;
-                hoverTrackEndMaxTiltDeg = HoverTrackEndMaxTiltDeg;
             }
 
             if (hoverTrackCurriculumBatchesToMostlyHard <= 0f)
@@ -181,16 +126,6 @@ namespace RocketSim
                 curriculumDifficultyIncreaseSpeed <= 0f ? DefaultCurriculumDifficultyIncreaseSpeed : curriculumDifficultyIncreaseSpeed,
                 MinCurriculumDifficultyIncreaseSpeed,
                 MaxCurriculumDifficultyIncreaseSpeed);
-            if (hoverTrackCurriculumEpisodeCount <= 0 && hoverTrackCurriculumSuccesses > 0)
-            {
-                hoverTrackCurriculumEpisodeCount = hoverTrackCurriculumSuccesses;
-                hoverTrackCurriculumSuccessfulEpisodes = hoverTrackCurriculumSuccesses;
-                hoverTrackCurriculumRecentSuccessRate = 1f;
-            }
-
-            if (hoverTrackCurriculumLinearProgress <= 0f && hoverTrackCurriculumProgress > 0f)
-                hoverTrackCurriculumLinearProgress = hoverTrackCurriculumProgress;
-
             hoverTrackCurriculumLinearProgress = Mathf.Clamp01(hoverTrackCurriculumLinearProgress);
         }
 

@@ -12,20 +12,6 @@ namespace RocketSim
 {
     public partial class RightConfigPanel
     {
-        private static readonly (RocketHardwareTestType type, string label)[] HardwareTestOptions =
-        {
-            (RocketHardwareTestType.FinAxisX,       "Fin X rotation"),
-            (RocketHardwareTestType.FinAxisY,       "Fin Y spin"),
-            (RocketHardwareTestType.FinAxisZ,       "Fin Z rotation"),
-            (RocketHardwareTestType.Aerodynamics,   "Aerodynamics"),
-            (RocketHardwareTestType.Takeoff,        "Takeoff"),
-            (RocketHardwareTestType.Landing,        "Landing"),
-            (RocketHardwareTestType.RcsVacuum,      "RCS vacuum"),
-            (RocketHardwareTestType.RcsSeparation,  "Stage separation RCS"),
-            (RocketHardwareTestType.TopStabilizers, "Top stabilizers"),
-            (RocketHardwareTestType.Thrusters,      "Engine static"),
-        };
-
         private Button _stopHardwareTestButton;
         private VisualElement _hardwareTestOptions;
         private Label _hardwareTestStatusLabel;
@@ -63,7 +49,6 @@ namespace RocketSim
             _hardwareTestOptions.Add(aero);
 
             var flight = UIHelper.Foldout("Flight Smoke Tests");
-            AddHardwareTestButton(flight, RocketHardwareTestType.Takeoff, "Takeoff test");
             AddHardwareTestButton(flight, RocketHardwareTestType.Landing, "Landing test");
             _hardwareTestOptions.Add(flight);
 

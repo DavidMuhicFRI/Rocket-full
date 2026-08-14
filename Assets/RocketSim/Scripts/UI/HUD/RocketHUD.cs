@@ -152,17 +152,25 @@ namespace UI
 
             if (env.scenario == ScenarioType.HoverTracking)
             {
+                TerminationParameters termination =
+                    env.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+                float difficulty = env.hoverTrackCurriculumProgress;
+                float captureRadius = termination.trackingCaptureRadiusM.At(difficulty);
+                float holdSeconds = termination.trackingCaptureHoldSeconds.At(difficulty);
+                float horizontalSpeed = termination.trackingCaptureMaxHorizontalSpeedMps.At(difficulty);
+                float verticalSpeed = termination.trackingCaptureMaxVerticalSpeedMps.At(difficulty);
+                float tilt = termination.trackingCaptureMaxTiltDeg.At(difficulty);
                 SetCurriculumHudVisible(true);
                 SetText(curriculumTitleText, "CURRICULUM: HOVER TRACKING");
                 SetText(curriculumProgressText, $"PROGRESS: {FormatPercent(env.hoverTrackCurriculumProgress)}");
                 SetText(curriculumRateText,
                     $"SUCCESS RATE: {FormatPercent(env.HoverTrackCurriculumSuccessRate)}  ({env.hoverTrackCurriculumSuccessfulEpisodes}/{env.hoverTrackCurriculumEpisodeCount} episodes)");
                 SetText(curriculumPrimaryText,
-                    $"TARGET: {env.targetMoveRadius:F0} m move radius, {env.hoverTrackSettleRadius:F1} m settle");
+                    $"TARGET: {env.targetMoveRadius:F0} m move radius, {captureRadius:F1} m capture");
                 SetText(curriculumSecondaryText,
-                    $"CAPTURE: {env.hoverTrackSuccessHoldTime:F1} s hold, <= {env.hoverTrackSuccessMaxSpeed:F1} m/s");
+                    $"CAPTURE: {holdSeconds:F1} s hold, <= {horizontalSpeed:F1} m/s planar, <= {verticalSpeed:F1} m/s vertical");
                 SetText(curriculumTertiaryText,
-                    $"ATTITUDE: <= {env.hoverTrackSuccessMaxTiltDeg:F0} deg tilt, {env.hoverTrackCurriculumSuccesses} pad captures");
+                    $"ATTITUDE: <= {tilt:F0} deg tilt, {env.hoverTrackCurriculumSuccesses} target captures");
                 return;
             }
 

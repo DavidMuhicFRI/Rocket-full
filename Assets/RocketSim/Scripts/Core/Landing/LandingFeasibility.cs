@@ -130,6 +130,21 @@ namespace RocketSim
             var errors = new List<string>();
             var warnings = new List<string>();
 
+            if (env != null)
+            {
+                ObjectiveValidationResult validation = ObjectiveValidator.Validate(
+                    env.scenario,
+                    env.GetTrainingObjective(env.scenario));
+                for (int i = 0; i < validation.issues.Count; i++)
+                {
+                    ObjectiveValidationIssue issue = validation.issues[i];
+                    if (issue.severity == ObjectiveValidationSeverity.Error)
+                        errors.Add($"objective: {issue.message}");
+                    else
+                        warnings.Add($"objective: {issue.message}");
+                }
+            }
+
             float startFuel = Mathf.Clamp(cfg.startFuelMass, 0f, cfg.maxFuelMass);
             float startMass = cfg.dryMass + startFuel + Mathf.Max(0f, cfg.rcsPropellantMass);
             int engines = Mathf.Max(0, cfg.activeEngineCount);
@@ -197,30 +212,49 @@ namespace RocketSim
                 if (netAcceleration <= 0f)
                     errors.Add($"maximum landing-burn TWR is {maxTwr:F2}, so the vehicle cannot decelerate upward");
 
+                LandingCurriculumProfile initialProfile = env.GetActiveLandingCurriculumProfile(0f);
+                LandingCurriculumProfile fullProfile = env.GetActiveLandingCurriculumProfile(1f);
+                float samplerMass = env.scenario == ScenarioType.LegLanding
+                    ? LegLandingReferenceEnvelope.ReferenceVehicleMassKg
+                    : startMass;
+                float samplerThrustPerEngine = env.scenario == ScenarioType.LegLanding
+                    ? LegLandingReferenceEnvelope.MaxThrustPerEngineN
+                    : cfg.maxThrust;
+                int samplerEngineCount = env.scenario == ScenarioType.LegLanding
+                    ? LegLandingReferenceEnvelope.ActiveEngineCount
+                    : engines;
+                float samplerStartupDelay = env.scenario == ScenarioType.LegLanding
+                    ? LegLandingReferenceEnvelope.StartupDelayS
+                    : cfg.engineStartupDelay;
+                float samplerNetAcceleration = LandingFeasibility.NetUpwardAcceleration(
+                    samplerThrustPerEngine,
+                    samplerEngineCount,
+                    samplerMass,
+                    G0);
                 float initialAvailableAltitude = Mathf.Max(
                     0f,
-                    SimEnvironmentConfig.LandingInitialSpawnAltitudeMin - terminalAltitude);
+                    initialProfile.spawnAltitudeMin - terminalAltitude);
                 float fullAvailableAltitude = Mathf.Max(
                     0f,
-                    SimEnvironmentConfig.LandingFullSpawnAltitudeMin - terminalAltitude);
+                    fullProfile.spawnAltitudeMin - terminalAltitude);
                 float initialRecoverableSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
                     initialAvailableAltitude,
-                    netAcceleration,
-                    cfg.engineStartupDelay,
+                    samplerNetAcceleration,
+                    samplerStartupDelay,
                     G0);
                 float fullRecoverableSpeed = LandingFeasibility.MaxRecoverableDownwardSpeed(
                     fullAvailableAltitude,
-                    netAcceleration,
-                    cfg.engineStartupDelay,
+                    samplerNetAcceleration,
+                    samplerStartupDelay,
                     G0);
 
-                if (SimEnvironmentConfig.LandingInitialVerticalSpeedMax > initialRecoverableSpeed + 0.1f)
+                if (initialProfile.verticalSpeedMax > initialRecoverableSpeed + 0.1f)
                     warnings.Add(
-                        $"initial downward-speed range reaches {SimEnvironmentConfig.LandingInitialVerticalSpeedMax:F1} m/s; " +
+                        $"initial downward-speed range reaches {initialProfile.verticalSpeedMax:F1} m/s; " +
                         $"the coupled sampler will cap it near {initialRecoverableSpeed:F1} m/s at minimum altitude");
-                if (SimEnvironmentConfig.LandingFullVerticalSpeedMax > fullRecoverableSpeed + 0.1f)
+                if (fullProfile.verticalSpeedMax > fullRecoverableSpeed + 0.1f)
                     warnings.Add(
-                        $"full downward-speed range reaches {SimEnvironmentConfig.LandingFullVerticalSpeedMax:F1} m/s; " +
+                        $"full downward-speed range reaches {fullProfile.verticalSpeedMax:F1} m/s; " +
                         $"the coupled sampler will cap it near {fullRecoverableSpeed:F1} m/s at minimum altitude");
 
                 float deltaV = cfg.specificImpulse > 0f && startMass > cfg.dryMass
@@ -234,7 +268,8 @@ namespace RocketSim
                 Debug.Log(
                     $"[SimulatorPreflight] landing capability: startMass={startMass:F0} kg, " +
                     $"maxTWR={maxTwr:F2}, minThrottleTWR={minThrottleTwr:F2}, " +
-                    $"netDeceleration={netAcceleration:F2} m/s^2, idealDeltaV={deltaV:F0} m/s, " +
+                    $"actualNetDeceleration={netAcceleration:F2} m/s^2, " +
+                    $"samplerNetDeceleration={samplerNetAcceleration:F2} m/s^2, idealDeltaV={deltaV:F0} m/s, " +
                     $"recoverableDownwardSpeed=[initialMinAltitude:{initialRecoverableSpeed:F1}, " +
                     $"fullMinAltitude:{fullRecoverableSpeed:F1}] m/s, " +
                     $"{guidanceFrame}Y={guidanceFrameLocalY:F1} m, targetAltitude={terminalAltitude:F1} m, " +

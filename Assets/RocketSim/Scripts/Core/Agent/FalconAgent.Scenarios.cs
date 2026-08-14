@@ -53,19 +53,6 @@ namespace RocketSim
                     transform.localRotation = Quaternion.Euler(
                         RandomRange(-1f, 1f), 0f, RandomRange(-1f, 1f));
                     break;
-
-                case ScenarioType.Takeoff:
-                    transform.localPosition = new Vector3(rx, BaseGroundClearance, rz);
-                    transform.localRotation = Quaternion.identity;
-                    rb.linearVelocity = Vector3.zero;
-                    break;
-
-                case ScenarioType.BellyFlop:
-                    transform.localPosition = new Vector3(rx, 100f, rz);
-                    transform.localRotation = Quaternion.Euler(
-                        85f + RandomRange(-5f, 5f), 0f, 0f);
-                    rb.linearVelocity = Vector3.down * RandomRange(8f, 18f);
-                    break;
             }
         }
 
@@ -78,8 +65,6 @@ namespace RocketSim
             profile.Clamp();
 
             float altitude = SampleProfile(profile, profile.altitudeMin, profile.altitudeMax);
-            if (envConfig.scenario == ScenarioType.Takeoff && altitude <= 0f)
-                altitude = BaseGroundClearance;
             if (envConfig.scenario.IsLanding())
                 altitude = Mathf.Max(
                     altitude,
@@ -322,15 +307,31 @@ namespace RocketSim
             if (envConfig.scenario != ScenarioType.HoverTracking)
             {
                 _hoverTrackStableTime = 0f;
+                _hoverTrackCaptureLatched = false;
                 return false;
             }
 
-            if (IsHoverTrackHoverReady())
-                _hoverTrackStableTime += Time.fixedDeltaTime;
-            else
+            if (!IsHoverTrackHoverReady())
+            {
                 _hoverTrackStableTime = 0f;
+                _hoverTrackCaptureLatched = false;
+                return false;
+            }
 
-            return _hoverTrackStableTime >= Mathf.Max(0f, envConfig.hoverTrackSuccessHoldTime);
+            if (_hoverTrackCaptureLatched)
+                return false;
+
+            _hoverTrackStableTime += Time.fixedDeltaTime;
+
+            TerminationParameters criteria =
+                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            float holdSeconds = criteria.trackingCaptureHoldSeconds.At(
+                _objectiveDifficulty01);
+            if (_hoverTrackStableTime < Mathf.Max(0f, holdSeconds))
+                return false;
+
+            _hoverTrackCaptureLatched = true;
+            return true;
         }
 
         /// <summary>
@@ -345,16 +346,26 @@ namespace RocketSim
             Vector2 horizontalVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z);
             Vector3 localAngularVelocity = transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
 
-            float settleRadius = Mathf.Max(envConfig.hoverTrackSettleRadius, 0.5f);
-            float maxSpeed = Mathf.Max(envConfig.hoverTrackSuccessMaxSpeed, 0.1f);
-            float maxTilt = Mathf.Max(envConfig.hoverTrackSuccessMaxTiltDeg, 0.1f);
+            TerminationParameters criteria =
+                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            float difficulty = _objectiveDifficulty01;
+            float settleRadius = Mathf.Max(criteria.trackingCaptureRadiusM.At(difficulty), 0.01f);
+            float maxVerticalError = Mathf.Max(
+                criteria.trackingCaptureMaxVerticalErrorM.At(difficulty), 0.01f);
+            float maxHorizontalSpeed = Mathf.Max(
+                criteria.trackingCaptureMaxHorizontalSpeedMps.At(difficulty), 0.01f);
+            float maxVerticalSpeed = Mathf.Max(
+                criteria.trackingCaptureMaxVerticalSpeedMps.At(difficulty), 0.01f);
+            float maxTilt = Mathf.Max(criteria.trackingCaptureMaxTiltDeg.At(difficulty), 0.01f);
+            float maxAngularRate = Mathf.Max(
+                criteria.trackingCaptureMaxAngularRateDegS.At(difficulty), 0.01f);
 
             return horizontalError.magnitude <= settleRadius &&
-                   Mathf.Abs(error.y) <= 3f &&
-                   horizontalVelocity.magnitude <= maxSpeed &&
-                   Mathf.Abs(rb.linearVelocity.y) <= maxSpeed &&
+                   Mathf.Abs(error.y) <= maxVerticalError &&
+                   horizontalVelocity.magnitude <= maxHorizontalSpeed &&
+                   Mathf.Abs(rb.linearVelocity.y) <= maxVerticalSpeed &&
                    Vector3.Angle(transform.up, Vector3.up) <= maxTilt &&
-                   localAngularVelocity.magnitude <= 25f;
+                   localAngularVelocity.magnitude <= maxAngularRate;
         }
 
         /// <summary>
@@ -369,16 +380,26 @@ namespace RocketSim
             float tiltDeg,
             float angularRateDegS)
         {
-            float settleRadius = Mathf.Max(envConfig.hoverTrackSettleRadius, 0.5f);
-            float maxSpeed = Mathf.Max(envConfig.hoverTrackSuccessMaxSpeed, 0.1f);
-            float maxTilt = Mathf.Max(envConfig.hoverTrackSuccessMaxTiltDeg, 0.1f);
+            TerminationParameters criteria =
+                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            float difficulty = _objectiveDifficulty01;
+            float settleRadius = Mathf.Max(criteria.trackingCaptureRadiusM.At(difficulty), 0.01f);
+            float maxVerticalError = Mathf.Max(
+                criteria.trackingCaptureMaxVerticalErrorM.At(difficulty), 0.01f);
+            float maxHorizontalSpeed = Mathf.Max(
+                criteria.trackingCaptureMaxHorizontalSpeedMps.At(difficulty), 0.01f);
+            float maxVerticalSpeed = Mathf.Max(
+                criteria.trackingCaptureMaxVerticalSpeedMps.At(difficulty), 0.01f);
+            float maxTilt = Mathf.Max(criteria.trackingCaptureMaxTiltDeg.At(difficulty), 0.01f);
+            float maxAngularRate = Mathf.Max(
+                criteria.trackingCaptureMaxAngularRateDegS.At(difficulty), 0.01f);
 
             float horizontalPosition = 1f - Mathf.Clamp01(horizontalError / settleRadius);
-            float verticalPosition = 1f - Mathf.Clamp01(Mathf.Abs(verticalError) / 3f);
-            float horizontalCalm = 1f - Mathf.Clamp01(horizontalSpeed / maxSpeed);
-            float verticalCalm = 1f - Mathf.Clamp01(Mathf.Abs(verticalSpeed) / maxSpeed);
+            float verticalPosition = 1f - Mathf.Clamp01(Mathf.Abs(verticalError) / maxVerticalError);
+            float horizontalCalm = 1f - Mathf.Clamp01(horizontalSpeed / maxHorizontalSpeed);
+            float verticalCalm = 1f - Mathf.Clamp01(Mathf.Abs(verticalSpeed) / maxVerticalSpeed);
             float attitude = 1f - Mathf.Clamp01(tiltDeg / maxTilt);
-            float rotationCalm = 1f - Mathf.Clamp01(angularRateDegS / 25f);
+            float rotationCalm = 1f - Mathf.Clamp01(angularRateDegS / maxAngularRate);
 
             return (horizontalPosition + verticalPosition + horizontalCalm + verticalCalm + attitude + rotationCalm) / 6f;
         }
@@ -396,14 +417,19 @@ namespace RocketSim
                 fixedTarget.z = 0f;
                 targetPad.localPosition = fixedTarget;
                 _hoverTrackSegmentElapsedTime = 0f;
+                _hoverTrackStableTime = 0f;
+                _hoverTrackCaptureLatched = false;
                 return;
             }
 
             float r = envConfig.targetMoveRadius;
+            TerminationParameters criteria =
+                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            float settleRadius = Mathf.Max(
+                criteria.trackingCaptureRadiusM.At(_objectiveDifficulty01), 0.01f);
             Vector3 selected = targetPad.localPosition;
-            float minTravelDistance = envConfig.scenario == ScenarioType.HoverTracking
-                ? Mathf.Min(r, Mathf.Max(envConfig.hoverTrackSettleRadius * 1.2f, envConfig.hoverTrackSettleRadius + 1f))
-                : 0f;
+            float minTravelDistance =
+                Mathf.Min(r, Mathf.Max(settleRadius * 1.2f, settleRadius + 1f));
             float bestDistance = -1f;
 
             for (int attempt = 0; attempt < 12; attempt++)
@@ -426,6 +452,8 @@ namespace RocketSim
 
             targetPad.localPosition = selected;
             _hoverTrackSegmentElapsedTime = 0f;
+            _hoverTrackStableTime = 0f;
+            _hoverTrackCaptureLatched = false;
             _hoverTrackSegmentStartDistance = new Vector2(
                 targetPad.localPosition.x - transform.localPosition.x,
                 targetPad.localPosition.z - transform.localPosition.z).magnitude;

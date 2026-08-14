@@ -1,10 +1,13 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Tests/Editor/RocketSimRegressionTests.cs
-// Purpose: Locks the thesis experiment's trainer, landing reward, curriculum,
-// feasibility, and evaluator contracts against accidental configuration drift.
+// Purpose: Locks trainer, configurable objectives, scenario-specific episode
+// endings, curriculum, feasibility, and evaluator contracts against drift.
 // -----------------------------------------------------------------------------
 
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -21,7 +24,15 @@ namespace RocketSim.Tests
             var config = new MLAgentsConfig();
 
             Assert.That(config.trainerType, Is.EqualTo(TrainerType.PPO));
-            Assert.That(config.extrinsicGamma, Is.EqualTo(0.995f).Within(Epsilon));
+            Assert.That(config.extrinsicGamma, Is.EqualTo(0.9995f).Within(Epsilon));
+            Assert.That(Mathf.Pow(config.extrinsicGamma, 10f / 0.03f), Is.GreaterThan(0.80f),
+                "A landing terminal ten seconds away must retain useful learning weight.");
+            float oneDecisionTimeCost = ScenarioObjectiveConfig
+                .CreateDefault(ScenarioType.ChopstickLanding)
+                .rewards.timeCostRate * 0.03f;
+            float oneDecisionFailureDelayBenefit = 5f * (1f - config.extrinsicGamma);
+            Assert.That(oneDecisionTimeCost, Is.GreaterThan(oneDecisionFailureDelayBenefit),
+                "Delaying a -5 landing failure by one decision must reduce, not improve, return.");
             Assert.That(config.lambd, Is.EqualTo(0.98f).Within(Epsilon));
             Assert.That(config.timeHorizon, Is.EqualTo(1024));
             Assert.That(config.curiosityEnabled, Is.False);
@@ -36,7 +47,7 @@ namespace RocketSim.Tests
             string yaml = source.ToYAML();
 
             Assert.That(MLAgentsConfig.TryFromYAML(yaml, out MLAgentsConfig restored), Is.True);
-            Assert.That(restored.extrinsicGamma, Is.EqualTo(0.995f).Within(Epsilon));
+            Assert.That(restored.extrinsicGamma, Is.EqualTo(0.9995f).Within(Epsilon));
             Assert.That(restored.lambd, Is.EqualTo(0.98f).Within(Epsilon));
             Assert.That(restored.timeHorizon, Is.EqualTo(1024));
             Assert.That(restored.curiosityEnabled, Is.False);
@@ -50,7 +61,7 @@ namespace RocketSim.Tests
             Assert.That(File.Exists(path), Is.True, "The manual CLI reference YAML must exist at the project root.");
             Assert.That(MLAgentsConfig.TryFromYAML(File.ReadAllText(path), out MLAgentsConfig config), Is.True);
             Assert.That(config.trainerType, Is.EqualTo(TrainerType.PPO));
-            Assert.That(config.extrinsicGamma, Is.EqualTo(0.995f).Within(Epsilon));
+            Assert.That(config.extrinsicGamma, Is.EqualTo(0.9995f).Within(Epsilon));
             Assert.That(config.lambd, Is.EqualTo(0.98f).Within(Epsilon));
             Assert.That(config.timeHorizon, Is.EqualTo(1024));
             Assert.That(config.curiosityEnabled, Is.False);
@@ -127,17 +138,577 @@ namespace RocketSim.Tests
                 controlEffort = 0f
             };
             var context = new RewardRuntimeContext(
-                30f, 0.5f, 9.80665f, 1f, 120f, 40000f, 2f, 180f,
-                2f, 2.5f, 2f, 1f, 5f, 25f, 10f,
-                false, false, false, false, 0f, 0.45f, 3f,
+                altitude: 30f,
+                terminalAltitude: 0.5f,
+                episodeStartAltitude: 30f,
+                gravityMagnitude: 9.80665f,
+                episodeElapsedSeconds: 1f,
+                curriculumDifficulty01: 1f,
+                fuelKg: 40000f,
                 engineRestartsThisStep: 1);
 
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
             RewardDecision restart = RocketRewardModel.Evaluate(
-                ScenarioType.Hover, terms, context, new ScenarioRewardFactors());
+                ScenarioType.Hover, terms, context, objective);
 
             Assert.That(restart.endEpisode, Is.False);
-            Assert.That(restart.eventReward, Is.EqualTo(-RocketRewardModel.HoverEngineRestartPenalty).Within(Epsilon));
+            Assert.That(restart.eventReward, Is.EqualTo(-objective.rewards.engineRestartCost).Within(Epsilon));
             Assert.That(Mathf.Abs(restart.eventReward), Is.LessThan(10f));
+        }
+
+        [Test]
+        public void BalancedObjectivesContainActualRewardMagnitudes()
+        {
+            ScenarioObjectiveConfig chopstick =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.ChopstickLanding);
+            ScenarioObjectiveConfig leg =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding);
+            ScenarioObjectiveConfig hover =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
+            ScenarioObjectiveConfig tracking =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.HoverTracking);
+
+            Assert.That(chopstick.presetName, Is.EqualTo("Balanced"));
+            Assert.That(chopstick.rewards.landingGoalClosureRewardRate, Is.EqualTo(0.060f).Within(Epsilon));
+            Assert.That(chopstick.rewards.landingDescentProfileErrorCostRate, Is.EqualTo(0.040f).Within(Epsilon));
+            Assert.That(chopstick.rewards.landingYawErrorCostRate, Is.EqualTo(0.015f).Within(Epsilon));
+            Assert.That(chopstick.rewards.timeCostRate, Is.EqualTo(0.100f).Within(Epsilon));
+            Assert.That(chopstick.rewards.stableCaptureReward, Is.EqualTo(1f).Within(Epsilon));
+            Assert.That(chopstick.rewards.chopstickSuccessfulCaptureReward, Is.EqualTo(10f).Within(Epsilon));
+            Assert.That(chopstick.rewards.chopstickFailedCaptureCost, Is.EqualTo(5f).Within(Epsilon));
+
+            Assert.That(leg.rewards.landingYawErrorCostRate, Is.Zero.Within(Epsilon));
+            Assert.That(leg.rewards.landingYawSpinCostRate, Is.EqualTo(0.040f).Within(Epsilon));
+            Assert.That(leg.rewards.firstFootContactReward, Is.EqualTo(0.250f).Within(Epsilon));
+            Assert.That(leg.rewards.stableTouchdownReward, Is.EqualTo(1f).Within(Epsilon));
+            Assert.That(leg.rewards.legSuccessfulTouchdownReward, Is.EqualTo(10f).Within(Epsilon));
+
+            Assert.That(hover.rewards.hoverAltitudeProximityRewardRate, Is.EqualTo(0.120f).Within(Epsilon));
+            Assert.That(hover.rewards.hoverLinearSpeedCostRate, Is.EqualTo(0.0015f).Within(Epsilon));
+            Assert.That(hover.rewards.engineRestartCost, Is.EqualTo(0.250f).Within(Epsilon));
+            Assert.That(hover.rewards.hoverGroundImpactCost, Is.EqualTo(10f).Within(Epsilon));
+
+            Assert.That(tracking.rewards.trackingSettleCenterRewardRate, Is.EqualTo(0.045f).Within(Epsilon));
+            Assert.That(tracking.rewards.trackingApproachClosureRewardRate, Is.EqualTo(0.085f).Within(Epsilon));
+            Assert.That(tracking.rewards.trackingMovingAwayCostRate, Is.EqualTo(0.045f).Within(Epsilon));
+        }
+
+        [Test]
+        public void ApplyingPresetReplacesTheWholeRewardVectorAndEditsBecomeCustom()
+        {
+            var config = new TrainingObjectiveConfig();
+            ScenarioObjectiveConfig objective = config.ForScenario(ScenarioType.ChopstickLanding);
+            objective.rewards.landingGoalClosureRewardRate = 99f;
+            objective.rewards.trackingTargetCaptureReward = 99f;
+            objective.MarkCustom();
+
+            config.ApplyPreset(ScenarioType.ChopstickLanding, "Balanced");
+
+            Assert.That(objective.presetName, Is.EqualTo("Balanced"));
+            Assert.That(objective.rewards.landingGoalClosureRewardRate, Is.EqualTo(0.060f).Within(Epsilon));
+            Assert.That(objective.rewards.trackingTargetCaptureReward, Is.Zero.Within(Epsilon),
+                "A complete preset must clear even inapplicable stale values before writing its vector.");
+
+            objective.rewards.landingGoalClosureRewardRate = 0.08f;
+            objective.MarkCustom();
+            Assert.That(objective.presetName, Is.EqualTo("Custom"));
+        }
+
+        [Test]
+        public void AllZeroRewardObjectiveRemainsIntentionalData()
+        {
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
+            objective.rewards.Clear();
+            objective.MarkCustom();
+
+            objective.EnsureObjects(ScenarioType.Hover);
+
+            Assert.That(objective.presetName, Is.EqualTo("Custom"));
+            Assert.That(
+                RewardParameterCatalog.All.All(descriptor =>
+                    descriptor.GetValue(objective.rewards) == 0f),
+                Is.True,
+                "Initialization must never reinterpret a deliberate all-zero objective as missing data.");
+
+            ObjectiveValidationResult validation =
+                ObjectiveValidator.Validate(ScenarioType.Hover, objective);
+            Assert.That(validation.HasErrors, Is.False,
+                "A zero reward vector is allowed for deliberate ablation experiments.");
+            Assert.That(validation.issues.Any(issue => issue.code == "reward.all_zero"), Is.True,
+                "The validator should still explain why an all-zero objective is usually unhelpful.");
+        }
+
+        [Test]
+        public void RewardCatalogHasUniqueStableIdsAndScenarioApplicability()
+        {
+            Assert.That(
+                RewardParameterCatalog.All.Select(descriptor => descriptor.id).Distinct().Count(),
+                Is.EqualTo(RewardParameterCatalog.All.Count));
+            Assert.That(
+                RewardParameterCatalog.All.Select(descriptor => descriptor.key).Distinct().Count(),
+                Is.EqualTo(RewardParameterCatalog.All.Count));
+            Assert.That(
+                RewardParameterCatalog.All.All(descriptor => descriptor.id != RewardParameterId.None),
+                Is.True);
+
+            int declaredParameterCount = System.Enum.GetValues(typeof(RewardParameterId)).Length - 1;
+            Assert.That(RewardParameterCatalog.All.Count, Is.EqualTo(declaredParameterCount),
+                "Every declared reward ID must have exactly one descriptor.");
+
+            RewardParameterDescriptor legStrike =
+                RewardParameterCatalog.Find(RewardParameterId.LegStructuralStrikeCost);
+            Assert.That(legStrike, Is.Not.Null);
+            Assert.That(legStrike.AppliesTo(ScenarioType.LegLanding), Is.True);
+            Assert.That(legStrike.AppliesTo(ScenarioType.Hover), Is.False,
+                "Leg contact outcomes must not leak into a legless hover objective.");
+            Assert.That(
+                RewardParameterCatalog.ForScenario(ScenarioType.Hover)
+                    .Any(descriptor => descriptor.key.StartsWith("leg.")),
+                Is.False,
+                "The scenario-filtered reward breakdown must not create leg-term columns for hover.");
+
+            foreach (ScenarioDefinition scenario in ScenarioCatalog.All)
+                Assert.That(
+                    RewardParameterCatalog.ForScenario(scenario.Type).All(item => item.AppliesTo(scenario.Type)),
+                    Is.True);
+        }
+
+        [Test]
+        public void RewardCatalogBindsEveryEditableRewardMagnitudeExactlyOnce()
+        {
+            FieldInfo[] rewardFields = typeof(RewardParameters)
+                .GetFields(BindingFlags.Instance | BindingFlags.Public)
+                .Where(field => field.FieldType == typeof(float))
+                .ToArray();
+            var boundFields = new HashSet<string>();
+
+            foreach (RewardParameterDescriptor descriptor in RewardParameterCatalog.All)
+            {
+                var values = new RewardParameters();
+                values.Clear();
+                descriptor.SetValue(values, 1f);
+
+                FieldInfo[] changed = rewardFields
+                    .Where(field => (float)field.GetValue(values) != 0f)
+                    .ToArray();
+                Assert.That(changed.Length, Is.EqualTo(1),
+                    $"Reward descriptor '{descriptor.key}' must bind exactly one serialized magnitude.");
+                Assert.That(boundFields.Add(changed[0].Name), Is.True,
+                    $"Reward field '{changed[0].Name}' is bound by more than one descriptor.");
+            }
+
+            Assert.That(boundFields.Count, Is.EqualTo(rewardFields.Length),
+                "The catalog-driven Reward panel must expose every editable RewardParameters field.");
+        }
+
+        [Test]
+        public void RewardSliderCurveKeepsNormalAndSmallValuesReachable()
+        {
+            Assert.That(
+                RewardParameterCatalog.Find(RewardParameterId.HoverAltitudeProximityRewardRate).scaleMode,
+                Is.EqualTo(NumericScaleMode.QuadraticWithZero));
+
+            float normalPosition = Mathf.Sqrt(0.08f / 0.25f);
+            float smallPosition = Mathf.Sqrt(0.001f / 0.25f);
+            Assert.That(normalPosition, Is.InRange(0.50f, 0.65f),
+                "A normal 0.08 reward should not render against the right edge of a 0..0.25 slider.");
+            Assert.That(smallPosition, Is.InRange(0.05f, 0.08f),
+                "Small nonzero rewards must remain reachable by dragging instead of collapsing into zero.");
+        }
+
+        [Test]
+        public void TerminationCatalogIsUniqueAndHidesLegRulesFromHover()
+        {
+            Assert.That(
+                TerminationRuleCatalog.All.Select(rule => rule.id).Distinct().Count(),
+                Is.EqualTo(TerminationRuleCatalog.All.Count));
+            Assert.That(
+                TerminationRuleCatalog.All.Select(rule => rule.key).Distinct().Count(),
+                Is.EqualTo(TerminationRuleCatalog.All.Count));
+            Assert.That(
+                TerminationRuleCatalog.All.Count,
+                Is.EqualTo(System.Enum.GetValues(typeof(TerminationRuleId)).Length));
+
+            TerminationRuleDescriptor legRebound =
+                TerminationRuleCatalog.Find(TerminationRuleId.LegExcessiveRebound);
+            Assert.That(legRebound, Is.Not.Null);
+            Assert.That(legRebound.AppliesTo(ScenarioType.LegLanding), Is.True);
+            Assert.That(legRebound.AppliesTo(ScenarioType.Hover), Is.False);
+            Assert.That(
+                TerminationRuleCatalog.ForScenario(ScenarioType.Hover)
+                    .Any(rule => rule.key.StartsWith("leg.")),
+                Is.False,
+                "A hover task without landing legs must not expose leg-contact termination controls.");
+
+            foreach (ScenarioDefinition scenario in ScenarioCatalog.All)
+                Assert.That(
+                    TerminationRuleCatalog.ForScenario(scenario.Type)
+                        .All(rule => rule.AppliesTo(scenario.Type)),
+                    Is.True);
+        }
+
+        [Test]
+        public void FreshHoverTimeLimitsStayDisabledButAreImmediatelyValidWhenEnabled()
+        {
+            TerminationRuleDescriptor timeLimitRule =
+                TerminationRuleCatalog.Find(TerminationRuleId.HoverTimeLimit);
+            Assert.That(timeLimitRule, Is.Not.Null);
+            TerminationThresholdDescriptor timeLimitThreshold = timeLimitRule.thresholds.Single(
+                threshold => threshold.key == "common.maximum_episode_seconds");
+
+            foreach (ScenarioType scenario in new[] { ScenarioType.Hover, ScenarioType.HoverTracking })
+            {
+                ScenarioObjectiveConfig objective = ScenarioObjectiveConfig.CreateDefault(scenario);
+
+                Assert.That(objective.terminations.timeLimitEnabled, Is.False,
+                    $"A fresh {scenario} objective must not terminate an otherwise healthy hover by time.");
+                Assert.That(
+                    objective.terminations.maximumEpisodeSeconds,
+                    Is.InRange(timeLimitThreshold.hardMinimum, timeLimitThreshold.hardMaximum),
+                    "Disabled controls must retain an editable value accepted by their descriptor.");
+
+                timeLimitRule.SetEnabled(objective.terminations, true);
+                ObjectiveValidationResult enabled = ObjectiveValidator.Validate(scenario, objective);
+                Assert.That(enabled.HasErrors, Is.False,
+                    $"Enabling the untouched {scenario} time limit must produce a runnable objective.");
+                Assert.That(
+                    enabled.issues.Any(issue =>
+                        issue.code == "termination.out_of_range" &&
+                        issue.parameterKey == timeLimitThreshold.key),
+                    Is.False);
+            }
+        }
+
+        [Test]
+        public void SemanticSignsAndContributionDiagnosticsMatchTheAppliedReward()
+        {
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
+            objective.rewards.Clear();
+            objective.terminations.Clear();
+            objective.rewards.hoverAltitudeProximityRewardRate = 0.20f;
+            objective.rewards.hoverLinearSpeedCostRate = 0.03f;
+            var terms = SafeHoverTerms();
+            terms.speed = 2f;
+            var contributions = new RewardContributionBuffer();
+
+            RewardDecision decision = RocketRewardModel.Evaluate(
+                ScenarioType.Hover,
+                terms,
+                HoverContext(),
+                objective,
+                contributions);
+
+            Assert.That(decision.shapingRate, Is.EqualTo(0.14f).Within(Epsilon));
+            Assert.That(contributions.shapingRate, Is.EqualTo(decision.shapingRate).Within(Epsilon));
+            Assert.That(contributions.eventReward, Is.Zero.Within(Epsilon));
+            Assert.That(contributions.terminalReward, Is.Zero.Within(Epsilon));
+
+            Assert.That(
+                contributions.GetRawFeature(RewardParameterId.HoverAltitudeProximityRewardRate),
+                Is.EqualTo(1f).Within(Epsilon));
+            Assert.That(
+                contributions.GetSignedCoefficient(RewardParameterId.HoverAltitudeProximityRewardRate),
+                Is.EqualTo(0.20f).Within(Epsilon));
+            Assert.That(
+                contributions.GetSignedContribution(RewardParameterId.HoverAltitudeProximityRewardRate),
+                Is.EqualTo(0.20f).Within(Epsilon));
+
+            Assert.That(
+                contributions.GetRawFeature(RewardParameterId.HoverLinearSpeedCostRate),
+                Is.EqualTo(2f).Within(Epsilon));
+            Assert.That(
+                contributions.GetSignedCoefficient(RewardParameterId.HoverLinearSpeedCostRate),
+                Is.EqualTo(-0.03f).Within(Epsilon));
+            Assert.That(
+                contributions.GetSignedContribution(RewardParameterId.HoverLinearSpeedCostRate),
+                Is.EqualTo(-0.06f).Within(Epsilon));
+
+            foreach (RewardParameterDescriptor descriptor in RewardParameterCatalog.All)
+            {
+                if (descriptor.AppliesTo(ScenarioType.Hover)) continue;
+                Assert.That(contributions.GetRawFeature(descriptor.id), Is.Zero.Within(Epsilon));
+                Assert.That(contributions.GetSignedCoefficient(descriptor.id), Is.Zero.Within(Epsilon));
+                Assert.That(contributions.GetSignedContribution(descriptor.id), Is.Zero.Within(Epsilon));
+            }
+
+            Assert.That(
+                RewardParameterCatalog.Find(RewardParameterId.HoverAltitudeProximityRewardRate).sign,
+                Is.EqualTo(RewardParameterSign.Reward));
+            Assert.That(
+                RewardParameterCatalog.Find(RewardParameterId.HoverLinearSpeedCostRate).sign,
+                Is.EqualTo(RewardParameterSign.Cost));
+        }
+
+        [Test]
+        public void HoverTerminationRulesRespectEnableSwitchesAndThresholds()
+        {
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
+            objective.terminations.hoverGroundClearanceM = 2f;
+
+            RewardDecision enabled = RocketRewardModel.Evaluate(
+                ScenarioType.Hover,
+                SafeHoverTerms(),
+                HoverContext(altitude: 1.9f),
+                objective);
+            AssertTerminal(enabled, -10f, false, EpisodeTerminationReason.HoverGroundImpact);
+
+            objective.terminations.hoverGroundImpactEnabled = false;
+            RewardDecision disabled = RocketRewardModel.Evaluate(
+                ScenarioType.Hover,
+                SafeHoverTerms(),
+                HoverContext(altitude: 1.9f),
+                objective);
+            Assert.That(disabled.endEpisode, Is.False,
+                "Disabling a configurable termination rule must change runtime behavior.");
+
+            objective.terminations.planarFlyawayEnabled = true;
+            objective.terminations.maximumPlanarDistanceM = 5f;
+            RewardTerms far = SafeHoverTerms();
+            far.planarDistance = 6f;
+            RewardDecision tightThreshold = RocketRewardModel.Evaluate(
+                ScenarioType.Hover, far, HoverContext(), objective);
+            AssertTerminal(tightThreshold, -10f, false, EpisodeTerminationReason.HoverTooFarFromTarget);
+
+            objective.terminations.maximumPlanarDistanceM = 10f;
+            RewardDecision relaxedThreshold = RocketRewardModel.Evaluate(
+                ScenarioType.Hover, far, HoverContext(), objective);
+            Assert.That(relaxedThreshold.endEpisode, Is.False);
+        }
+
+        [Test]
+        public void HoverTrackingCaptureGoalIsOptionalAndUsesConfiguredSignals()
+        {
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.HoverTracking);
+            objective.terminations.trackingCaptureGoalEnabled = true;
+            objective.terminations.trackingRequiredCaptures = 2;
+            objective.rewards.trackingTargetCaptureReward = 1.25f;
+            objective.rewards.trackingCaptureGoalReward = 6f;
+            var contributions = new RewardContributionBuffer();
+
+            RewardDecision firstCapture = RocketRewardModel.Evaluate(
+                ScenarioType.HoverTracking,
+                SafeHoverTerms(),
+                HoverContext(targetCaptured: true, captureCount: 1),
+                objective,
+                contributions);
+            Assert.That(firstCapture.endEpisode, Is.False);
+            Assert.That(firstCapture.eventReward, Is.EqualTo(1.25f).Within(Epsilon));
+
+            RewardDecision goal = RocketRewardModel.Evaluate(
+                ScenarioType.HoverTracking,
+                SafeHoverTerms(),
+                HoverContext(targetCaptured: true, captureCount: 2),
+                objective,
+                contributions);
+            AssertTerminal(goal, 6f, true, EpisodeTerminationReason.HoverTrackingCaptureGoal);
+            Assert.That(goal.eventReward, Is.EqualTo(1.25f).Within(Epsilon));
+            Assert.That(contributions.eventReward, Is.EqualTo(goal.eventReward).Within(Epsilon));
+            Assert.That(contributions.shapingRate, Is.EqualTo(goal.shapingRate).Within(Epsilon));
+            Assert.That(
+                contributions.GetRawFeature(RewardParameterId.TrackingTargetCaptureReward),
+                Is.EqualTo(1f).Within(Epsilon));
+            Assert.That(
+                contributions.GetSignedCoefficient(RewardParameterId.TrackingCaptureGoalReward),
+                Is.EqualTo(6f).Within(Epsilon));
+            Assert.That(contributions.terminalReward, Is.EqualTo(6f).Within(Epsilon));
+
+            objective.terminations.trackingCaptureGoalEnabled = false;
+            RewardDecision optional = RocketRewardModel.Evaluate(
+                ScenarioType.HoverTracking,
+                SafeHoverTerms(),
+                HoverContext(targetCaptured: true, captureCount: 2),
+                objective);
+            Assert.That(optional.endEpisode, Is.False);
+            Assert.That(optional.eventReward, Is.EqualTo(1.25f).Within(Epsilon));
+        }
+
+        [Test]
+        public void ObjectiveValidationAcceptsDefaultsAndRejectsInvalidValues()
+        {
+            foreach (ScenarioDefinition scenario in ScenarioCatalog.All)
+            {
+                ObjectiveValidationResult defaults = ObjectiveValidator.Validate(
+                    scenario.Type,
+                    ScenarioObjectiveConfig.CreateDefault(scenario.Type));
+                Assert.That(defaults.HasErrors, Is.False,
+                    $"The fresh {scenario.DisplayName} objective must be runnable.");
+            }
+
+            ScenarioObjectiveConfig hover =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover);
+            hover.rewards.hoverLinearSpeedCostRate = -0.01f;
+            ObjectiveValidationResult negativeReward =
+                ObjectiveValidator.Validate(ScenarioType.Hover, hover);
+            Assert.That(negativeReward.HasErrors, Is.True);
+            Assert.That(negativeReward.issues.Any(issue => issue.code == "reward.out_of_range"), Is.True);
+
+            ScenarioObjectiveConfig tracking =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.HoverTracking);
+            tracking.terminations.trackingCaptureGoalEnabled = true;
+            tracking.terminations.trackingRequiredCaptures = 0;
+            ObjectiveValidationResult invalidCaptureGoal =
+                ObjectiveValidator.Validate(ScenarioType.HoverTracking, tracking);
+            Assert.That(invalidCaptureGoal.HasErrors, Is.True);
+            Assert.That(
+                invalidCaptureGoal.issues.Any(issue => issue.code == "termination.capture_count"),
+                Is.True);
+
+            ScenarioObjectiveConfig chopstick =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.ChopstickLanding);
+            chopstick.terminations.chopstickCapturePlaneEnabled = false;
+            DifficultyRange invalidEventRadius = chopstick.terminations.landingSuccessRadiusM;
+            invalidEventRadius.initial = float.NaN;
+            chopstick.terminations.landingSuccessRadiusM = invalidEventRadius;
+            ObjectiveValidationResult invalidStableCaptureEvent =
+                ObjectiveValidator.Validate(ScenarioType.ChopstickLanding, chopstick);
+            Assert.That(invalidStableCaptureEvent.HasErrors, Is.True,
+                "Stable-capture event criteria remain active when terminal capture is disabled.");
+        }
+
+        [Test]
+        public void ObjectiveValidationRejectsObjectivesWithoutAnyEnabledTerminationRule()
+        {
+            foreach (ScenarioDefinition scenario in ScenarioCatalog.All)
+            {
+                ScenarioObjectiveConfig objective =
+                    ScenarioObjectiveConfig.CreateDefault(scenario.Type);
+                foreach (TerminationRuleDescriptor rule in
+                         TerminationRuleCatalog.ForScenario(scenario.Type))
+                    rule.SetEnabled(objective.terminations, false);
+
+                ObjectiveValidationResult validation =
+                    ObjectiveValidator.Validate(scenario.Type, objective);
+
+                Assert.That(validation.HasErrors, Is.True,
+                    $"A {scenario.DisplayName} episode with MaxStep=0 needs at least one enabled termination path.");
+                Assert.That(
+                    validation.issues.Any(issue =>
+                        issue.code == "termination.none_enabled" &&
+                        issue.severity == ObjectiveValidationSeverity.Error),
+                    Is.True,
+                    "The missing termination path must be a launch-blocking validation error.");
+            }
+        }
+
+        [Test]
+        public void ResumeAcceptsTheExactCurrentTrainingContract()
+        {
+            using var fixture = new ResumeContractFixture();
+
+            bool accepted = fixture.TryValidate(
+                fixture.CloneEnvironment(),
+                fixture.CloneParts(),
+                fixture.CloneMl(),
+                out string error);
+
+            Assert.That(accepted, Is.True);
+            Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void ResumeIgnoresOnlyThePreservedEvaluatorFields()
+        {
+            using var fixture = new ResumeContractFixture();
+            SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
+            requestedEnvironment.behaviorType = BehaviorType.Inference;
+            requestedEnvironment.inferencePurpose = InferencePurpose.ManualInference;
+            requestedEnvironment.evaluation = new EvaluationConfig
+            {
+                episodeCount = 17,
+                seed = 7341
+            };
+
+            bool accepted = fixture.TryValidate(
+                requestedEnvironment,
+                fixture.CloneParts(),
+                fixture.CloneMl(),
+                out string error);
+
+            Assert.That(accepted, Is.True,
+                "Run loading deliberately preserves evaluator mode, purpose, seed, and episode count.");
+            Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void ResumeRejectsChangingOnlyTheActiveScenarioUnderTheSameRunId()
+        {
+            using var fixture = new ResumeContractFixture();
+            SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
+            requestedEnvironment.scenario = ScenarioType.HoverTracking;
+            Assert.That(
+                JsonUtility.ToJson(requestedEnvironment.EnsureTrainingObjective()),
+                Is.EqualTo(JsonUtility.ToJson(fixture.SavedEnvironment.EnsureTrainingObjective())),
+                "This regression must vary only the active scenario, not the objective payload.");
+
+            AssertResumeRejected(
+                fixture,
+                requestedEnvironment,
+                fixture.CloneParts(),
+                fixture.CloneMl(),
+                "differs from the saved run scenario");
+        }
+
+        [Test]
+        public void ResumeRejectsTrainingEnvironmentChanges()
+        {
+            using var fixture = new ResumeContractFixture();
+            SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
+            requestedEnvironment.windEnabled = true;
+            requestedEnvironment.windSpeed = 12f;
+
+            AssertResumeRejected(
+                fixture,
+                requestedEnvironment,
+                fixture.CloneParts(),
+                fixture.CloneMl(),
+                "environment configuration differs");
+        }
+
+        [Test]
+        public void ResumeRejectsHardwareChanges()
+        {
+            using var fixture = new ResumeContractFixture();
+            RocketPartsConfig requestedParts = fixture.CloneParts();
+            requestedParts.maxThrustPerEngine += 1000f;
+
+            AssertResumeRejected(
+                fixture,
+                fixture.CloneEnvironment(),
+                requestedParts,
+                fixture.CloneMl(),
+                "hardware configuration differs");
+        }
+
+        [Test]
+        public void ResumeRejectsMlTrainerChanges()
+        {
+            using var fixture = new ResumeContractFixture();
+            MLAgentsConfig requestedMl = fixture.CloneMl();
+            requestedMl.learningRate *= 0.5f;
+
+            AssertResumeRejected(
+                fixture,
+                fixture.CloneEnvironment(),
+                fixture.CloneParts(),
+                requestedMl,
+                "ML-Agents trainer configuration differs");
+        }
+
+        [Test]
+        public void ObjectiveDifficultyRangesInterpolateAndClampAtCurriculumEndpoints()
+        {
+            var range = new DifficultyRange(initial: 8f, full: 2f);
+
+            Assert.That(range.At(-1f), Is.EqualTo(8f).Within(Epsilon));
+            Assert.That(range.At(0f), Is.EqualTo(8f).Within(Epsilon));
+            Assert.That(range.At(0.5f), Is.EqualTo(5f).Within(Epsilon));
+            Assert.That(range.At(1f), Is.EqualTo(2f).Within(Epsilon));
+            Assert.That(range.At(2f), Is.EqualTo(2f).Within(Epsilon));
         }
 
         [Test]
@@ -170,9 +741,9 @@ namespace RocketSim.Tests
                 verticalSpeed: 10f,
                 closureRate: -10f);
 
-            Assert.That(usefulDescent.shapingReward, Is.GreaterThan(hover.shapingReward));
-            Assert.That(hover.shapingReward, Is.GreaterThan(flyaway.shapingReward));
-            Assert.That(hover.shapingReward, Is.LessThan(0f), "Stationary hovering must not farm positive landing reward.");
+            Assert.That(usefulDescent.shapingRate, Is.GreaterThan(hover.shapingRate));
+            Assert.That(hover.shapingRate, Is.GreaterThan(flyaway.shapingRate));
+            Assert.That(hover.shapingRate, Is.LessThan(0f), "Stationary hovering must not farm positive landing reward.");
         }
 
         [Test]
@@ -193,7 +764,7 @@ namespace RocketSim.Tests
 
             Assert.That(ordinary.eventReward, Is.Zero.Within(Epsilon));
             Assert.That(transition.eventReward, Is.EqualTo(1f).Within(Epsilon));
-            Assert.That(transition.shapingReward, Is.EqualTo(ordinary.shapingReward).Within(Epsilon));
+            Assert.That(transition.shapingRate, Is.EqualTo(ordinary.shapingRate).Within(Epsilon));
         }
 
         [Test]
@@ -233,6 +804,23 @@ namespace RocketSim.Tests
             Assert.That(middle.successRadius, Is.EqualTo((easy.successRadius + full.successRadius) * 0.5f).Within(Epsilon));
             Assert.That(clamped.spawnAltitudeMax, Is.EqualTo(full.spawnAltitudeMax).Within(Epsilon));
             Assert.That(clamped.successRadius, Is.EqualTo(full.successRadius).Within(Epsilon));
+        }
+
+        [Test]
+        public void LegLandingStartsFastCalmAndKeepsEnginesOffByContract()
+        {
+            var environment = new SimEnvironmentConfig { scenario = ScenarioType.LegLanding };
+            LandingCurriculumProfile easy = environment.GetLegLandingCurriculumProfile(0f);
+            LandingCurriculumProfile full = environment.GetLegLandingCurriculumProfile(1f);
+
+            Assert.That(easy.spawnAltitudeMin,
+                Is.EqualTo(SimEnvironmentConfig.LegLandingInitialSpawnAltitudeMin).Within(Epsilon));
+            Assert.That(easy.verticalSpeedMin, Is.EqualTo(20f).Within(Epsilon));
+            Assert.That(easy.verticalSpeedMax, Is.EqualTo(30f).Within(Epsilon));
+            Assert.That(easy.spawnTiltRangeDeg, Is.EqualTo(0.5f).Within(Epsilon));
+            Assert.That(easy.angularSpeedMaxDegS, Is.Zero.Within(Epsilon));
+            Assert.That(full.angularSpeedMaxDegS, Is.EqualTo(12f).Within(Epsilon));
+            Assert.That(full.verticalSpeedMax, Is.EqualTo(70f).Within(Epsilon));
         }
 
         [Test]
@@ -293,8 +881,6 @@ namespace RocketSim.Tests
             Assert.That(ScenarioType.ChopstickLanding.SupportsStandardEvaluation(), Is.True);
             Assert.That(ScenarioType.LegLanding.SupportsStandardEvaluation(), Is.True);
             Assert.That(ScenarioType.HoverTracking.SupportsStandardEvaluation(), Is.False);
-            Assert.That(ScenarioType.Takeoff.SupportsStandardEvaluation(), Is.False);
-            Assert.That(ScenarioType.BellyFlop.SupportsStandardEvaluation(), Is.False);
         }
 
         [Test]
@@ -408,28 +994,57 @@ namespace RocketSim.Tests
                 angularRateDegS = 0f
             };
             var context = new RewardRuntimeContext(
-                30f, 0.5f, 9.80665f, 20f, 120f, 0f, 2f, 180f,
-                2f, 2.5f, 2f, 1f, 5f, 25f, 10f,
-                false, false, false, false, 0f, 0.45f, 3f);
+                altitude: 30f,
+                terminalAltitude: 0.5f,
+                episodeStartAltitude: 30f,
+                gravityMagnitude: 9.80665f,
+                episodeElapsedSeconds: 20f,
+                curriculumDifficulty01: 1f,
+                fuelKg: 0f);
 
             RewardDecision decision = RocketRewardModel.Evaluate(
-                ScenarioType.Hover, terms, context, new ScenarioRewardFactors());
+                ScenarioType.Hover,
+                terms,
+                context,
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover));
 
             AssertTerminal(decision, -10f, false, EpisodeTerminationReason.HoverFuelDepleted);
         }
 
         [Test]
-        public void ScenarioValuesPreserveLegacyLandingAsChopstick()
+        public void ScenarioCatalogContainsOnlySupportedTasks()
         {
-            Assert.That((int)ScenarioType.ChopstickLanding, Is.EqualTo(0));
-            Assert.That((int)ScenarioType.Hover, Is.EqualTo(1));
-            Assert.That((int)ScenarioType.LegLanding, Is.EqualTo(5));
+            ScenarioType[] scenarios = ScenarioCatalog.All.Select(profile => profile.Type).ToArray();
+            ScenarioType[] declaredScenarios =
+                (ScenarioType[])System.Enum.GetValues(typeof(ScenarioType));
+            var expectedScenarios = new[]
+            {
+                ScenarioType.ChopstickLanding,
+                ScenarioType.LegLanding,
+                ScenarioType.Hover,
+                ScenarioType.HoverTracking
+            };
+
+            CollectionAssert.AreEquivalent(expectedScenarios, scenarios);
+            CollectionAssert.AreEquivalent(expectedScenarios, declaredScenarios,
+                "Removed tasks must not remain as hidden enum values.");
+            CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 },
+                declaredScenarios.Select(value => (int)value).OrderBy(value => value).ToArray(),
+                "The fresh scenario schema should not retain obsolete numeric-ID gaps.");
             Assert.That(ScenarioType.ChopstickLanding.IsLanding(), Is.True);
             Assert.That(ScenarioType.LegLanding.IsLanding(), Is.True);
             Assert.That(ScenarioCatalog.Get(ScenarioType.ChopstickLanding).DisplayName,
                 Is.EqualTo("Chopstick Catch Landing"));
             Assert.That(ScenarioCatalog.Get(ScenarioType.LegLanding).DisplayName,
                 Is.EqualTo("Falcon 9 Leg Landing"));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+                ScenarioCatalog.Get((ScenarioType)99),
+                "Unknown serialized values must not be migrated into a supported task.");
+            ObjectiveValidationResult invalidScenario = ObjectiveValidator.Validate(
+                (ScenarioType)99,
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.Hover));
+            Assert.That(invalidScenario.HasErrors, Is.True);
+            Assert.That(invalidScenario.issues.Any(issue => issue.code == "scenario.unsupported"), Is.True);
         }
 
         [Test]
@@ -489,6 +1104,8 @@ namespace RocketSim.Tests
         {
             var environment = new SimEnvironmentConfig { scenario = ScenarioType.LegLanding };
             LandingCurriculumProfile profile = environment.GetLegLandingCurriculumProfile(1f);
+            TerminationParameters termination =
+                environment.GetTrainingObjective(ScenarioType.LegLanding).terminations;
             var terms = new RewardTerms
             {
                 planarDistance = 0.5f,
@@ -499,13 +1116,20 @@ namespace RocketSim.Tests
             };
 
             Assert.That(LegLandingContactEvaluator.IsStableCandidate(
-                0b0011, false, false, terms, 1f, profile), Is.False);
+                0b0011, false, false, terms, 1f, profile, termination.legMinimumStableFeet), Is.False);
             Assert.That(LegLandingContactEvaluator.IsStableCandidate(
-                0b0111, false, false, terms, 1f, profile), Is.True);
+                0b0111, false, false, terms, 1f, profile, termination.legMinimumStableFeet), Is.True);
             Assert.That(LegLandingContactEvaluator.IsStableCandidate(
-                0b1111, false, true, terms, 1f, profile), Is.False);
+                0b1111, false, true, terms, 1f, profile, termination.legMinimumStableFeet), Is.False);
             Assert.That(LegLandingContactEvaluator.IsStableCandidate(
-                0b1111, true, false, terms, 1f, profile), Is.False);
+                0b1111, true, false, terms, 1f, profile, termination.legMinimumStableFeet), Is.False);
+
+            termination.legMinimumStableFeet = 4;
+            Assert.That(LegLandingContactEvaluator.IsStableCandidate(
+                0b0111, false, false, terms, 1f, profile, termination.legMinimumStableFeet), Is.False,
+                "The contact evaluator must consume the user-configured minimum-foot count.");
+            Assert.That(LegLandingContactEvaluator.IsStableCandidate(
+                0b1111, false, false, terms, 1f, profile, termination.legMinimumStableFeet), Is.True);
         }
 
         [Test]
@@ -525,6 +1149,99 @@ namespace RocketSim.Tests
         }
 
         [Test]
+        public void LegLandingContactMaximumThresholdsAreInclusiveAtEquality()
+        {
+            var environment = new SimEnvironmentConfig { scenario = ScenarioType.LegLanding };
+            LandingCurriculumProfile profile = environment.GetLegLandingCurriculumProfile(1f);
+            TerminationParameters termination =
+                environment.GetTrainingObjective(ScenarioType.LegLanding).terminations;
+            var boundaryTerms = new RewardTerms
+            {
+                planarDistance = profile.successRadius,
+                speed = profile.successMaxSpeed,
+                planarSpeed = profile.successMaxHorizontalSpeed,
+                verticalSpeed = -profile.successMaxVerticalSpeed,
+                angularRateDegS = profile.successMaxAngularRateDegS
+            };
+
+            Assert.That(LegLandingContactEvaluator.IsFirstContactSafe(
+                totalSpeed: profile.successMaxSpeed,
+                verticalSpeed: -profile.successMaxVerticalSpeed,
+                horizontalSpeed: profile.successMaxHorizontalSpeed,
+                tiltDeg: profile.successMaxTiltDeg,
+                angularRateDegS: profile.successMaxAngularRateDegS,
+                profile: profile), Is.True,
+                "Every first-contact value equal to its labeled maximum must remain safe.");
+            Assert.That(LegLandingContactEvaluator.IsStableCandidate(
+                footMask: 0b1111,
+                footOutsidePad: false,
+                structuralStrike: false,
+                terms: boundaryTerms,
+                tiltDeg: profile.successMaxTiltDeg,
+                profile: profile,
+                minimumStableFeet: termination.legMinimumStableFeet), Is.True,
+                "Target radius and every stable-touchdown maximum must include equality.");
+            Assert.That(LegLandingContactEvaluator.IsExcessiveRebound(
+                reboundRiseM: termination.legMaximumReboundRiseM,
+                allFeetContactLossSeconds: termination.legMaximumAllFeetContactLossSeconds,
+                maximumReboundRiseM: termination.legMaximumReboundRiseM,
+                maximumAllFeetContactLossSeconds: termination.legMaximumAllFeetContactLossSeconds),
+                Is.False,
+                "Rebound and contact-loss values equal to their maximums must remain accepted.");
+        }
+
+        [Test]
+        public void GeneratedLandingGearCollidersResolveTheirOwningAgent()
+        {
+            var root = new GameObject("GeneratedLandingGearRelayTest");
+            try
+            {
+                FalconAgent owner = root.AddComponent<FalconAgent>();
+                LandingLegAssembly legs = LandingLegAssembly.Ensure(root.transform);
+                legs.Configure(true, Falcon9Reference.BodyRadiusM, Falcon9Reference.BodyHeightM);
+                LandingGearCollider[] markers = root.GetComponentsInChildren<LandingGearCollider>();
+
+                Assert.That(markers.Length, Is.EqualTo(LandingLegAssembly.LegCount * 2));
+                foreach (LandingGearCollider marker in markers)
+                    Assert.That(marker.Owner, Is.SameAs(owner));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void LegReboundRequiresEitherMeaningfulRiseOrSustainedContactLoss()
+        {
+            TerminationParameters termination = ScenarioObjectiveConfig
+                .CreateDefault(ScenarioType.LegLanding)
+                .terminations;
+            Assert.That(LegLandingContactEvaluator.IsExcessiveRebound(
+                termination.legMaximumReboundRiseM,
+                termination.legMaximumAllFeetContactLossSeconds,
+                termination.legMaximumReboundRiseM,
+                termination.legMaximumAllFeetContactLossSeconds), Is.False);
+            Assert.That(LegLandingContactEvaluator.IsExcessiveRebound(
+                termination.legMaximumReboundRiseM + 0.01f,
+                0f,
+                termination.legMaximumReboundRiseM,
+                termination.legMaximumAllFeetContactLossSeconds), Is.True);
+            Assert.That(LegLandingContactEvaluator.IsExcessiveRebound(
+                0f,
+                termination.legMaximumAllFeetContactLossSeconds + 0.01f,
+                termination.legMaximumReboundRiseM,
+                termination.legMaximumAllFeetContactLossSeconds), Is.True);
+
+            Assert.That(LegLandingContactEvaluator.IsExcessiveRebound(
+                reboundRiseM: 0.75f,
+                allFeetContactLossSeconds: 0.40f,
+                maximumReboundRiseM: 1f,
+                maximumAllFeetContactLossSeconds: 0.5f), Is.False,
+                "Raising both configured limits must change the contact verdict without code changes.");
+        }
+
+        [Test]
         public void LegLandingRewardUsesContactDrivenTerminalOutcomes()
         {
             RewardTerms terms = SafeLegTerms();
@@ -532,22 +1249,54 @@ namespace RocketSim.Tests
                 ScenarioType.LegLanding,
                 terms,
                 LegContext(altitude: 0f),
-                new ScenarioRewardFactors());
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
             RewardDecision stable = RocketRewardModel.Evaluate(
                 ScenarioType.LegLanding,
                 terms,
                 LegContext(altitude: 0f, touchdown: true, stable: true, becameStable: true),
-                new ScenarioRewardFactors());
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
             RewardDecision strike = RocketRewardModel.Evaluate(
                 ScenarioType.LegLanding,
                 terms,
                 LegContext(altitude: 0f, touchdown: true, structuralStrike: true),
-                new ScenarioRewardFactors());
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
+            RewardDecision rebound = RocketRewardModel.Evaluate(
+                ScenarioType.LegLanding,
+                terms,
+                LegContext(altitude: 0.6f, touchdown: true, excessiveRebound: true),
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
 
             Assert.That(airborneAtPadPlane.endEpisode, Is.False,
                 "Crossing the pad plane must not replace physical foot contact.");
             AssertTerminal(stable, 10f, true, EpisodeTerminationReason.LegLandingSuccessfulTouchdown);
             AssertTerminal(strike, -5f, false, EpisodeTerminationReason.LegLandingStructuralStrike);
+            AssertTerminal(rebound, -5f, false, EpisodeTerminationReason.LegLandingExcessiveRebound);
+        }
+
+        [Test]
+        public void LegLandingPenalizesBodyAxisSpinAtAltitudeWithoutRequiringAHeading()
+        {
+            RewardTerms calmTerms = SafeLegTerms();
+            calmTerms.yawRateDegS = 0f;
+            calmTerms.yawErrorDeg = 150f;
+            RewardTerms spinningTerms = calmTerms;
+            spinningTerms.yawRateDegS = 20f;
+
+            RewardDecision calm = RocketRewardModel.Evaluate(
+                ScenarioType.LegLanding,
+                calmTerms,
+                LegContext(altitude: 250f),
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
+            RewardDecision spinning = RocketRewardModel.Evaluate(
+                ScenarioType.LegLanding,
+                spinningTerms,
+                LegContext(altitude: 250f),
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding));
+
+            Assert.That(calm.endEpisode, Is.False);
+            Assert.That(spinning.endEpisode, Is.False);
+            Assert.That(calm.shapingRate - spinning.shapingRate,
+                Is.EqualTo(0.04f).Within(Epsilon));
         }
 
         [Test]
@@ -581,11 +1330,171 @@ namespace RocketSim.Tests
                 Is.EqualTo(Falcon9Reference.MerlinSeaLevelThrustN).Within(Epsilon));
         }
 
+        static void AssertResumeRejected(
+            ResumeContractFixture fixture,
+            SimEnvironmentConfig environment,
+            RocketPartsConfig parts,
+            MLAgentsConfig ml,
+            string expectedCategory)
+        {
+            bool accepted = fixture.TryValidate(environment, parts, ml, out string error);
+
+            Assert.That(accepted, Is.False);
+            Assert.That(error, Does.Contain(expectedCategory));
+        }
+
+        sealed class ResumeContractFixture : System.IDisposable
+        {
+            readonly System.Reflection.MethodInfo _validateDestination;
+            readonly bool _safeToDelete;
+
+            public readonly string RunId;
+            public readonly string RunRoot;
+            public readonly SimEnvironmentConfig SavedEnvironment;
+            public readonly RocketPartsConfig SavedParts;
+            public readonly MLAgentsConfig SavedMl;
+
+            public ResumeContractFixture()
+            {
+                string resultsRoot = Path.GetFullPath(
+                    Path.Combine(Application.dataPath, "..", "results"));
+                RunId = "__rocketsim_resume_contract_test_" + System.Guid.NewGuid().ToString("N");
+                RunRoot = Path.GetFullPath(Path.Combine(resultsRoot, RunId));
+                string safePrefix = resultsRoot.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                _safeToDelete = RunRoot.StartsWith(
+                    safePrefix,
+                    System.StringComparison.OrdinalIgnoreCase);
+                Assert.That(_safeToDelete, Is.True,
+                    "The test run must stay inside the project results directory.");
+
+                System.Type repositoryType = typeof(TrainingLauncher).Assembly.GetType(
+                    "RocketSim.TrainingRunRepository",
+                    throwOnError: true);
+                _validateDestination = repositoryType.GetMethod(
+                    "TryValidateRunDestination",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                Assert.That(_validateDestination, Is.Not.Null);
+
+                SavedEnvironment = new SimEnvironmentConfig
+                {
+                    scenario = ScenarioType.Hover,
+                    behaviorType = BehaviorType.Training,
+                    runId = RunId,
+                    trainingObjective = new TrainingObjectiveConfig()
+                };
+                SavedEnvironment.EnsureTrainingObjective();
+                SavedParts = new RocketPartsConfig();
+                SavedMl = new MLAgentsConfig();
+
+                string environmentJson = JsonUtility.ToJson(SavedEnvironment);
+                string partsJson = JsonUtility.ToJson(SavedParts);
+                string mlYaml = SavedMl.ToYAML();
+                var manifest = new TrainingRunManifest
+                {
+                    schemaVersion = TrainingRunManifest.CurrentSchemaVersion,
+                    runId = RunId,
+                    scenario = SavedEnvironment.scenario.ToString(),
+                    trainingObjectiveSha256 = Sha256Hex(
+                        JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective())),
+                    partsConfigSha256 = Sha256Hex(partsJson),
+                    mlAgentsConfigSha256 = Sha256Hex(mlYaml)
+                };
+
+                try
+                {
+                    Directory.CreateDirectory(RunRoot);
+                    File.WriteAllText(Path.Combine(RunRoot, "EnvConfig.json"), environmentJson);
+                    File.WriteAllText(Path.Combine(RunRoot, "PartsConfig.json"), partsJson);
+                    File.WriteAllText(Path.Combine(RunRoot, "TrainingConfig.yaml"), mlYaml);
+                    File.WriteAllText(
+                        Path.Combine(RunRoot, "RunManifest.json"),
+                        JsonUtility.ToJson(manifest));
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+            public SimEnvironmentConfig CloneEnvironment() =>
+                JsonUtility.FromJson<SimEnvironmentConfig>(JsonUtility.ToJson(SavedEnvironment));
+
+            public RocketPartsConfig CloneParts() =>
+                JsonUtility.FromJson<RocketPartsConfig>(JsonUtility.ToJson(SavedParts));
+
+            public MLAgentsConfig CloneMl() =>
+                JsonUtility.FromJson<MLAgentsConfig>(JsonUtility.ToJson(SavedMl));
+
+            public bool TryValidate(
+                SimEnvironmentConfig environment,
+                RocketPartsConfig parts,
+                MLAgentsConfig ml,
+                out string error)
+            {
+                object[] arguments = { RunId, true, environment, parts, ml, null };
+                bool accepted = (bool)_validateDestination.Invoke(null, arguments);
+                error = arguments[5] as string;
+                return accepted;
+            }
+
+            public void Dispose()
+            {
+                if (_safeToDelete && Directory.Exists(RunRoot))
+                    Directory.Delete(RunRoot, true);
+            }
+        }
+
+        static string Sha256Hex(string value)
+        {
+            using System.Security.Cryptography.SHA256 sha256 =
+                System.Security.Cryptography.SHA256.Create();
+            byte[] digest = sha256.ComputeHash(
+                System.Text.Encoding.UTF8.GetBytes(value ?? string.Empty));
+            return System.BitConverter.ToString(digest)
+                .Replace("-", string.Empty)
+                .ToLowerInvariant();
+        }
+
         static RocketPartsConfig Preset(RocketHardwarePreset preset)
         {
             var config = new RocketPartsConfig();
             config.ApplyPreset(preset);
             return config;
+        }
+
+        static RewardTerms SafeHoverTerms() => new()
+        {
+            verticalError = 0f,
+            planarDistance = 0f,
+            speed = 0f,
+            planarSpeed = 0f,
+            verticalSpeed = 0f,
+            horizontalClosureRate = 0f,
+            upDot = 1f,
+            upright01 = 1f,
+            angularRateDegS = 0f,
+            controlEffort = 0f
+        };
+
+        static RewardRuntimeContext HoverContext(
+            float altitude = 30f,
+            bool targetCaptured = false,
+            int captureCount = 0,
+            float fuelKg = 1000f)
+        {
+            return new RewardRuntimeContext(
+                altitude: altitude,
+                terminalAltitude: 0.5f,
+                episodeStartAltitude: 30f,
+                gravityMagnitude: 9.80665f,
+                episodeElapsedSeconds: 1f,
+                curriculumDifficulty01: 1f,
+                fuelKg: fuelKg,
+                hoverTrackTargetCapturedThisStep: targetCaptured,
+                hoverTrackEpisodeCaptures: captureCount);
         }
 
         static RewardTerms SafeLegTerms() => new()
@@ -607,12 +1516,17 @@ namespace RocketSim.Tests
             bool touchdown = false,
             bool stable = false,
             bool becameStable = false,
-            bool structuralStrike = false)
+            bool structuralStrike = false,
+            bool excessiveRebound = false)
         {
             return new RewardRuntimeContext(
-                altitude, 0f, 9.80665f, 1f, 120f, 1000f, 1f, 1000f,
-                2f, 2.5f, 2f, 1f, 5f, 25f, 180f,
-                false, false, false, false, 0f, 1f, 10f,
+                altitude: altitude,
+                terminalAltitude: 0f,
+                episodeStartAltitude: 300f,
+                gravityMagnitude: 9.80665f,
+                episodeElapsedSeconds: 1f,
+                curriculumDifficulty01: 1f,
+                fuelKg: 1000f,
                 legTouchdownStarted: touchdown,
                 legFirstContactThisStep: touchdown,
                 legFeetOnPad: stable ? 4 : 1,
@@ -624,7 +1538,8 @@ namespace RocketSim.Tests
                 legFirstContactVerticalSpeed: -0.1f,
                 legFirstContactHorizontalSpeed: 0.1f,
                 legFirstContactTiltDeg: 1f,
-                legFirstContactAngularRateDegS: 1f);
+                legFirstContactAngularRateDegS: 1f,
+                legExcessiveRebound: excessiveRebound);
         }
 
         static RewardDecision EvaluateLanding(
@@ -649,34 +1564,23 @@ namespace RocketSim.Tests
                 controlEffort = 0f
             };
             var context = new RewardRuntimeContext(
-                altitude,
-                60f,
-                9.80665f,
-                elapsedSeconds,
-                120f,
-                1000f,
-                1f,
-                1000f,
-                2f,
-                2.5f,
-                2f,
-                1f,
-                5f,
-                25f,
-                10f,
-                true,
-                platformStable,
-                platformStable,
-                platformBecameStable,
-                platformStable ? 0.45f : 0f,
-                0.45f,
-                3f);
+                altitude: altitude,
+                terminalAltitude: 60f,
+                episodeStartAltitude: 300f,
+                gravityMagnitude: 9.80665f,
+                episodeElapsedSeconds: elapsedSeconds,
+                curriculumDifficulty01: 1f,
+                fuelKg: 1000f,
+                landingPlatformInsideCapture: platformStable,
+                landingPlatformStable: platformStable,
+                landingPlatformBecameStable: platformBecameStable,
+                landingPlatformStableTime: platformStable ? 0.45f : 0f);
 
             return RocketRewardModel.Evaluate(
                 ScenarioType.ChopstickLanding,
                 terms,
                 context,
-                new ScenarioRewardFactors());
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.ChopstickLanding));
         }
 
         static void AssertTerminal(

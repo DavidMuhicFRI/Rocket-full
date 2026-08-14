@@ -45,14 +45,10 @@ namespace RocketSim
     [Serializable]
     public class InferenceScenarioConfig
     {
-        // The old `landing` field is kept for serialized-data compatibility;
-        // its behavior was always the chopstick-catch task.
-        public InferenceSpawnProfile landing = new();
+        public InferenceSpawnProfile chopstickLanding = new();
         public InferenceSpawnProfile legLanding = new();
         public InferenceSpawnProfile hover = new();
         public InferenceSpawnProfile hoverTracking = new();
-        public InferenceSpawnProfile takeoff = new();
-        public InferenceSpawnProfile bellyFlop = new();
 
         /// <summary>
         /// Returns the spawn profile for the selected inference scenario and
@@ -60,23 +56,20 @@ namespace RocketSim
         /// </summary>
         public InferenceSpawnProfile ForScenario(ScenarioType scenario)
         {
-            landing ??= new InferenceSpawnProfile();
+            chopstickLanding ??= new InferenceSpawnProfile();
             legLanding ??= new InferenceSpawnProfile();
             hover ??= new InferenceSpawnProfile();
             hoverTracking ??= new InferenceSpawnProfile();
-            takeoff ??= new InferenceSpawnProfile();
-            bellyFlop ??= new InferenceSpawnProfile();
 
             ScenarioType resolvedScenario = ScenarioCatalog.Get(scenario).Type;
             InferenceSpawnProfile profile = resolvedScenario switch
             {
-                ScenarioType.ChopstickLanding => landing,
+                ScenarioType.ChopstickLanding => chopstickLanding,
                 ScenarioType.LegLanding => legLanding,
                 ScenarioType.Hover => hover,
                 ScenarioType.HoverTracking => hoverTracking,
-                ScenarioType.Takeoff => takeoff,
-                ScenarioType.BellyFlop => bellyFlop,
-                _ => landing
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(scenario), scenario, "The scenario is not part of the current schema.")
             };
             profile.EnsureInitialized(resolvedScenario);
             return profile;

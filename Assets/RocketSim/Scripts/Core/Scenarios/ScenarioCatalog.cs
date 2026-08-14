@@ -14,15 +14,11 @@ namespace RocketSim
 {
     public enum ScenarioType
     {
-        // Explicit values protect saved JsonUtility/Unity data when scenarios
-        // are renamed or inserted. Value zero was the old generic Landing task;
-        // that implementation was chopstick-specific, so it remains the catch.
+        // Explicit values keep the serialized schema deterministic.
         ChopstickLanding = 0,
-        Hover = 1,
-        HoverTracking = 2,
-        Takeoff = 3,
-        BellyFlop = 4,
-        LegLanding = 5
+        LegLanding = 1,
+        Hover = 2,
+        HoverTracking = 3
     }
 
     /// <summary>
@@ -140,19 +136,13 @@ namespace RocketSim
     {
         public const float ChopstickLandingStartFuelFraction = 0.08f;
         public const float LegLandingStartFuelFraction = 0.08f;
-        // Retained as a source-compatible generic default for older helpers.
-        public const float LandingStartFuelFraction = ChopstickLandingStartFuelFraction;
         public const float HoverStartFuelFraction = 0.1f;
         public const float HoverTrackingStartFuelFraction = 0.1f;
         public const float HoverStartAltitude = 80f;
         public const float HoverTrackingStartAltitude = 80f;
-        public const float TakeoffStartFuelFraction = 1.00f;
-        public const float BellyFlopStartFuelFraction = 0.12f;
 
         public const float HoverGoalAltitude = 30f;
         public const float HoverTrackingGoalAltitude = 30f;
-        public const float TakeoffGoalAltitude = 120f;
-        public const float BellyFlopGoalAltitude = 0.5f;
 
         public const float DefaultTerminalAltitude = 0.5f;
 
@@ -190,29 +180,14 @@ namespace RocketSim
                 HoverTrackingGoalAltitude,
                 true,
                 new InferenceSpawnDefaults(25f, 35f, 8f, -2f, 2f, 0f, 3f, 0f, 5f, 8f)),
-            new(
-                ScenarioType.Takeoff,
-                "Takeoff",
-                "Lift off",
-                TakeoffStartFuelFraction,
-                TakeoffGoalAltitude,
-                false,
-                new InferenceSpawnDefaults(0f, 0f, 2f, 0f, 0f, 0f, 0f, 0f, 2f, 2f)),
-            new(
-                ScenarioType.BellyFlop,
-                "Belly Flop",
-                "Reorient from horizontal",
-                BellyFlopStartFuelFraction,
-                BellyFlopGoalAltitude,
-                false,
-                new InferenceSpawnDefaults(90f, 140f, 15f, -22f, -10f, 0f, 5f, 85f, 7f, 15f)),
         };
 
         public static readonly IReadOnlyList<ScenarioDefinition> All = Array.AsReadOnly(Entries);
 
         /// <summary>
-        /// Returns metadata for a scenario. Unknown enum values safely fall back
-        /// to ChopstickLanding so callers always receive a valid definition.
+        /// Returns metadata for one of the four supported scenarios. Unknown
+        /// serialized values are rejected instead of being reinterpreted as a
+        /// different task under the clean scenario schema.
         /// </summary>
         public static ScenarioDefinition Get(ScenarioType scenario)
         {
@@ -222,7 +197,8 @@ namespace RocketSim
                     return Entries[i];
             }
 
-            return Entries[0];
+            throw new ArgumentOutOfRangeException(
+                nameof(scenario), scenario, "The scenario is not part of the current schema.");
         }
     }
 }

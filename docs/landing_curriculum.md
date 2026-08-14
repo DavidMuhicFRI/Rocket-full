@@ -18,9 +18,9 @@ Fifteen percent of training episodes replay a complete profile at `max(0, d - 0.
 
 Telemetry stores global difficulty, actual episode difficulty, and the replay flag independently.
 
-## Shared continuous profile
+## Continuous profiles
 
-The built-in endpoints are:
+Chopstick catch retains its broad acquisition profile. The spawn rows are curriculum defaults; success rows are the default objective's editable termination endpoints:
 
 | Quantity | `d = 0` | `d = 1` |
 |---|---:|---:|
@@ -37,33 +37,50 @@ The built-in endpoints are:
 | Tilt max | 20 deg | 5 deg |
 | Angular-rate max | 50 deg/s | 25 deg/s |
 
+Physical leg landing uses a separate terminal-descent spawn profile while
+retaining the same success-limit interpolation shown above:
+
+| Quantity | `d = 0` | `d = 1` |
+|---|---:|---:|
+| Spawn altitude | 250-350 m | 400-1000 m |
+| Horizontal offset radius | 3 m | 60 m |
+| Downward speed range | 20-30 m/s | 30-70 m/s |
+| Horizontal speed max | 0.5 m/s | 12 m/s |
+| Pitch/roll range | 0.5 deg | 8 deg |
+| Angular-speed max | 0 deg/s | 12 deg/s |
+
 The sampler couples altitude and velocity through conservative braking/lateral-control checks rather than sampling impossible combinations independently. For the leg-landing hardware comparison, this check uses one fixed single-engine Falcon reference envelope so every ablation receives the same seeded task distribution. Actual vehicle TWR is still validated/reported separately.
 
-The flyaway ceiling is calculated per episode as the relevant landing frame's starting altitude plus 100 m. A horizontal error above 150 m is a separate flyaway condition.
+In the default objective, the altitude-escape rule allows 100 m above the episode's starting landing-frame altitude and the planar-flyaway rule allows 150 m of horizontal error. Both rules and thresholds are configurable.
 
 ## Chopstick catch behavior
 
 Observations and reward use `CatchFrame` near the grid fins and the target at the configured catch altitude (60 m by default). The generated tower/arms are visual and logical only: they do not apply impulses, close, form joints, or support the vehicle.
 
-Capture requires `CatchFrame` to stay inside the logical envelope while satisfying total/vertical/horizontal speed, tilt, angular-rate, uprightness, and yaw limits. Yaw tolerance interpolates from 30 deg to 10 deg, capture half-size from 8 m to 3 m, and stable hold from 0.15 s to 0.45 s.
+With the default objective, capture requires `CatchFrame` to stay inside the logical envelope while satisfying total/vertical/horizontal speed, tilt, angular-rate, uprightness, and yaw limits. Yaw tolerance interpolates from 30 deg to 10 deg, capture half-size from 8 m to 3 m, and stable hold from 0.15 s to 0.45 s. The logical platform geometry remains curriculum configuration; success thresholds and the stable-hold rule belong to the training objective.
 
 ## Leg-landing behavior
 
-Observations and reward use `FeetFrame` at the generated landing-foot plane and the measured top of the existing landing-pad collider. Four physical legs are active for the whole scenario; the curriculum never switches collision on midway through training. Heading/yaw is not a requirement.
+Observations and reward use `FeetFrame` at the generated landing-foot plane and the measured top of the existing landing-pad collider. Four physical legs are active for the whole scenario; the curriculum never switches collision on midway through training. Heading/yaw angle is not a requirement, but body-axis spin is penalized at every altitude so rotation cannot be used as a free drag device.
 
-The pad half-size remains 10 m. Safe first contact must meet the current motion/attitude limits. Stable success additionally requires at least three feet on the pad, no outside-pad foot, no body/strut strike, position within the current success radius, and continuous compliance for a hold interpolated from 0.25 s to 1.0 s.
+Every leg-landing episode starts with all engines off. The policy must infer the
+suicide-burn ignition point from altitude, velocity, attitude, actuator timing,
+and the remaining state observations. Every configured independent engine
+channel remains available throughout training and evaluation.
+
+The pad half-size remains 10 m. Each generated foot/strut collider explicitly reports its own pad contacts; the body does not need to touch the ground. With the default objective, safe first contact must meet the interpolated motion/attitude limits. Stable success additionally requires at least three feet on the pad, no outside-pad foot, no body/strut strike, position within the current success radius, and continuous compliance for a hold interpolated from 0.25 s to 1.0 s. The default excessive-rebound rule ends the episode after rising more than 0.5 m above first-contact height or losing all foot contact for more than 0.25 s. All of these criteria are editable in the scenario-specific Termination Criteria section and are serialized with the run.
 
 ## Reward timing
 
 Dense landing shaping is a per-second rate multiplied by `Time.fixedDeltaTime`. First-contact/stable milestones and terminal rewards are one-off events. All contributions use `AddReward`, so a terminal signal is added to shaping accumulated since the previous ML-Agents decision instead of erasing it.
 
-Both landing models use signed goal closure, a gravity/height-derived descent profile, centering, uprightness, near-target velocity/rotation, control-effort, and time terms. Neither rewards a prescribed throttle setting or merely remaining alive. Chopstick adds yaw/capture logic; leg landing replaces it with physical first-contact and stable-support logic. See [reward_functions.md](reward_functions.md).
+The default landing objectives use signed goal closure, a gravity/height-derived descent profile, centering, uprightness, near-target velocity/rotation, control effort, and a `0.10` reward-unit-per-second time cost. Neither rewards a prescribed throttle setting or merely remaining alive. Chopstick adds yaw/capture logic; leg landing replaces heading alignment with a global body-axis spin cost plus physical first-contact and stable-support logic. Every magnitude and shaping scale is editable without code changes; see [reward_functions.md](reward_functions.md).
 
 ## PPO temporal settings
 
 The experiment contract is a 0.01 s physics step and decision period 3: one decision every 0.03 s (about 33.3 Hz).
 
-- `gamma = 0.995` discounts per policy decision. A reward 10 simulated seconds away retains about 19% of its value.
+- `gamma = 0.9995` discounts per policy decision. A reward 10 simulated seconds away retains about 85% of its value. Together with the `0.10/s` time cost, delaying a `-5` failure by one 0.03 s decision lowers return instead of improving it.
 - `lambda = 0.98` is the Generalized Advantage Estimation bias/variance control. Higher values propagate observed outcomes farther back with more variance; lower values rely more on the critic with more bias.
 - `time_horizon = 1024` is a rollout chunk, not an episode limit. It covers 30.72 simulated seconds. Longer episodes continue in another chunk and bootstrap the unfinished return from the critic.
 - Curiosity is disabled for the primary dense-reward experiment so novelty reward is not an uncontrolled treatment.

@@ -7,7 +7,6 @@
 
 using UnityEngine;
 using Unity.MLAgents;
-using UnityEngine.Serialization;
 
 namespace RocketSim
 {
@@ -27,7 +26,6 @@ namespace RocketSim
 
         public RocketAssembly assembly;
         public Transform targetPad;
-        [FormerlySerializedAs("topControlPoint")]
         [Tooltip("Guidance/capture reference point near the grid-fin hardpoint.")]
         public Transform catchFrame;
 
@@ -49,8 +47,11 @@ namespace RocketSim
         bool _landingEpisodeEndLogged;
         bool _hoverTrackTargetReachedThisStep;
         bool _landingEpisodeSucceeded;
+        bool _objectiveSuccessTerminalReached;
         EpisodeTerminationReason _episodeTerminationReason;
         int _hoverTrackEpisodeCaptures;
+        readonly RewardContributionBuffer _rewardContributions = new();
+        float _objectiveDifficulty01;
         
 
 
@@ -109,6 +110,7 @@ namespace RocketSim
         float q; // dynamic pressure
         float aoaDeg; // angle of attack
         float _hoverTrackStableTime;
+        bool _hoverTrackCaptureLatched;
         float _hoverTrackSegmentStartDistance;
         float _hoverTrackSegmentElapsedTime;
         ChopstickCatchPlatform _chopstickPlatform;
@@ -136,8 +138,11 @@ namespace RocketSim
         float _legFirstContactHorizontalSpeed;
         float _legFirstContactTiltDeg;
         float _legFirstContactAngularRateDegS;
+        float _legFirstContactHeightAbovePad;
+        float _legAllFeetContactLossTime;
         float _legMaximumContactImpulseNs;
         float _legMaximumReboundHeightM;
+        bool _legExcessiveRebound;
         int _defaultSolverIterations = 6;
         int _defaultSolverVelocityIterations = 1;
         CollisionDetectionMode _defaultCollisionDetectionMode = CollisionDetectionMode.Discrete;
@@ -163,8 +168,6 @@ namespace RocketSim
         const float HScale = 8500f; // ISA scale height (m)
         const float G0 = 9.80665f;
         const float BaseGroundClearance = 0.5f;
-        const float HoverTrackCycleCompleteReward = 4.0f;
-        const float LandingFlyawayAltitudeMargin = 100f;
         const float EngineIgnitionThreshold = 0.08f;
         const float EngineShutdownThreshold = 0.03f;
         const float RcsValveActionThreshold = 0.5f;

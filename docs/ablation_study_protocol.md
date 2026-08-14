@@ -34,19 +34,22 @@ Checkpoints trained before the canonical 109-observation/39-action schema was in
 `Falcon 9 Leg Landing` is separate from `Chopstick Catch Landing`.
 
 - Four deployed legs are generated at 90-degree spacing with an approximately 18 m footprint. Reference dry mass is assumed to already include the landing gear, so generated geometry adds neither a second leg mass nor an aerodynamic term.
-- Each foot and strut has a compound collider; the legs deliberately add no aerodynamic drag.
+- Each foot and strut has a compound collider that explicitly relays its own pad contacts; the legs deliberately add no aerodynamic drag.
 - The existing landing-pad collider supplies the measured contact plane and pad footprint.
 - The touchdown reference is `FeetFrame`, not the body origin or grid-fin catch frame.
-- A successful landing requires at least three feet on the pad, no foot outside the pad, no body/strut strike, and all full-difficulty motion/position limits held for 1.0 simulated second.
+- Under the default objective, a successful landing requires at least three feet on the pad, no foot outside the pad, no body/strut strike, and all full-difficulty motion/position limits held for 1.0 simulated second.
 - First foot contact is evaluated immediately. Excess total, vertical, or horizontal speed, tilt, or angular rate is a hard-touchdown failure.
-- A body/strut strike, foot outside the pad, missed pad, unsafe attitude, fuel depletion while airborne, flyaway, or time limit is a distinct terminal reason.
+- The default excessive-rebound rule triggers after rising more than 0.5 m above first-contact height or losing all foot contact for more than 0.25 s. The body is not expected to contact the ground.
+- A body/strut strike, foot outside the pad, excessive rebound, missed pad, unsafe attitude, fuel depletion while airborne, flyaway, or time limit is a distinct terminal reason.
 - Physics solver iterations are raised only during this contact-heavy scenario and restored afterwards. The landing pad remains kinematic/static; there are no closing arms or joints.
 
 This is a best-effort rigid-body stability model, not a structural model of Falcon 9 landing-leg deployment or failure. Do not interpret contact impulse as a certified leg load.
 
+These contact counts, holds, limits, rule switches, and linked terminal costs are scenario-specific objective parameters. Freeze them before the ablation; changing one creates a different experimental treatment.
+
 ### Continuous curriculum
 
-Leg landing has independent curriculum progress but shares the declared continuous spawn/tolerance curve and adaptive rules with chopstick landing. Heading/yaw is irrelevant, the pad half-size stays 10 m, and stable-contact hold grows from 0.25 s to 1.0 s.
+Leg landing has independent curriculum progress, its own faster terminal-descent spawn curve, and the same declared success-tolerance/adaptive rules as chopstick landing. Heading angle is irrelevant, while body-axis spin is penalized globally; the pad half-size stays 10 m, and the default stable-contact hold grows from 0.25 s to 1.0 s. Every episode starts with all engines off, so ignition timing and engine selection remain part of the learned task.
 
 Use one curriculum mode consistently within an experiment:
 
@@ -76,7 +79,7 @@ Hover does not need an artificial “landed” terminal event. Its evaluator can
 - Use at least five independent trainer seeds per condition; three is a pilot-study minimum.
 - Reuse the same trainer-seed list and evaluation episode seeds across conditions.
 - Use deterministic inference and 200 episodes per saved landing policy in the primary evaluation.
-- Keep `Time.fixedDeltaTime = 0.01 s`, decision period `3`, PPO hyperparameters, reward factors, curriculum rule, training budget, checkpoint schedule, weather, and faults fixed across a comparison.
+- Keep `Time.fixedDeltaTime = 0.01 s`, decision period `3`, PPO hyperparameters, the complete selected-scenario objective, curriculum rule, training budget, checkpoint schedule, weather, and faults fixed across a comparison. The objective includes reward magnitudes, shaping geometry, termination switches, and termination thresholds; a matching reward-preset label alone is not sufficient.
 - Use clear weather/no faults for the primary evaluation. A seeded-wind suite may be a separately named robustness experiment.
 - Keep PPO curiosity disabled for the primary dense-reward experiment. Enabling it is a separate treatment.
 - Treat the independently trained policy seed, not each evaluation episode, as the replicate for claims about learning.
@@ -139,16 +142,18 @@ These measurements help distinguish missing physical authority from failure to l
 
 ## Saved evidence
 
-Each run records configuration snapshots, a run manifest, episode summaries, and sampled/full-rate trajectories. The manifest includes scenario, hardware flags, installed/active engines, initial mass and the three thrust-authority values, policy dimensions, seeds, timing, transfer source, Unity/ML-Agents/Python/PyTorch/CUDA versions, trainer GPU/host details, Git state, and a SHA-256 fingerprint of the complete reward model. Leg-landing telemetry adds per-foot contact, first-contact motion, stable hold, contact impulse, rebound, body strike, and outside-pad fields. Standard evaluation writes a neighboring JSON aggregate with success intervals, outcome counts, final-state statistics, fuel/control use, and leg touchdown statistics.
+Each run records configuration snapshots, a run manifest, episode summaries, and sampled/full-rate trajectories. The manifest includes scenario, hardware flags, installed/active engines, initial mass and the three thrust-authority values, policy dimensions, seeds, timing, transfer source, Unity/ML-Agents/Python/PyTorch/CUDA versions, trainer GPU/host details, Git state, `trainingObjectiveSha256` for the serialized four-scenario objective, and fingerprints for the complete hardware and generated ML-Agents configurations. Leg-landing telemetry adds per-foot contact, first-contact motion, stable hold, contact impulse, rebound, body strike, and outside-pad fields. Optional reward-breakdown telemetry adds each applicable parameter's raw feature, signed coefficient, and signed contribution. Standard evaluation writes a neighboring JSON aggregate with success intervals, outcome counts, final-state statistics, fuel/control use, and leg touchdown statistics.
 
 ## Final-run readiness gate
 
-Pilot runs may be used to choose a reward model and debug the protocol. Before collecting thesis data:
+Pilot runs may be used to choose a complete objective and debug the protocol. Before collecting thesis data:
 
-- freeze the reward definition/factors and write them into the preregistered experiment table;
+- freeze the selected scenario's reward magnitudes, shaping parameters, termination rules, and thresholds, and write them into the preregistered experiment table;
 - commit or tag the complete simulator state so `sourceControlDirty` is false;
-- use a unique run ID for every seed and condition; the launcher refuses to overwrite an existing results directory unless Resume is explicitly enabled;
+- use a unique run ID for every seed and condition; the launcher refuses to overwrite an existing results directory unless Resume is explicitly enabled, and Resume accepts only the current saved environment/curriculum state with identical scenario, objective, hardware, and generated ML-Agents configuration;
 - verify that every run manifest reports a successful Python-environment probe and the expected package/GPU versions;
-- use the same root commit, reward-model hash, PPO YAML contract, and evaluator seed across every condition in the comparison.
+- use the same root commit, `trainingObjectiveSha256`, PPO YAML contract, and evaluator seed across every condition in the comparison.
+
+The current run manifest is a clean objective-schema boundary. Runs created by earlier schemas are not resume, inference, or transfer sources for this protocol; train fresh sources and targets under the current four-scenario configuration.
 
 `TrainingConfig.yaml` at the project root is a synchronized manual-CLI reference. Normal UI launches generate and consume the run-local copy saved beside each experiment's other configuration files.

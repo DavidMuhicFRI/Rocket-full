@@ -249,7 +249,9 @@ namespace UI
         void ReadInput()
         {
             Keyboard keyboard = Keyboard.current;
-            if (keyboard != null)
+            // A text editor owns digit, Tab, bracket, V, and F keystrokes while it
+            // is focused. Do not let those same keys change the watched camera.
+            if (keyboard != null && !UIHelper.IsTextInputFocused)
             {
                 if (keyboard.digit1Key.wasPressedThisFrame) SetView(RocketCameraView.Orbit);
                 if (keyboard.digit2Key.wasPressedThisFrame) SetView(RocketCameraView.Side);

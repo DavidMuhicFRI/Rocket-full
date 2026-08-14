@@ -1,9 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Rewards/ChopstickLandingRewardModel.cs
-// Purpose: Defines chopstick-catch reward shaping for vertical descent profile, target
-// centering, uprightness, chopstick yaw alignment, stable hold, and final capture.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
+// Purpose: Scores chopstick descent/capture entirely from the selected task
+// objective. There are no hidden reward weights or termination thresholds.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -13,131 +11,155 @@ namespace RocketSim
     public static partial class RocketRewardModel
     {
         /// <summary>
-        /// Scores chopstick-style landing with signed progress and bounded
-        /// error costs. Static positive state bonuses are intentionally avoided
-        /// so hovering cannot accumulate reward without making progress.
+        /// Rewards signed target closure and costs deviations from the desired
+        /// ballistic descent profile. Positive state bonuses are avoided so the
+        /// vehicle cannot profit simply by hovering indefinitely.
         /// </summary>
-        static RewardDecision ChopstickLanding(RewardTerms t, RewardRuntimeContext ctx, ScenarioRewardFactors f)
+        static RewardDecision ChopstickLanding(
+            RewardTerms t,
+            RewardRuntimeContext ctx,
+            ScenarioObjectiveConfig objective,
+            RewardContributionBuffer contributions)
         {
-            float heightAboveTouchdown = Mathf.Max(0f, ctx.altitude - ctx.terminalAltitude);
-            // Gravity is supplied by the agent's immutable runtime snapshot so
-            // this reward equation has no hidden dependency on global physics.
-            float gravity = Mathf.Max(0.01f, ctx.gravityMagnitude);
-            float touchdownSpeedScale = Mathf.Sqrt(gravity * 0.5f);
-            // A fraction of ballistic free-fall speed provides one continuous
-            // descent target that naturally approaches zero at the catch plane.
-            float desiredDescentSpeed = Mathf.Sqrt(2f * gravity * heightAboveTouchdown) * 0.30f;
+            RewardParameters r = objective.rewards;
+            RewardShapingParameters s = objective.shaping;
+            TerminationParameters end = objective.terminations;
+
+            float heightAboveCapture = Mathf.Max(0f, ctx.altitude - ctx.terminalAltitude);
+            float gravity = SafeScale(ctx.gravityMagnitude);
+            float desiredDescentSpeed =
+                Mathf.Sqrt(2f * gravity * heightAboveCapture) * s.landingBallisticDescentFraction;
             float desiredVerticalSpeed = -desiredDescentSpeed;
+            float descentErrorScale = Mathf.Max(
+                SafeScale(s.landingDescentErrorMinimumScaleMps),
+                desiredDescentSpeed);
+            float closureScale = Mathf.Max(
+                SafeScale(s.landingClosureMinimumScaleMps),
+                desiredDescentSpeed);
+
             float descentError01 = Mathf.Clamp01(
-                Mathf.Abs(t.verticalSpeed - desiredVerticalSpeed) /
-                Mathf.Max(5f, desiredDescentSpeed));
-            float closureScale = Mathf.Max(5f, desiredDescentSpeed);
+                Mathf.Abs(t.verticalSpeed - desiredVerticalSpeed) / descentErrorScale);
             float signedClosure = Mathf.Clamp(t.goalClosureRate / closureScale, -1f, 1f);
+            float planarError01 = 1f - Exp01(
+                Mathf.Max(0f, t.planarDistance), s.landingPlanarDistanceFalloffM);
+            float uprightError01 = 1f - Mathf.Clamp01(t.upright01);
+            float nearCapture01 = Exp01(heightAboveCapture, s.landingNearTargetAltitudeFalloffM);
+            float planarSpeedError01 = Mathf.Clamp01(
+                t.planarSpeed / SafeScale(s.landingPlanarSpeedScaleMps));
+            float angularRateError01 = Mathf.Clamp01(
+                t.angularRateDegS / SafeScale(s.landingAngularRateScaleDegS));
+            float yawError01 = Mathf.Clamp01(
+                Mathf.Abs(t.yawErrorDeg) / SafeScale(s.landingYawErrorScaleDeg));
 
-            // These are fixed physical scales, not curriculum-dependent success
-            // limits. Difficulty therefore changes the task, not reward units.
-            float lateralError01 = 1f - Mathf.Exp(-Mathf.Max(0f, t.planarDistance) / 25f);
-            float attitudeError01 = 1f - Mathf.Clamp01(t.upright01);
-            float nearCatch01 = Mathf.Exp(-heightAboveTouchdown / 50f);
-            float lateralSpeedError01 = Mathf.Clamp01(t.planarSpeed / 5f);
-            float yawError01 = Mathf.Clamp01(t.yawErrorDeg / 45f);
-            float angularRateError01 = Mathf.Clamp01(t.angularRateDegS / 60f);
-            float controlEffort01 = Mathf.Clamp01(t.controlEffort);
+            float shapingRate = 0f;
+            shapingRate += RewardRate(contributions, RewardParameterId.LandingGoalClosureRewardRate,
+                r.landingGoalClosureRewardRate, signedClosure);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingDescentProfileErrorCostRate,
+                r.landingDescentProfileErrorCostRate, descentError01);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingPlanarDistanceCostRate,
+                r.landingPlanarDistanceCostRate, planarError01);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingUprightErrorCostRate,
+                r.landingUprightErrorCostRate, uprightError01);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingNearTargetPlanarSpeedCostRate,
+                r.landingNearTargetPlanarSpeedCostRate, nearCapture01 * planarSpeedError01);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingNearTargetAngularRateCostRate,
+                r.landingNearTargetAngularRateCostRate, nearCapture01 * angularRateError01);
+            shapingRate += CostRate(contributions, RewardParameterId.LandingYawErrorCostRate,
+                r.landingYawErrorCostRate, nearCapture01 * yawError01);
+            shapingRate += CostRate(contributions, RewardParameterId.ControlEffortCostRate,
+                r.controlEffortCostRate, Mathf.Clamp01(t.controlEffort));
+            shapingRate += CostRate(contributions, RewardParameterId.TimeCostRate,
+                r.timeCostRate, 1f);
 
-            float reward =
-                0.060f * f.descentDrive * signedClosure -
-                0.040f * f.descentDrive * descentError01 -
-                0.025f * f.targetPrecision * lateralError01 -
-                0.020f * f.uprightness * attitudeError01 -
-                nearCatch01 * (
-                    0.025f * f.speed * lateralSpeedError01 +
-                    0.015f * f.orientation * yawError01 +
-                    0.015f * f.rotation * angularRateError01) -
-                0.005f * f.controlEffort * controlEffort01 -
-                0.005f * f.timePressure;
+            float eventReward = EventReward(
+                contributions,
+                RewardParameterId.StableCaptureReward,
+                r.stableCaptureReward,
+                ctx.landingPlatformBecameStable ? 1f : 0f);
 
-            // Reaching the full stable-hold requirement is an event, not a
-            // per-second state bonus. It can therefore be earned only once.
-            float stableCaptureEvent = ctx.landingPlatformBecameStable
-                ? 1f * f.settle
-                : 0f;
-
-            if (t.upDot < 0.35f)
+            // Failure priority is deterministic. Irrecoverable/safety outcomes
+            // win over a simultaneous capture or time-limit boundary.
+            if (end.unsafeAttitudeEnabled && TiltDegrees(t.upDot) > end.maximumTiltDeg)
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(-5f, f),
-                    eventReward: stableCaptureEvent,
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.ChopstickUnsafeAttitudeCost,
+                        r.chopstickUnsafeAttitudeCost),
+                    eventReward: eventReward,
                     terminationReason: EpisodeTerminationReason.ChopstickUnsafeAttitude);
 
-            // High-altitude landing starts are intentionally far from the
-            // catch point vertically. Only horizontal flyaway is unrecoverable
-            // here; the independent failure-altitude guard handles upward escape.
-            if (t.planarDistance > 150f)
+            if (end.planarFlyawayEnabled && t.planarDistance > end.maximumPlanarDistanceM)
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(-5f, f),
-                    eventReward: stableCaptureEvent,
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.ChopstickTooFarFromTargetCost,
+                        r.chopstickTooFarFromTargetCost),
+                    eventReward: eventReward,
                     terminationReason: EpisodeTerminationReason.ChopstickTooFarFromTarget);
 
-            if (ctx.fuelKg <= 0f)
+            if (end.fuelDepletionEnabled && ctx.fuelKg <= end.minimumFuelKg)
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(-5f, f),
-                    eventReward: stableCaptureEvent,
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.ChopstickFuelDepletedCost,
+                        r.chopstickFuelDepletedCost),
+                    eventReward: eventReward,
                     terminationReason: EpisodeTerminationReason.ChopstickFuelDepleted);
 
-            if (ctx.altitude > ctx.landingFlyawayAltitude)
+            if (end.altitudeCeilingEnabled &&
+                ctx.altitude > ctx.episodeStartAltitude + end.maximumAltitudeAboveStartM)
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(-5f, f),
-                    eventReward: stableCaptureEvent,
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.ChopstickAboveAltitudeLimitCost,
+                        r.chopstickAboveAltitudeLimitCost),
+                    eventReward: eventReward,
                     terminationReason: EpisodeTerminationReason.ChopstickAboveAltitudeLimit);
 
-            if (ctx.altitude <= ctx.terminalAltitude)
+            if (end.chopstickCapturePlaneEnabled && ctx.altitude <= ctx.terminalAltitude)
             {
-                float touchdownSpeedLimit = ctx.landingSuccessMaxSpeed > 0f
-                    ? ctx.landingSuccessMaxSpeed
-                    : touchdownSpeedScale * 1.6f;
-                float touchdownVerticalSpeedLimit = ctx.landingSuccessMaxVerticalSpeed > 0f
-                    ? ctx.landingSuccessMaxVerticalSpeed
-                    : touchdownSpeedScale * 1.35f;
-                float touchdownHorizontalSpeedLimit = ctx.landingSuccessMaxHorizontalSpeed > 0f
-                    ? ctx.landingSuccessMaxHorizontalSpeed
-                    : touchdownSpeedScale;
-                float successTiltDot = Mathf.Cos(ctx.landingSuccessMaxTiltDeg * Mathf.Deg2Rad);
-                bool headingGood = t.yawErrorDeg < ctx.landingSuccessMaxYawErrorDeg;
-                bool platformGood = !ctx.landingPlatformRequired || ctx.landingPlatformStable;
-                bool good = t.upDot > 0.94f &&
-                            t.upDot > successTiltDot &&
-                            t.planarDistance < ctx.landingSuccessRadius &&
-                            t.speed < touchdownSpeedLimit &&
-                            Mathf.Abs(t.verticalSpeed) < touchdownVerticalSpeedLimit &&
-                            t.planarSpeed < touchdownHorizontalSpeedLimit &&
-                            t.angularRateDegS < ctx.landingSuccessMaxAngularRateDegS &&
-                            headingGood &&
-                            platformGood;
+                bool success = ChopstickCaptureWithinLimits(t, ctx, end);
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(good ? 10f : -5f, f),
-                    good,
-                    stableCaptureEvent,
-                    good
+                    shapingRate,
+                    success
+                        ? TerminalReward(contributions, RewardParameterId.ChopstickSuccessfulCaptureReward,
+                            r.chopstickSuccessfulCaptureReward)
+                        : TerminalCost(contributions, RewardParameterId.ChopstickFailedCaptureCost,
+                            r.chopstickFailedCaptureCost),
+                    successTerminal: success,
+                    eventReward: eventReward,
+                    terminationReason: success
                         ? EpisodeTerminationReason.ChopstickSuccessfulCapture
                         : EpisodeTerminationReason.ChopstickFailedCapture);
             }
 
-            if (ctx.landingMaxEpisodeSeconds > 0f &&
-                ctx.episodeElapsedSeconds >= ctx.landingMaxEpisodeSeconds)
-            {
+            if (end.timeLimitEnabled && ctx.episodeElapsedSeconds >= end.maximumEpisodeSeconds)
                 return RewardDecision.Terminate(
-                    reward,
-                    Terminal(-5f, f),
-                    eventReward: stableCaptureEvent,
+                    shapingRate,
+                    TerminalCost(contributions, RewardParameterId.ChopstickTimeLimitCost,
+                        r.chopstickTimeLimitCost),
+                    eventReward: eventReward,
                     terminationReason: EpisodeTerminationReason.ChopstickTimeLimit);
-            }
 
-            return RewardDecision.Continue(reward, stableCaptureEvent);
+            return RewardDecision.Continue(shapingRate, eventReward);
         }
 
+        static bool ChopstickCaptureWithinLimits(
+            RewardTerms t,
+            RewardRuntimeContext ctx,
+            TerminationParameters end)
+        {
+            float difficulty = ctx.curriculumDifficulty01;
+            bool platformReady = !end.chopstickRequireStablePlatform ||
+                                 (ctx.landingPlatformInsideCapture &&
+                                  ctx.landingPlatformStable &&
+                                  ctx.landingPlatformStableTime >=
+                                      end.landingStableHoldSeconds.At(difficulty));
+
+            return platformReady &&
+                   t.planarDistance <= end.landingSuccessRadiusM.At(difficulty) &&
+                   t.speed <= end.landingSuccessMaxTotalSpeedMps.At(difficulty) &&
+                   Mathf.Abs(t.verticalSpeed) <= end.landingSuccessMaxVerticalSpeedMps.At(difficulty) &&
+                   t.planarSpeed <= end.landingSuccessMaxHorizontalSpeedMps.At(difficulty) &&
+                   TiltDegrees(t.upDot) <= end.landingSuccessMaxTiltDeg.At(difficulty) &&
+                   t.angularRateDegS <= end.landingSuccessMaxAngularRateDegS.At(difficulty) &&
+                   Mathf.Abs(t.yawErrorDeg) <= end.landingSuccessMaxYawErrorDeg.At(difficulty);
+        }
     }
 }

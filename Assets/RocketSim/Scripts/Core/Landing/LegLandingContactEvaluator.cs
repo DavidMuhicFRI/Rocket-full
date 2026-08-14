@@ -10,8 +10,6 @@ namespace RocketSim
 {
     public static class LegLandingContactEvaluator
     {
-        public const int MinimumStableFeet = 3;
-
         public static int CountFeet(int footMask)
         {
             int count = 0;
@@ -29,11 +27,26 @@ namespace RocketSim
             float angularRateDegS,
             LandingCurriculumProfile profile)
         {
-            return totalSpeed < profile.successMaxSpeed &&
-                   Mathf.Abs(verticalSpeed) < profile.successMaxVerticalSpeed &&
-                   horizontalSpeed < profile.successMaxHorizontalSpeed &&
-                   tiltDeg < profile.successMaxTiltDeg &&
-                   angularRateDegS < profile.successMaxAngularRateDegS;
+            return totalSpeed <= profile.successMaxSpeed &&
+                   Mathf.Abs(verticalSpeed) <= profile.successMaxVerticalSpeed &&
+                   horizontalSpeed <= profile.successMaxHorizontalSpeed &&
+                   tiltDeg <= profile.successMaxTiltDeg &&
+                   angularRateDegS <= profile.successMaxAngularRateDegS;
+        }
+
+        /// <summary>
+        /// Rejects a touchdown that launches the feet back into the air. The
+        /// height is upward travel relative to first contact, not absolute pad
+        /// clearance, so an initially tilted foot contact is not misclassified.
+        /// </summary>
+        public static bool IsExcessiveRebound(
+            float reboundRiseM,
+            float allFeetContactLossSeconds,
+            float maximumReboundRiseM,
+            float maximumAllFeetContactLossSeconds)
+        {
+            return reboundRiseM > Mathf.Max(0f, maximumReboundRiseM) ||
+                   allFeetContactLossSeconds > Mathf.Max(0f, maximumAllFeetContactLossSeconds);
         }
 
         public static bool IsStableCandidate(
@@ -42,17 +55,19 @@ namespace RocketSim
             bool structuralStrike,
             RewardTerms terms,
             float tiltDeg,
-            LandingCurriculumProfile profile)
+            LandingCurriculumProfile profile,
+            int minimumStableFeet)
         {
-            return CountFeet(footMask) >= MinimumStableFeet &&
+            int requiredFeet = Mathf.Clamp(minimumStableFeet, 1, LandingLegAssembly.LegCount);
+            return CountFeet(footMask) >= requiredFeet &&
                    !footOutsidePad &&
                    !structuralStrike &&
-                   terms.planarDistance < profile.successRadius &&
-                   terms.speed < profile.successMaxSpeed &&
-                   Mathf.Abs(terms.verticalSpeed) < profile.successMaxVerticalSpeed &&
-                   terms.planarSpeed < profile.successMaxHorizontalSpeed &&
-                   tiltDeg < profile.successMaxTiltDeg &&
-                   terms.angularRateDegS < profile.successMaxAngularRateDegS;
+                   terms.planarDistance <= profile.successRadius &&
+                   terms.speed <= profile.successMaxSpeed &&
+                   Mathf.Abs(terms.verticalSpeed) <= profile.successMaxVerticalSpeed &&
+                   terms.planarSpeed <= profile.successMaxHorizontalSpeed &&
+                   tiltDeg <= profile.successMaxTiltDeg &&
+                   terms.angularRateDegS <= profile.successMaxAngularRateDegS;
         }
     }
 }

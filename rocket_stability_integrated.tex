@@ -39,7 +39,7 @@ Reusable launch vehicles are difficult to control because they combine unstable 
 
 This project focuses on the development of a configurable rocket simulation environment for reinforcement learning. The simulator is built in Unity and uses Unity ML-Agents to train and evaluate control policies. The simulated vehicle is inspired by a reusable Falcon-9-style booster, although the goal is not to create an exact digital twin of Falcon 9. Instead, the goal is to build a physics-inspired environment where the rocket behaves plausibly enough to compare learning algorithms and different rocket configurations under controlled conditions.
 
-The long-term thesis goal is to study how reinforcement learning algorithms such as Proximal Policy Optimization (PPO) and Soft Actor-Critic (SAC) perform on rocket control tasks. Planned experiments include hovering, takeoff, landing, stage-separation-style attitude control, wind disturbances, possible hardware defects, and different rocket configurations. The current document describes the simulator and the systems that have already been implemented. The final experimental results and the full development story will be added later.
+The long-term thesis goal is to study how reinforcement learning algorithms such as Proximal Policy Optimization (PPO) and Soft Actor-Critic (SAC) perform on rocket control tasks. Planned experiments include hovering, powered landing, stage-separation-style attitude control, wind disturbances, possible hardware defects, and different rocket configurations. The current document describes the simulator and the systems that have already been implemented. The final experimental results and the full development story will be added later.
 
 At the current stage, the project already contains:
 
@@ -51,13 +51,13 @@ At the current stage, the project already contains:
     \item reaction control system (RCS) pods for attitude control in vacuum-like or thin-atmosphere conditions;
     \item a simplified atmosphere, wind, gust, weather, and aerodynamic force model;
     \item changing mass, centre of mass, and inertia as fuel and RCS propellant are consumed;
-    \item several training scenarios, including landing, hover, hover tracking, takeoff, and belly-flop-style reorientation;
+    \item four training scenarios: chopstick landing, leg landing, hover, and hover tracking;
     \item a reinforcement learning observation and action interface using Unity ML-Agents;
     \item scenario-specific reward functions;
     \item telemetry logging to CSV files for later analysis;
     \item a Python plotting tool for telemetry visualization;
     \item a runtime user interface for changing rocket, environment, scenario, telemetry, and ML settings;
-    \item diagnostic hardware-style tests for engines, fins, aerodynamics, RCS, takeoff, and landing behavior.
+    \item diagnostic hardware-style tests for engines, fins, aerodynamics, RCS, and landing behavior.
 \end{itemize}
 
 The simulator should be understood as a research and experimentation environment. It includes many physical effects that are important for rocket control, but it is not yet a fully validated aerospace simulation. For this thesis, the most important requirement is not exact reproduction of real flight telemetry, but consistent and physically meaningful behavior. This makes it possible to compare algorithms fairly, because each algorithm is evaluated under the same assumptions, disturbances, and vehicle model.
@@ -128,7 +128,7 @@ The simulator is separated into several main components. This makes the system e
 \texttt{TrainingAreaManager} & Spawns training, inference, and hardware test areas. Applies shared configuration to all agents. \\
 \texttt{TrainingLauncher} & Writes ML-Agents training configuration files and launches the Python trainer process. \\
 \texttt{RightConfigPanel} & Runtime UI for changing parts, telemetry, environment, scenario, and ML settings. \\
-\texttt{HardwareTestController} & Manual diagnostic controller for testing thrusters, fins, aerodynamics, RCS, takeoff, and landing. \\
+\texttt{HardwareTestController} & Manual diagnostic controller for testing thrusters, fins, aerodynamics, RCS, and landing. \\
 \bottomrule
 \caption{Important implemented classes and their responsibilities.}
 \end{longtable}
@@ -318,23 +318,22 @@ RCS uses \(N_{\mathrm{RCS}}\) binary discrete branches, one per valve. An open c
 
 \subsection{Implemented Scenarios}
 
-The current simulator supports five scenario types:
+The current simulator supports four scenario types:
 
 \begin{longtable}{p{0.22\linewidth} p{0.68\linewidth}}
 \toprule
 \textbf{Scenario} & \textbf{Description} \\
 \midrule
 \endhead
-Landing & The rocket starts above the pad with downward velocity and must descend upright, slow down, and touch down near the target. \\
+Chopstick Landing & The rocket descends into a tower catch envelope and must remain stable long enough to be captured. \\
+Leg Landing & The rocket descends toward a physical pad, touches down on its deployed feet, and remains stable. \\
 Hover & The rocket must hold a fixed altitude around \(30\,\mathrm{m}\), remain upright, and resist drift. \\
 Hover Tracking & The rocket must hover and follow a moving target pad. A curriculum gradually changes difficulty. \\
-Takeoff & The rocket starts near ground clearance and must lift off, climb, and avoid excessive lateral drift. \\
-Belly Flop & The rocket starts in a high-tilt state and must transition toward upright landing behavior. \\
 \bottomrule
 \caption{Implemented scenario modes.}
 \end{longtable}
 
-Hover and hover tracking use a goal altitude of \(30\,\mathrm{m}\). Takeoff uses a goal altitude of \(120\,\mathrm{m}\). Landing-style scenarios use a ground-clearance target of \(0.5\,\mathrm{m}\).
+Hover and hover tracking use a goal altitude of \(30\,\mathrm{m}\). Chopstick landing uses the configured catch height, while leg landing targets the top of the physical pad.
 
 \subsection{Reward Functions}
 
@@ -360,7 +359,7 @@ Several reward terms use an exponential closeness function:
 
 where \(x\) is an error and \(s\) is a scale factor. This gives smooth feedback instead of only rewarding the final success state.
 
-Landing rewards low horizontal error, upright attitude, low angular rate, low speed, and low vertical speed near the landing zone. Hover rewards altitude control, horizontal centering, low speed, and stable attitude. Hover tracking separates the task into a movement phase and a hover phase. Takeoff rewards altitude gain, upward velocity, and uprightness. Belly-flop mode rewards broadside descent at altitude and upright landing behavior near the ground.
+Both landing tasks reward controlled descent, low horizontal error, upright attitude, low angular rate, and low touchdown speed, with scenario-specific contact or capture outcomes. Hover rewards altitude control, horizontal centering, low speed, and stable attitude. Hover tracking separates the task into a movement phase and a hover phase.
 
 \subsection{Telemetry}
 
@@ -397,7 +396,6 @@ Implemented tests include:
 \begin{itemize}
     \item fin axis response tests;
     \item aerodynamics test;
-    \item takeoff test;
     \item landing burn test;
     \item RCS vacuum test;
     \item stage separation RCS test;

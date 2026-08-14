@@ -91,8 +91,11 @@ namespace RocketSim
             _legFirstContactHorizontalSpeed = 0f;
             _legFirstContactTiltDeg = 0f;
             _legFirstContactAngularRateDegS = 0f;
+            _legFirstContactHeightAbovePad = 0f;
+            _legAllFeetContactLossTime = 0f;
             _legMaximumContactImpulseNs = 0f;
             _legMaximumReboundHeightM = 0f;
+            _legExcessiveRebound = false;
         }
 
         /// <summary>Updates the continuous stable-hold timer from current contact and motion.</summary>
@@ -109,40 +112,63 @@ namespace RocketSim
             RewardTerms terms = MeasureRewardTerms(
                 ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
             float tiltDeg = Vector3.Angle(transform.up, Vector3.up);
+            TerminationParameters termination =
+                envConfig.GetTrainingObjective(ScenarioType.LegLanding).terminations;
             bool ready = LegLandingContactEvaluator.IsStableCandidate(
                 _legFootMask,
                 _legFootOutsidePad,
                 _legStructuralStrike,
                 terms,
                 tiltDeg,
-                ActiveLandingProfile);
+                ActiveLandingProfile,
+                termination.legMinimumStableFeet);
 
             bool wasStable = _legStable;
             _legStableTime = ready ? _legStableTime + Mathf.Max(0f, dt) : 0f;
-            _legStable = ready && _legStableTime >= ActiveLandingProfile.platformStableHoldTime;
+            float requiredHold = termination.landingStableHoldSeconds.At(_objectiveDifficulty01);
+            _legStable = ready && _legStableTime >= Mathf.Max(0f, requiredHold);
             _legBecameStable = !wasStable && _legStable;
 
             if (_legTouchdownStarted)
             {
-                float heightAbovePad = ScenarioReferenceLocalPosition().y -
-                                       ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y;
-                _legMaximumReboundHeightM = Mathf.Max(_legMaximumReboundHeightM, heightAbovePad);
+                float reboundRise = Mathf.Max(
+                    0f,
+                    LegFeetHeightAbovePad() - _legFirstContactHeightAbovePad);
+                _legMaximumReboundHeightM = Mathf.Max(_legMaximumReboundHeightM, reboundRise);
+                _legAllFeetContactLossTime = _legFootMask != 0
+                    ? 0f
+                    : _legAllFeetContactLossTime + Mathf.Max(0f, dt);
+                _legExcessiveRebound |= LegLandingContactEvaluator.IsExcessiveRebound(
+                    _legMaximumReboundHeightM,
+                    _legAllFeetContactLossTime,
+                    termination.legMaximumReboundRiseM,
+                    termination.legMaximumAllFeetContactLossSeconds);
             }
         }
+
+        float LegFeetHeightAbovePad() =>
+            ScenarioReferenceLocalPosition().y -
+            ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y;
 
         bool IsLandingFootOnPad(int index) =>
             index >= 0 && index < LandingLegAssembly.LegCount &&
             (_legFootMask & (1 << index)) != 0;
 
-        void OnCollisionEnter(Collision collision) => RecordLegLandingCollision(collision);
-        void OnCollisionStay(Collision collision) => RecordLegLandingCollision(collision);
+        void OnCollisionEnter(Collision collision) => RecordLegLandingCollision(collision, null);
+        void OnCollisionStay(Collision collision) => RecordLegLandingCollision(collision, null);
+
+        /// <summary>Receives a pad contact directly from one generated child collider.</summary>
+        internal void RecordLandingGearCollision(
+            Collision collision,
+            LandingGearCollider sourceMarker) =>
+            RecordLegLandingCollision(collision, sourceMarker);
 
         /// <summary>
         /// Records only collisions against this training area's landing pad.
         /// Contact callbacks fill a pending frame so reward evaluation never
         /// depends on Unity's callback ordering inside the current physics step.
         /// </summary>
-        void RecordLegLandingCollision(Collision collision)
+        void RecordLegLandingCollision(Collision collision, LandingGearCollider sourceMarker)
         {
             if (envConfig == null || envConfig.scenario != ScenarioType.LegLanding || collision == null)
                 return;
@@ -161,6 +187,12 @@ namespace RocketSim
                 LandingGearCollider marker = contact.thisCollider
                     ? contact.thisCollider.GetComponent<LandingGearCollider>()
                     : null;
+
+                // A child callback can contain the compound rigidbody's full
+                // contact set. Process only points owned by that child; the root
+                // callback separately classifies body and other structural hits.
+                if (sourceMarker && marker != sourceMarker)
+                    continue;
 
                 if (!marker || marker.kind != LandingGearColliderKind.Foot)
                 {
@@ -188,6 +220,7 @@ namespace RocketSim
                 _legFirstContactHorizontalSpeed = new Vector2(contactVelocity.x, contactVelocity.z).magnitude;
                 _legFirstContactTiltDeg = Vector3.Angle(transform.up, Vector3.up);
                 _legFirstContactAngularRateDegS = rb.angularVelocity.magnitude * Mathf.Rad2Deg;
+                _legFirstContactHeightAbovePad = LegFeetHeightAbovePad();
             }
         }
     }

@@ -15,7 +15,6 @@ namespace RocketSim
         FinAxisY,
         FinAxisZ,
         Aerodynamics,
-        Takeoff,
         Landing,
         RcsVacuum,
         RcsSeparation,
@@ -79,36 +78,6 @@ namespace RocketSim
 
         public bool IsRunning => Outcome == RocketHardwareTestOutcome.Running;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         /// <summary>
         /// Returns whether all vector components are finite simulation values.
         /// </summary>
@@ -124,15 +93,5 @@ namespace RocketSim
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
         }
-
-
-
-
-
-
-
-
-
-
     }
 }

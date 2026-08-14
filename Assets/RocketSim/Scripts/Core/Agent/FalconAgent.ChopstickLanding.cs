@@ -15,8 +15,7 @@ namespace RocketSim
     {
         /// <summary>
         /// Ensures the reusable-booster catch reference exists and follows the
-        /// configured grid-fin station. Existing prefabs reuse the legacy top
-        /// control point through FormerlySerializedAs on the field.
+        /// configured grid-fin station.
         /// </summary>
         void ConfigureCatchFrame()
         {
@@ -145,8 +144,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Captures the sampled CatchFrame start height and defines this
-        /// episode's upward flyaway ceiling exactly 100 m above it.
+        /// Captures the sampled CatchFrame start height and the configured
+        /// upward escape ceiling used by diagnostics for this episode.
         /// </summary>
         void CaptureLandingEpisodeStartAltitude()
         {
@@ -158,7 +157,10 @@ namespace RocketSim
             }
 
             _landingEpisodeStartAltitude = ScenarioReferenceLocalPosition().y;
-            _landingEpisodeFlyawayAltitude = _landingEpisodeStartAltitude + LandingFlyawayAltitudeMargin;
+            TerminationParameters termination =
+                envConfig.GetTrainingObjective(envConfig.scenario).terminations;
+            _landingEpisodeFlyawayAltitude =
+                _landingEpisodeStartAltitude + termination.maximumAltitudeAboveStartM;
         }
 
         /// <summary>
@@ -188,8 +190,11 @@ namespace RocketSim
             else
                 _landingPlatformStableTime = 0f;
 
+            float requiredHold = envConfig
+                .GetTrainingObjective(ScenarioType.ChopstickLanding)
+                .terminations.landingStableHoldSeconds.At(_objectiveDifficulty01);
             _landingPlatformStable = platformReady &&
-                _landingPlatformStableTime >= Mathf.Max(0f, ActiveLandingProfile.platformStableHoldTime);
+                _landingPlatformStableTime >= Mathf.Max(0f, requiredHold);
             _landingPlatformBecameStable = !wasStable && _landingPlatformStable;
         }
 
@@ -205,14 +210,11 @@ namespace RocketSim
             RewardTerms terms = MeasureRewardTerms(
                 ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
             LandingCurriculumProfile landing = ActiveLandingProfile;
-            float tiltLimitDeg = Mathf.Min(
-                landing.successMaxTiltDeg,
-                Mathf.Acos(0.94f) * Mathf.Rad2Deg);
 
             return ChopstickCaptureEvaluator.IsKinematicallyReady(
                 terms,
                 Vector3.Angle(transform.up, Vector3.up),
-                tiltLimitDeg,
+                landing.successMaxTiltDeg,
                 landing.successRadius,
                 landing.successMaxSpeed,
                 landing.successMaxVerticalSpeed,

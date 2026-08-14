@@ -59,9 +59,10 @@ namespace RocketSim
         public int numLayers = 3;
 
         // Gamma is applied once per ML-Agents decision, not once per second.
-        // 0.995 retains about 19% of a terminal signal across ten simulated
-        // seconds at DecisionPeriod=3 and a 0.01 s physics timestep.
-        public float extrinsicGamma = 0.995f;
+        // 0.9995 retains about 85% of a terminal signal across ten simulated
+        // seconds at DecisionPeriod=3 and a 0.01 s physics timestep. The former
+        // 0.995 baseline made postponing a failed landing locally attractive.
+        public float extrinsicGamma = 0.9995f;
         public float extrinsicStrength = 1.0f;
         // Disabled for the curriculum baseline: novelty rewards depend on the
         // state distribution and would interact with the curriculum treatment.

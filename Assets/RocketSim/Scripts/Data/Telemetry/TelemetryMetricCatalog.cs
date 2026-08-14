@@ -24,6 +24,9 @@ namespace RocketSim
                 if (metric.IsEnabled(cfg))
                     metrics.Add(metric);
 
+            if (cfg.logRewardBreakdown)
+                AppendRewardBreakdown(metrics, cfg.scenario);
+
             // Aggregate actuator values are convenient for plots, but an
             // ablation study also needs to show whether individual engines or
             // fins were actually used. The run-specific slot count prevents
@@ -60,6 +63,38 @@ namespace RocketSim
             }
 
             return metrics;
+        }
+
+        /// <summary>
+        /// Adds diagnostics only for parameters that can affect the selected
+        /// scenario. Schema creation happens once per run, so these closures do
+        /// not allocate in the physics or telemetry logging loops.
+        /// </summary>
+        static void AppendRewardBreakdown(
+            ICollection<TelemetryMetricDescriptor> metrics,
+            ScenarioType scenario)
+        {
+            IReadOnlyList<RewardParameterDescriptor> descriptors = RewardParameterCatalog.All;
+            for (int i = 0; i < descriptors.Count; i++)
+            {
+                RewardParameterDescriptor descriptor = descriptors[i];
+                if (!descriptor.AppliesTo(scenario)) continue;
+
+                RewardParameterId id = descriptor.id;
+                string prefix = $"RewardTerm_{descriptor.key.Replace('.', '_')}";
+                metrics.Add(new TelemetryMetricDescriptor(
+                    $"{prefix}_RawFeature",
+                    _ => true,
+                    row => row.rewardContributions?.GetRawFeature(id) ?? 0f));
+                metrics.Add(new TelemetryMetricDescriptor(
+                    $"{prefix}_SignedCoefficient",
+                    _ => true,
+                    row => row.rewardContributions?.GetSignedCoefficient(id) ?? 0f));
+                metrics.Add(new TelemetryMetricDescriptor(
+                    $"{prefix}_SignedContribution",
+                    _ => true,
+                    row => row.rewardContributions?.GetSignedContribution(id) ?? 0f));
+            }
         }
 
         /// <summary>
@@ -178,6 +213,12 @@ namespace RocketSim
             new("Env_NormalizedDynamicPressure01", cfg => cfg.logEnvironmentMetrics, r => r.obs_dynPressNorm),
 
             new("Reward_StepReward", cfg => cfg.logRewardMetrics, r => r.stepReward),
+            new("Reward_ShapingRatePerSecond", cfg => cfg.logRewardMetrics,
+                r => r.rewardContributions?.shapingRate ?? 0f),
+            new("Reward_Event", cfg => cfg.logRewardMetrics,
+                r => r.rewardContributions?.eventReward ?? 0f),
+            new("Reward_Terminal", cfg => cfg.logRewardMetrics,
+                r => r.rewardContributions?.terminalReward ?? 0f),
         };
     }
 }

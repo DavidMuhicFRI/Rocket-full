@@ -30,17 +30,22 @@ title RocketSim readable architecture overview
 
 package "User interface" {
   [RightConfigPanel\nall UI partials] as Panel
+  [Scenario-aware objective editor\nreward/shaping sliders\ntermination cards] as ObjectiveEditor
   [RocketCameraController] as Camera
   [RocketHUD + RocketHudFactory] as HUD
-  [UI catalogs\nHardwarePresetUiCatalog\nRewardPanelCatalog] as UICatalogs
+  [HardwarePresetUiCatalog] as HardwareCatalog
 }
 
 package "Shared configuration" {
   [SimEnvironmentConfig\nscenario/weather/curriculum] as EnvConfig
+  [TrainingObjectiveConfig\nfour independent\nScenarioObjectiveConfig objects] as ObjectiveConfig
+  [Objective descriptor catalogs\nRewardParameterCatalog\nShapingParameterCatalog\nTerminationRuleCatalog] as ObjectiveCatalogs
+  [RewardPresetCatalog\ncomplete reward vectors] as RewardPresets
+  [ObjectiveValidator\npure warnings/errors] as ObjectiveValidator
   [RocketPartsConfig\nhardware preset + dimensions] as PartsConfig
   [MLAgentsConfig\ntrainer YAML settings] as MLConfig
-  [TelemetryConfig\nlogged metric families] as TelemetryConfig
-  [Preset/default helpers\nFalcon9Reference\nScenarioProfile\nPresetFactory\nFuelCatalog\nValidator] as ConfigHelpers
+  [TelemetryConfig\nmetric families + optional\nreward breakdown] as TelemetryConfig
+  [Other config helpers\nFalcon9Reference\nScenarioProfile\nPresetFactory\nFuelCatalog\npreflight validation] as ConfigHelpers
 }
 
 package "Runtime orchestration" {
@@ -71,20 +76,21 @@ package "Simulation agent" {
 
 package "Learning feedback" {
   [RocketRewardModel\ndispatcher] as RewardDispatcher
-  [Scenario reward models\nChopstick / Leg / Hover\nTakeoff / BellyFlop] as RewardModels
+  [Scenario reward models\nChopstick / Leg / Hover / Hover Track] as RewardModels
   [Reward data\nRewardRuntimeContext\nRewardTerms\nRewardDecision] as RewardData
+  [RewardContributionBuffer\nraw feature / signed coefficient\n/ signed contribution] as RewardBreakdown
 }
 
 package "Telemetry output" {
   [TelemetryLogger\nsingleton facade] as Logger
   [Telemetry pipeline\nMetricCatalog\nRowFormatter\nCsvWriter\nAccumulator\nRunningStats] as TelemetryPipeline
-  [CSV + JSON files\nstep telemetry\nepisode summaries\nevaluation aggregate] as CsvFiles
+  [CSV + JSON files\nstep telemetry + reward terms\nepisode summaries\nevaluation aggregate] as CsvFiles
 }
 
 package "Hardware diagnostics" {
   [HardwareTestController\norchestrator] as TestController
   [IRocketHardwareTest\ncommon test contract] as TestContract
-  [Test cases\nfin/aero/takeoff/landing/RCS/thruster] as TestCases
+  [Test cases\nfin/aero/landing/RCS/thruster] as TestCases
 }
 
 Scene --> Bridge : serialized UI/manager references
@@ -97,14 +103,20 @@ Bridge --> Panel : injects manager/config references
 Panel --> Manager : applies shared config changes
 Panel --> PartsConfig : edits hardware values
 Panel --> EnvConfig : edits scenario/weather/curriculum
+Panel --> ObjectiveEditor : Rewards tab composition
+ObjectiveEditor --> ObjectiveConfig : edits selected task objective
+ObjectiveEditor --> ObjectiveCatalogs : renders applicable controls
+ObjectiveEditor --> RewardPresets : applies complete reward vector
+ObjectiveEditor --> ObjectiveValidator : live validation
 Panel --> MLConfig : edits trainer settings
 Panel --> TelemetryConfig : edits logged metrics
-Panel --> UICatalogs : renders preset/slider metadata
+Panel --> HardwareCatalog : renders hardware presets
 Panel --> Launcher : start training/inference
 Panel --> TestController : start/stop diagnostics through manager
 
 PartsConfig --> ConfigHelpers : presets, fuel defaults, validation
 EnvConfig --> ConfigHelpers : scenario goals/curriculum defaults
+EnvConfig --> ObjectiveConfig : owns complete task objectives
 
 Launcher --> Repos : save/load run configs
 Launcher --> Manager : spawn after trainer ready
@@ -112,6 +124,7 @@ Manager --> Repos : load inference model
 Manager --> Schema : configure ML-Agents behavior
 Manager --> Assembly : instantiate/apply hardware
 Manager --> AgentCore : inject env/model/area index
+Manager --> ObjectiveValidator : blocks objective errors
 
 Assembly --> PartsConfig : reads hardware config
 Assembly --> Hardware : creates/sizes/positions parts
@@ -138,11 +151,14 @@ LegLanding --> Hardware : generated four-leg collider assembly
 
 RewardDispatcher --> RewardModels : scenario-specific reward
 RewardModels --> RewardData : terms/context/decision
-RewardModels --> EnvConfig : reward factors + success limits
+RewardDispatcher --> ObjectiveConfig : selected task configuration
+RewardModels --> RewardBreakdown : record each contribution
 
 AgentTelemetry --> TelemetryConfig : metric families
+AgentTelemetry --> RewardBreakdown : attach latest breakdown
 AgentTelemetry --> Logger : sends TelemetryRow
 Logger --> TelemetryPipeline : format/aggregate/write
+TelemetryPipeline --> ObjectiveCatalogs : scenario reward-column schema
 TelemetryPipeline --> CsvFiles : append rows
 
 Camera --> Manager : active agent list
@@ -156,8 +172,8 @@ TestCases --> Physics : diagnostics/observed response
 
 note bottom
   Read this graph left-to-right:
-  UI edits shared configs -> Manager spawns/configures rocket -> Assembly builds hardware/physics ->
-  FalconAgent runs actuator/physics/reward/telemetry loop -> outputs rewards, CSV telemetry, HUD, and diagnostics.
+  UI edits shared configs and one of four task objectives -> Manager validates and configures the rocket ->
+  FalconAgent evaluates the selected objective -> telemetry can emit a term-by-term reward audit.
 end note
 
 @enduml
