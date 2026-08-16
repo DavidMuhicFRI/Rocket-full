@@ -42,7 +42,8 @@ package "Shared configuration" {
   [Objective descriptor catalogs\nRewardParameterCatalog\nShapingParameterCatalog\nTerminationRuleCatalog] as ObjectiveCatalogs
   [RewardPresetCatalog\ncomplete reward vectors] as RewardPresets
   [ObjectiveValidator\npure warnings/errors] as ObjectiveValidator
-  [RocketPartsConfig\nhardware preset + dimensions] as PartsConfig
+  [RocketPartsConfig\nvehicle hardware + dimensions] as PartsConfig
+  [VehiclePresetRepository\nnamed user vehicle snapshots] as VehiclePresets
   [MLAgentsConfig\ntrainer YAML settings] as MLConfig
   [TelemetryConfig\nmetric families + optional\nreward breakdown] as TelemetryConfig
   [Other config helpers\nFalcon9Reference\nScenarioProfile\nPresetFactory\nFuelCatalog\npreflight validation] as ConfigHelpers
@@ -52,8 +53,8 @@ package "Runtime orchestration" {
   [ConfigBridge] as Bridge
   [TrainingAreaManager\nshared configs + area spawn] as Manager
   [TrainingLauncher\ntraining/inference/evaluator entry] as Launcher
-  [Repositories\nTrainingRunRepository\nModelRepository] as Repos
-  [RocketAgentSchema\nfixed 109-observation / 39-action schema] as Schema
+  [Repositories\nTrainingRunRepository\nreward snapshot + revision history\nModelRepository] as Repos
+  [RocketAgentSchema\nhardware-sized observation/action schema] as Schema
 }
 
 package "Rocket construction" {
@@ -111,7 +112,9 @@ ObjectiveEditor --> ObjectiveValidator : live validation
 Panel --> MLConfig : edits trainer settings
 Panel --> TelemetryConfig : edits logged metrics
 Panel --> HardwareCatalog : renders hardware presets
+Panel --> VehiclePresets : save/load/delete user vehicles
 Panel --> Launcher : start training/inference
+Panel --> Repos : restore run/reward configs
 Panel --> TestController : start/stop diagnostics through manager
 
 PartsConfig --> ConfigHelpers : presets, fuel defaults, validation
@@ -119,6 +122,7 @@ EnvConfig --> ConfigHelpers : scenario goals/curriculum defaults
 EnvConfig --> ObjectiveConfig : owns complete task objectives
 
 Launcher --> Repos : save/load run configs
+Repos --> ObjectiveConfig : latest snapshot + launch history
 Launcher --> Manager : spawn after trainer ready
 Manager --> Repos : load inference model
 Manager --> Schema : configure ML-Agents behavior

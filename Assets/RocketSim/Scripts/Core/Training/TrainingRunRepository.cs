@@ -28,6 +28,24 @@ namespace RocketSim
     }
 
     /// <summary>
+    /// One append-only record of the reward setup used at a trainer launch.
+    /// The run keeps a latest snapshot for convenient loading and this history
+    /// so changing rewards during Resume never erases how earlier checkpoints
+    /// were trained.
+    /// </summary>
+    [Serializable]
+    public sealed class TrainingRewardRevision
+    {
+        public int revision;
+        public string launchedUtc;
+        public bool resumed;
+        public string initializedFromRunId;
+        public bool changedFromPreviousLaunch;
+        public string trainingObjectiveSha256;
+        public TrainingObjectiveConfig trainingObjective;
+    }
+
+    /// <summary>
     /// Best-effort snapshot of the external Python trainer environment. A probe
     /// failure is recorded instead of silently pretending that package versions
     /// are known; it does not prevent an otherwise valid trainer launch.
@@ -48,8 +66,8 @@ namespace RocketSim
     }
 
     /// <summary>
-    /// Compact provenance record for grouping ablation runs without parsing
-    /// Unity JSON or ML-Agents YAML during analysis.
+    /// Compact provenance record for identifying and comparing runs without
+    /// parsing Unity JSON or ML-Agents YAML during analysis.
     /// </summary>
     [Serializable]
     public sealed class TrainingRunManifest
@@ -60,7 +78,7 @@ namespace RocketSim
         /// are deliberately excluded from resume, transfer, and inference lists
         /// instead of being guessed at.
         /// </summary>
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 7;
 
         public int schemaVersion = CurrentSchemaVersion;
         public string runId;
@@ -89,7 +107,6 @@ namespace RocketSim
         public bool physicalLandingGearEnabled;
         public float landingGearFootprintDiameterM;
         public int landingRequiredStableFeet;
-        public bool commonSingleEngineLandingEnvelope;
         public int vectorObservationSize;
         public int continuousActionSize;
         public string behaviorName;
@@ -103,6 +120,8 @@ namespace RocketSim
         public float minimumCommandableNonzeroThrustToWeight;
         public float allActiveEnginesMinimumThrottleThrustToWeight;
         public float allActiveEnginesMaximumThrustToWeight;
+        public int rewardConfigRevision;
+        public bool rewardConfigChangedOnLastLaunch;
         public string trainingObjectiveSha256;
         public string partsConfigSha256;
         public string mlAgentsConfigSha256;
@@ -135,6 +154,8 @@ namespace RocketSim
         const string PartsConfigFileName = "PartsConfig.json";
         const string MlConfigFileName = "TrainingConfig.yaml";
         const string TelemetryConfigFileName = "TelemetryConfig.json";
+        const string RewardConfigFileName = "RewardConfig.json";
+        const string RewardHistoryFileName = "RewardConfigHistory.jsonl";
         const string RunManifestFileName = "RunManifest.json";
 
         /// <summary>
@@ -204,8 +225,10 @@ namespace RocketSim
 
         /// <summary>
         /// Prevents a resumed trainer from silently changing its active task,
-        /// environment, hardware, trainer settings, or objective under the same
-        /// run identity. Any experiment change must use a new run ID.
+        /// environment, hardware, or trainer settings under the same run
+        /// identity. Reward changes are deliberately permitted: the launch
+        /// overwrites RewardConfig.json and appends the complete setup to the
+        /// run's reward history before the trainer starts.
         /// </summary>
         static bool TryValidateResumeContract(
             string runRoot,
@@ -239,19 +262,6 @@ namespace RocketSim
             {
                 error =
                     $"The requested scenario '{requestedScenario}' differs from the saved run scenario '{manifest.scenario}'. Choose a new Run ID when changing tasks.";
-                return false;
-            }
-
-            string requestedJson = JsonUtility.ToJson(
-                requestedEnvironment.EnsureTrainingObjective());
-            string requestedHash = Sha256Hex(requestedJson);
-            if (!string.Equals(
-                    requestedHash,
-                    manifest.trainingObjectiveSha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                error =
-                    "The training objective differs from the saved run. Choose a new Run ID for reward, shaping, or termination changes.";
                 return false;
             }
 
@@ -310,9 +320,10 @@ namespace RocketSim
 
         /// <summary>
         /// Fingerprints training-relevant environment state while ignoring the
-        /// evaluator-only fields deliberately preserved by the run-loading UI.
-        /// Live curriculum counters remain included, so the current EnvConfig
-        /// snapshot is the authoritative resume point.
+        /// evaluator-only fields deliberately preserved by the run-loading UI
+        /// and the independently revisioned reward setup. Live curriculum
+        /// counters remain included, so EnvConfig is still the authoritative
+        /// resume point for scenario and environment state.
         /// </summary>
         static string ResumeEnvironmentSha256(SimEnvironmentConfig environment)
         {
@@ -321,12 +332,14 @@ namespace RocketSim
             normalized.behaviorType = BehaviorType.Training;
             normalized.inferencePurpose = InferencePurpose.StandardEvaluation;
             normalized.evaluation = new EvaluationConfig();
+            normalized.trainingObjective = null;
             return Sha256Hex(JsonUtility.ToJson(normalized));
         }
 
         /// <summary>
-        /// Writes ML-Agents YAML plus environment and parts JSON snapshots into
-        /// the run folder so training and later inference use the same settings.
+        /// Writes ML-Agents YAML plus environment, parts, telemetry, and reward
+        /// snapshots into the run folder. RewardConfig.json always contains the
+        /// latest launch setup; RewardConfigHistory.jsonl preserves every launch.
         /// </summary>
         public static string SaveTrainingConfigs(
             string runId,
@@ -345,10 +358,17 @@ namespace RocketSim
             if (mlConfig == null) throw new ArgumentNullException(nameof(mlConfig));
             if (envConfig == null) throw new ArgumentNullException(nameof(envConfig));
             if (partsConfig == null) throw new ArgumentNullException(nameof(partsConfig));
-            envConfig.EnsureTrainingObjective();
+            TrainingObjectiveConfig objective = envConfig.EnsureTrainingObjective();
 
             string runRoot = RunRoot(runId);
             Directory.CreateDirectory(runRoot);
+
+            string objectiveJson = JsonUtility.ToJson(objective);
+            ReadRewardRevisionState(
+                runRoot,
+                objectiveJson,
+                out int rewardRevision,
+                out bool rewardChanged);
 
             File.WriteAllText(Path.Combine(runRoot, mlConfigPath), mlConfig.ToYAML());
             string serializedEnvironment = JsonUtility.ToJson(envConfig);
@@ -360,6 +380,17 @@ namespace RocketSim
             File.WriteAllText(
                 Path.Combine(runRoot, TelemetryConfigFileName),
                 JsonUtility.ToJson(telemetryConfig ?? new TelemetryConfig(), true));
+            File.WriteAllText(
+                Path.Combine(runRoot, RewardConfigFileName),
+                JsonUtility.ToJson(objective, true));
+            AppendRewardRevision(
+                runRoot,
+                rewardRevision,
+                resumed,
+                initializedFromRunId,
+                rewardChanged,
+                objectiveJson,
+                objective);
             SaveRunManifest(
                 runRoot,
                 runId,
@@ -370,16 +401,16 @@ namespace RocketSim
                 resumed,
                 initializedFromRunId,
                 trainingEnvironment,
-                configuredTorchDevice);
+                configuredTorchDevice,
+                rewardRevision,
+                rewardChanged);
 
             return runRoot;
         }
 
         /// <summary>
         /// Verifies that a prior run has a checkpoint and the exact policy
-        /// schema/network settings needed for a scientifically clean transfer.
-        /// ML-Agents can partially load incompatible networks, but that would
-        /// make a hover-pretraining comparison ambiguous.
+        /// channel layout and network settings required for initialization.
         /// </summary>
         public static bool TryValidateInitializationSource(
             string sourceRunId,
@@ -428,13 +459,15 @@ namespace RocketSim
                 return false;
             }
 
-            string targetPreset = targetParts.hardwarePreset.ToString();
-            if (!string.Equals(sourceManifest.hardwarePreset, targetPreset, StringComparison.Ordinal))
+            bool sameHardwareChannels =
+                sourceManifest.engineControlChannels == targetParts.GetIndependentEngineCount() &&
+                sourceManifest.finCount == targetParts.GetFinCount() &&
+                sourceManifest.rcsEnabled == targetParts.rcsEnabled;
+            if (!sameHardwareChannels)
             {
                 error =
-                    $"Initialization run '{sourceRunId}' uses hardware preset " +
-                    $"'{sourceManifest.hardwarePreset}', but the target uses '{targetPreset}'. " +
-                    "Use a hover checkpoint trained with the same named preset.";
+                    $"Initialization run '{sourceRunId}' uses a different engine/fin/RCS " +
+                    "policy-channel layout. Use a checkpoint trained with matching commandable hardware.";
                 return false;
             }
 
@@ -449,6 +482,46 @@ namespace RocketSim
                 error =
                     $"Initialization run '{sourceRunId}' uses different trainer/network settings. " +
                     "Match trainer type, behavior name, normalization, hidden units, and layer count.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Ensures an inference model receives the same ordered hardware-channel
+        /// layout it was trained with. Physical values may change as long as the
+        /// engine, fin, and RCS interface itself remains compatible.
+        /// </summary>
+        public static bool TryValidateInferencePolicySchema(
+            string runId,
+            RocketPartsConfig currentParts,
+            out string error)
+        {
+            error = string.Empty;
+            if (currentParts == null)
+            {
+                error = "The current vehicle configuration is missing.";
+                return false;
+            }
+            if (!HasCompleteRunConfig(runId) ||
+                !TryLoadRunManifest(RunRoot(runId), out TrainingRunManifest manifest))
+            {
+                error = $"Run '{runId}' has no complete current model configuration.";
+                return false;
+            }
+
+            bool compatible =
+                manifest.vectorObservationSize == RocketAgentSchema.ObservationSize(currentParts) &&
+                manifest.continuousActionSize == RocketAgentSchema.ContinuousActionSize(currentParts) &&
+                manifest.engineControlChannels == currentParts.GetIndependentEngineCount() &&
+                manifest.finCount == currentParts.GetFinCount() &&
+                manifest.rcsEnabled == currentParts.rcsEnabled;
+            if (!compatible)
+            {
+                error =
+                    $"Run '{runId}' was trained with a different engine/fin/RCS policy-channel layout. " +
+                    "Restore its saved vehicle or select a compatible model.";
                 return false;
             }
 
@@ -488,7 +561,9 @@ namespace RocketSim
             bool resumed,
             string initializedFromRunId,
             TrainingEnvironmentProvenance trainingEnvironment,
-            string configuredTorchDevice)
+            string configuredTorchDevice,
+            int rewardRevision,
+            bool rewardChanged)
         {
             string manifestPath = Path.Combine(runRoot, RunManifestFileName);
             string createdUtc = DateTime.UtcNow.ToString("o");
@@ -551,7 +626,6 @@ namespace RocketSim
                 landingRequiredStableFeet = envConfig.scenario == ScenarioType.LegLanding
                     ? envConfig.GetTrainingObjective(ScenarioType.LegLanding).terminations.legMinimumStableFeet
                     : 0,
-                commonSingleEngineLandingEnvelope = envConfig.scenario == ScenarioType.LegLanding,
                 vectorObservationSize = RocketAgentSchema.ObservationSize(partsConfig),
                 continuousActionSize = RocketAgentSchema.ContinuousActionSize(partsConfig),
                 behaviorName = mlConfig.behaviorName,
@@ -565,6 +639,8 @@ namespace RocketSim
                 minimumCommandableNonzeroThrustToWeight = thrustAuthority.MinimumCommandableNonzeroTwr,
                 allActiveEnginesMinimumThrottleThrustToWeight = thrustAuthority.AllActiveEnginesMinimumThrottleTwr,
                 allActiveEnginesMaximumThrustToWeight = thrustAuthority.AllActiveEnginesMaximumTwr,
+                rewardConfigRevision = rewardRevision,
+                rewardConfigChangedOnLastLaunch = rewardChanged,
                 trainingObjectiveSha256 = Sha256Hex(trainingObjectiveJson),
                 partsConfigSha256 = Sha256Hex(JsonUtility.ToJson(partsConfig)),
                 mlAgentsConfigSha256 = Sha256Hex(mlConfig.ToYAML()),
@@ -590,6 +666,62 @@ namespace RocketSim
                 sourceControlDirty = dirty
             };
             File.WriteAllText(manifestPath, JsonUtility.ToJson(manifest, true));
+        }
+
+        /// <summary>
+        /// Chooses the logical reward revision before the latest manifest is
+        /// replaced. Re-launching an unchanged setup remains on the same
+        /// revision; changing any reward, shaping, or termination value advances it.
+        /// </summary>
+        static void ReadRewardRevisionState(
+            string runRoot,
+            string objectiveJson,
+            out int revision,
+            out bool changed)
+        {
+            string objectiveHash = Sha256Hex(objectiveJson);
+            if (TryLoadRunManifest(runRoot, out TrainingRunManifest previous) &&
+                previous.schemaVersion == TrainingRunManifest.CurrentSchemaVersion &&
+                !string.IsNullOrWhiteSpace(previous.trainingObjectiveSha256))
+            {
+                changed = !string.Equals(
+                    objectiveHash,
+                    previous.trainingObjectiveSha256,
+                    StringComparison.OrdinalIgnoreCase);
+                revision = Math.Max(1, previous.rewardConfigRevision) + (changed ? 1 : 0);
+                return;
+            }
+
+            revision = 1;
+            changed = true;
+        }
+
+        /// <summary>
+        /// Appends one compact JSON object per launch. JSON Lines keeps prior
+        /// revisions readable even while RewardConfig.json is overwritten.
+        /// </summary>
+        static void AppendRewardRevision(
+            string runRoot,
+            int revision,
+            bool resumed,
+            string initializedFromRunId,
+            bool changed,
+            string objectiveJson,
+            TrainingObjectiveConfig objective)
+        {
+            var entry = new TrainingRewardRevision
+            {
+                revision = revision,
+                launchedUtc = DateTime.UtcNow.ToString("o"),
+                resumed = resumed,
+                initializedFromRunId = resumed ? string.Empty : initializedFromRunId ?? string.Empty,
+                changedFromPreviousLaunch = changed,
+                trainingObjectiveSha256 = Sha256Hex(objectiveJson),
+                trainingObjective = JsonUtility.FromJson<TrainingObjectiveConfig>(objectiveJson)
+            };
+            File.AppendAllText(
+                Path.Combine(runRoot, RewardHistoryFileName),
+                JsonUtility.ToJson(entry) + Environment.NewLine);
         }
 
         /// <summary>Returns a lowercase SHA-256 fingerprint for a serialized configuration.</summary>
@@ -731,9 +863,11 @@ namespace RocketSim
             string environmentPath = Path.Combine(root, EnvConfigFileName);
             string partsPath = Path.Combine(root, PartsConfigFileName);
             string mlPath = Path.Combine(root, MlConfigFileName);
+            string rewardPath = Path.Combine(root, RewardConfigFileName);
             if (!File.Exists(environmentPath) ||
                 !File.Exists(partsPath) ||
-                !File.Exists(mlPath))
+                !File.Exists(mlPath) ||
+                !File.Exists(rewardPath))
                 return false;
 
             if (!TryLoadRunManifest(root, out TrainingRunManifest manifest) ||
@@ -747,8 +881,11 @@ namespace RocketSim
             {
                 SimEnvironmentConfig environment = JsonUtility.FromJson<SimEnvironmentConfig>(
                     File.ReadAllText(environmentPath));
+                TrainingObjectiveConfig reward = JsonUtility.FromJson<TrainingObjectiveConfig>(
+                    File.ReadAllText(rewardPath));
                 if (environment == null ||
                     environment.trainingObjective == null ||
+                    reward == null ||
                     !Enum.IsDefined(typeof(ScenarioType), environment.scenario) ||
                     !string.Equals(
                         environment.scenario.ToString(),
@@ -756,6 +893,10 @@ namespace RocketSim
                         StringComparison.Ordinal) ||
                     !string.Equals(
                         Sha256Hex(JsonUtility.ToJson(environment.trainingObjective)),
+                        manifest.trainingObjectiveSha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        Sha256Hex(JsonUtility.ToJson(reward)),
                         manifest.trainingObjectiveSha256,
                         StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(
@@ -810,14 +951,44 @@ namespace RocketSim
                 throw new InvalidDataException(
                     $"Run '{runId}' is incomplete or was created with an unsupported objective schema.");
 
+            SimEnvironmentConfig environment = JsonUtility.FromJson<SimEnvironmentConfig>(
+                File.ReadAllText(envPath));
+            environment.trainingObjective = LoadTrainingObjectiveFile(root);
+            environment.EnsureTrainingObjective();
+
             return new TrainingRunConfigs
             {
-                envConfig = JsonUtility.FromJson<SimEnvironmentConfig>(File.ReadAllText(envPath)),
+                envConfig = environment,
                 partsConfig = JsonUtility.FromJson<RocketPartsConfig>(File.ReadAllText(partsPath)),
                 mlConfig = MLAgentsConfig.TryFromYAML(File.ReadAllText(mlPath), out var loadedMl)
                     ? loadedMl
                     : new MLAgentsConfig()
             };
+        }
+
+        /// <summary>
+        /// Loads a run's latest complete reward, shaping, and termination setup.
+        /// A new object is returned so the caller can edit it without mutating
+        /// any cached or source-run state.
+        /// </summary>
+        public static TrainingObjectiveConfig LoadTrainingObjective(string runId)
+        {
+            string root = Path.Combine(GetResultsRoot(), runId);
+            if (!HasCurrentRunLayout(root))
+                throw new InvalidDataException(
+                    $"Run '{runId}' has no complete current reward configuration.");
+            return LoadTrainingObjectiveFile(root);
+        }
+
+        static TrainingObjectiveConfig LoadTrainingObjectiveFile(string runRoot)
+        {
+            string path = Path.Combine(runRoot, RewardConfigFileName);
+            TrainingObjectiveConfig objective = JsonUtility.FromJson<TrainingObjectiveConfig>(
+                File.ReadAllText(path));
+            if (objective == null)
+                throw new InvalidDataException("RewardConfig.json is malformed.");
+            objective.EnsureDefaults();
+            return objective;
         }
     }
 }

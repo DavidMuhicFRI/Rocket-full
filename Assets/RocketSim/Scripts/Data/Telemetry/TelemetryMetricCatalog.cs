@@ -27,9 +27,9 @@ namespace RocketSim
             if (cfg.logRewardBreakdown)
                 AppendRewardBreakdown(metrics, cfg.scenario);
 
-            // Aggregate actuator values are convenient for plots, but an
-            // ablation study also needs to show whether individual engines or
-            // fins were actually used. The run-specific slot count prevents
+            // Aggregate actuator values are convenient for plots, while
+            // per-channel values show which engines and fins a policy used.
+            // The run-specific slot count prevents
             // irrelevant all-zero columns on smaller vehicles.
             if (cfg.logControlMetrics)
             {

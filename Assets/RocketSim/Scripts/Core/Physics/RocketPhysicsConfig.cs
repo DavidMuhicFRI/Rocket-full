@@ -67,7 +67,7 @@ namespace RocketSim
     }
 
     /// <summary>
-    /// Three distinct TWR quantities needed to describe an engine ablation.
+    /// Three distinct TWR quantities needed to describe engine authority.
     /// The minimum nonzero command differs from the all-engine minimum whenever
     /// engines have independent command channels.
     /// </summary>

@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/RocketAgentSchema.cs
-// Purpose: Configures one experiment-safe ML-Agents interface shared by every
-// hardware ablation and transfer-learning scenario.
+// Purpose: Builds the ML-Agents interface required by the selected vehicle.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -19,41 +18,50 @@ namespace RocketSim
     /// </summary>
     public static class RocketAgentSchema
     {
-        public const int MaxEngineChannels = 9;
-        public const int MaxFinChannels = 4;
-        public const int MaxRcsChannels = RcsComponent.JetCount;
         public const int LandingFootObservationCount = 4;
         public const int BaseObservationCount = 21 + LandingFootObservationCount;
         public const int EngineTimingObservationCount = 5;
+        public const int EngineObservationCount = 3 + EngineTimingObservationCount;
         public const int CanonicalDecisionPeriod = 3;
 
         public const int ThrottleActionOffset = 0;
-        public const int GimbalActionOffset = ThrottleActionOffset + MaxEngineChannels;
-        public const int FinActionOffset = GimbalActionOffset + 2 * MaxEngineChannels;
-        public const int RcsActionOffset = FinActionOffset + MaxFinChannels;
-        public const int CanonicalContinuousActionCount = RcsActionOffset + MaxRcsChannels;
-
-        public const int CanonicalObservationCount =
-            (3 + EngineTimingObservationCount) * MaxEngineChannels +
-            MaxFinChannels + MaxRcsChannels + BaseObservationCount;
 
         /// <summary>
-        /// Returns the fixed vector size used by every ablation. Missing
-        /// hardware writes zero-valued slots instead of changing policy shape.
+        /// Returns the fixed flight-state observations plus only the actuator
+        /// state channels that exist on the selected vehicle.
         /// </summary>
         public static int ObservationSize(RocketPartsConfig parts)
         {
-            return CanonicalObservationCount;
+            if (parts == null) return BaseObservationCount;
+
+            return BaseObservationCount +
+                   EngineObservationCount * parts.GetIndependentEngineCount() +
+                   parts.GetFinCount() +
+                   parts.GetRCSCount();
         }
 
         /// <summary>
-        /// Returns the fixed action count. Commands addressed to unavailable
-        /// actuator slots are consumed but deliberately become no-ops.
+        /// Returns throttle plus two-axis gimbal control for every engine
+        /// command channel, followed by the enabled fin and RCS channels.
         /// </summary>
         public static int ContinuousActionSize(RocketPartsConfig parts)
         {
-            return CanonicalContinuousActionCount;
+            if (parts == null) return 0;
+
+            return 3 * parts.GetIndependentEngineCount() +
+                   parts.GetFinCount() +
+                   parts.GetRCSCount();
         }
+
+        /// <summary>First two-axis gimbal command after all throttle commands.</summary>
+        public static int GimbalActionOffset(int engineChannelCount) => engineChannelCount;
+
+        /// <summary>First fin command after throttle and gimbal commands.</summary>
+        public static int FinActionOffset(int engineChannelCount) => 3 * engineChannelCount;
+
+        /// <summary>First RCS valve command after every engine and fin command.</summary>
+        public static int RcsActionOffset(int engineChannelCount, int finCount) =>
+            FinActionOffset(engineChannelCount) + finCount;
 
         /// <summary>
         /// Keeps the policy in a single continuous action space. RCS valves are
@@ -67,9 +75,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Writes the canonical ML-Agents behavior parameters, then selects
-        /// training or deterministic inference mode. Hardware availability is
-        /// represented inside the fixed schema rather than by resizing it.
+        /// Writes the vehicle-sized ML-Agents behavior parameters, then selects
+        /// training or deterministic inference mode.
         /// </summary>
         public static void ConfigureBehavior(
             BehaviorParameters behavior,

@@ -15,7 +15,7 @@ Use `Standard Evaluation` inference for thesis measurements. It runs a fixed num
 
 Keep the episode count and seed fixed for the primary comparison. Additional seeded suites may be reported as robustness checks only when every condition receives the same suites.
 
-The saved `TrainingObjectiveConfig` is part of the evaluated treatment. For the selected scenario it contains the complete objective: absolute reward/cost magnitudes, shaping scales and target geometry, plus enabled termination rules and their thresholds. Standard Evaluation fixes the environment and curriculum state described below; it does not silently replace that objective with a preset. Record and compare its `trainingObjectiveSha256` manifest fingerprint alongside the model checkpoint.
+The saved `TrainingObjectiveConfig` is part of the evaluated treatment. For the selected scenario it contains the complete objective: absolute reward/cost magnitudes, shaping scales and target geometry, plus enabled termination rules and their thresholds. Standard Evaluation fixes the environment and curriculum state described below; it does not silently replace that objective with a preset. Record and compare its `trainingObjectiveSha256` fingerprint and `rewardConfigRevision` from the manifest alongside the model checkpoint. If a run has more than one reward revision, use `RewardConfigHistory.jsonl` to state which checkpoints were trained under each objective; do not describe the latest `RewardConfig.json` as if it governed the entire run.
 
 ## Landing evaluation
 
@@ -23,7 +23,7 @@ Both landing scenarios are forced to fixed full difficulty (`d = 1`) with easier
 
 - `Chopstick Catch Landing` restores the canonical catch altitude, yaw, and logical platform size, then evaluates the saved objective's full-difficulty capture criteria.
 - `Falcon 9 Leg Landing` uses the physical pad/feet task and the saved objective's full-difficulty touchdown, stable-contact, and rebound criteria.
-- Both use their coupled feasibility sampler. Leg-landing ablations use the common single-engine Falcon reference envelope so identical episode seeds produce the same initial task distribution for every hardware preset.
+- Both use their coupled feasibility sampler. Its braking and lateral-control envelope is derived from the selected vehicle's current mass, active engines, gimbal authority, and startup delay.
 
 The evaluator counts success only after the scenario's real terminal criterion: a stable logical catch for chopsticks or stable physical multi-foot contact for legs. Crossing a target altitude is not success.
 

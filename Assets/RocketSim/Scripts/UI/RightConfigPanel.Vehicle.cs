@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -19,7 +20,6 @@ namespace RocketSim
         const int ReferenceFinCount = 4;
         const float EngineDryMassKg = 470f;
         const float GridFinDryMassKg = 200f;
-        const string CustomBuildPlayerPrefsKey = "RocketSim.CustomVehicleBuild";
 
         /// <summary>
         /// Builds the hardware editor tab for presets, body geometry, engines,
@@ -29,7 +29,9 @@ namespace RocketSim
         {
             c.Clear();
 
-            var presets = UIHelper.Foldout("Vehicle Presets");
+            var presets = UIHelper.Foldout("Vehicle Presets", _vehiclePresetsExpanded);
+            presets.RegisterValueChangedCallback(evt =>
+                _vehiclePresetsExpanded = evt.newValue);
             BuildPresetSection(presets);
             c.Add(presets);
 
@@ -70,19 +72,13 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Builds preset selection, one local custom-build save slot, and the
-        /// lightweight configuration validation action.
+        /// Builds immutable built-in presets, the named user-preset library,
+        /// and the lightweight configuration validation action.
         /// </summary>
         void BuildPresetSection(VisualElement root)
         {
             root.Add(BuildPresetSelector());
-            var customActions = new VisualElement();
-            customActions.AddToClassList("rs-btn-group");
-            customActions.Add(UIHelper.ActionButton("Save Custom Build", SaveCustomBuild));
-            var load = UIHelper.ActionButton("Load Custom Build", LoadCustomBuild);
-            load.SetEnabled(PlayerPrefs.HasKey(CustomBuildPlayerPrefsKey));
-            customActions.Add(load);
-            root.Add(customActions);
+            BuildUserPresetSection(root);
             root.Add(UIHelper.ActionButton("Check Configuration", () =>
             {
                 bool valid = ValidateConfiguration(out string error, out string warning);
@@ -283,39 +279,172 @@ namespace RocketSim
         /// </summary>
         void EditCustomParts(Action mutate, Action refresh = null)
         {
-            partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
+            MarkVehicleCustom();
             mutate();
             Dirty();
             refresh?.Invoke();
         }
 
         /// <summary>
-        /// Serializes the current vehicle into the single local PlayerPrefs save
-        /// slot used by the panel's simple custom-build workflow.
+        /// Marks the live vehicle as edited while retaining the name draft so
+        /// the user can explicitly overwrite the preset it was loaded from.
         /// </summary>
-        void SaveCustomBuild()
+        void MarkVehicleCustom()
         {
             partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
-            PlayerPrefs.SetString(CustomBuildPlayerPrefsKey, JsonUtility.ToJson(partsConfig));
-            PlayerPrefs.Save();
-            ShowNotification("Custom vehicle build saved on this computer.", false);
-            BuildVehicleTab(_tabContents[VehicleTab]);
+            _selectedUserVehiclePresetName = null;
         }
 
         /// <summary>
-        /// Restores the local custom build, clamps physical ranges, reconnects
-        /// shared config references, and rebuilds every affected tab/readout.
+        /// Builds the editable user-preset list plus save/overwrite and delete
+        /// controls. Only RocketPartsConfig is persisted by these actions.
         /// </summary>
-        void LoadCustomBuild()
+        void BuildUserPresetSection(VisualElement root)
         {
-            if (!PlayerPrefs.HasKey(CustomBuildPlayerPrefsKey)) return;
-            partsConfig = JsonUtility.FromJson<RocketPartsConfig>(PlayerPrefs.GetString(CustomBuildPlayerPrefsKey));
+            root.Add(UIHelper.SectionLabel("Saved Vehicle Presets"));
+
+            IReadOnlyList<UserVehiclePreset> savedPresets =
+                VehiclePresetRepository.LoadAll(out string loadError);
+            if (!string.IsNullOrEmpty(loadError))
+            {
+                var error = BuildGroupDetail(loadError);
+                error.AddToClassList("rs-user-preset-error");
+                root.Add(error);
+            }
+            else if (savedPresets.Count == 0)
+            {
+                root.Add(BuildGroupDetail(
+                    "No user presets saved yet. Configure a vehicle, enter a name, and save it below."));
+            }
+            else
+            {
+                var list = new VisualElement();
+                list.AddToClassList("rs-user-preset-list");
+                foreach (UserVehiclePreset saved in savedPresets)
+                {
+                    string capturedName = saved.name;
+                    var button = new Button(() => LoadUserVehiclePreset(capturedName));
+                    button.AddToClassList("rs-preset-btn");
+                    button.EnableInClassList(
+                        "rs-preset-btn-active",
+                        string.Equals(
+                            _selectedUserVehiclePresetName,
+                            capturedName,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    var title = new Label(saved.name);
+                    title.AddToClassList("rs-preset-title");
+                    button.Add(title);
+
+                    var description = new Label(UserVehiclePresetDescription(saved.vehicle));
+                    description.AddToClassList("rs-preset-desc");
+                    button.Add(description);
+                    list.Add(button);
+                }
+                root.Add(list);
+            }
+
+            var editor = new VisualElement();
+            editor.AddToClassList("rs-user-preset-editor");
+
+            var nameLabel = new Label("Preset Name");
+            nameLabel.AddToClassList("rs-user-preset-name-label");
+            editor.Add(nameLabel);
+
+            var nameField = new TextField
+            {
+                value = _vehiclePresetNameDraft,
+                maxLength = VehiclePresetRepository.MaximumNameLength
+            };
+            nameField.AddToClassList("rs-text-field");
+            nameField.AddToClassList("rs-user-preset-name-field");
+            UIHelper.TrackTextInputFocus(nameField);
+            nameField.RegisterValueChangedCallback(evt =>
+                _vehiclePresetNameDraft = evt.newValue);
+            editor.Add(nameField);
+            root.Add(editor);
+
+            var actions = new VisualElement();
+            actions.AddToClassList("rs-user-preset-actions");
+
+            var save = UIHelper.ActionButton("Save / Overwrite", SaveUserVehiclePreset);
+            save.AddToClassList("rs-user-preset-action");
+            save.AddToClassList("rs-user-preset-action-first");
+            actions.Add(save);
+
+            var delete = UIHelper.DangerButton("Delete Selected", DeleteSelectedUserVehiclePreset);
+            delete.AddToClassList("rs-user-preset-action");
+            delete.AddToClassList("rs-user-preset-action-last");
+            delete.SetEnabled(!string.IsNullOrWhiteSpace(_selectedUserVehiclePresetName));
+            actions.Add(delete);
+            root.Add(actions);
+            root.Add(BuildGroupDetail(
+                "Saving an existing user name overwrites it. Built-in presets cannot be changed or deleted."));
+        }
+
+        /// <summary>
+        /// Saves the current vehicle under the entered name, replacing only a
+        /// user-owned preset when that name already exists.
+        /// </summary>
+        void SaveUserVehiclePreset()
+        {
+            if (!VehiclePresetRepository.TrySave(
+                    _vehiclePresetNameDraft,
+                    partsConfig,
+                    out string normalizedName,
+                    out bool overwritten,
+                    out string error))
+            {
+                ShowNotification(error, true);
+                return;
+            }
+
             partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
-            partsConfig.ClampPhysicalRanges();
+            _selectedUserVehiclePresetName = normalizedName;
+            _vehiclePresetNameDraft = normalizedName;
+            Dirty();
+            BuildVehicleTab(_tabContents[VehicleTab]);
+            ShowNotification(
+                overwritten
+                    ? $"Vehicle preset '{normalizedName}' overwritten."
+                    : $"Vehicle preset '{normalizedName}' saved.",
+                false);
+        }
+
+        /// <summary>Loads a named user vehicle without changing any other config.</summary>
+        void LoadUserVehiclePreset(string presetName)
+        {
+            if (!VehiclePresetRepository.TryLoad(presetName, out RocketPartsConfig loaded, out string error))
+            {
+                ShowNotification(error, true);
+                return;
+            }
+
+            partsConfig = loaded;
+            _selectedUserVehiclePresetName = presetName;
+            _vehiclePresetNameDraft = presetName;
+            ApplyCurrentScenarioHardwareDefaults();
             SyncManagerConfigs();
             Dirty();
             RebuildUI();
-            ShowNotification("Custom vehicle build loaded.", false);
+            ShowNotification($"Vehicle preset '{presetName}' loaded.", false);
+        }
+
+        /// <summary>Deletes the selected user-owned preset from the catalog.</summary>
+        void DeleteSelectedUserVehiclePreset()
+        {
+            string presetName = _selectedUserVehiclePresetName;
+            if (string.IsNullOrWhiteSpace(presetName)) return;
+            if (!VehiclePresetRepository.TryDelete(presetName, out string error))
+            {
+                ShowNotification(error, true);
+                return;
+            }
+
+            _selectedUserVehiclePresetName = null;
+            _vehiclePresetNameDraft = string.Empty;
+            BuildVehicleTab(_tabContents[VehicleTab]);
+            ShowNotification($"Vehicle preset '{presetName}' deleted.", false);
         }
 
         /// <summary>
@@ -450,7 +579,7 @@ namespace RocketSim
                 var captured = group;
                 var button = new Button(() =>
                 {
-                    partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
+                    MarkVehicleCustom();
                     partsConfig.octawebBurnGroup = captured;
                     RebuildUI();
                     Dirty();
@@ -474,10 +603,29 @@ namespace RocketSim
         /// </summary>
         void ApplyHardwarePreset(RocketHardwarePreset preset)
         {
+            _selectedUserVehiclePresetName = null;
+            _vehiclePresetNameDraft = string.Empty;
             partsConfig.ApplyPreset(preset);
             ApplyCurrentScenarioHardwareDefaults();
             Dirty();
             RebuildUI();
+        }
+
+        /// <summary>Builds the compact hardware summary shown under a user preset.</summary>
+        static string UserVehiclePresetDescription(RocketPartsConfig vehicle)
+        {
+            if (vehicle == null) return "Invalid vehicle configuration";
+
+            string engines = vehicle.engineLayout switch
+            {
+                EngineLayout.Single => "single engine",
+                EngineLayout.Triple => "three engines",
+                EngineLayout.Octaweb => $"octaweb, {vehicle.GetActiveEngineCount()} active",
+                _ => "custom engine layout"
+            };
+            string fins = vehicle.finsEnabled ? $"{vehicle.GetFinCount()} fins" : "no fins";
+            string rcs = vehicle.rcsEnabled ? "RCS" : "no RCS";
+            return $"{engines}, {fins}, {rcs}";
         }
 
         /// <summary>
@@ -518,7 +666,7 @@ namespace RocketSim
 
                 card.RegisterCallback<ClickEvent>(_ =>
                 {
-                    partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
+                    MarkVehicleCustom();
                     partsConfig.engineLayout = cfg.layout;
                     RebuildUI();
                     Dirty();
@@ -572,7 +720,7 @@ namespace RocketSim
 
                 card.RegisterCallback<ClickEvent>(_ =>
                 {
-                    partsConfig.hardwarePreset = RocketHardwarePreset.Custom;
+                    MarkVehicleCustom();
                     partsConfig.finLayout = cfg.layout;
                     foreach (var child in row.Children())
                         child.EnableInClassList("rs-fin-card-active",

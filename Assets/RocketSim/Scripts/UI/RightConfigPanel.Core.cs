@@ -21,8 +21,8 @@ namespace RocketSim
             ("Vehicle",   "rs-theme-parts"),
             ("Task",      "rs-theme-scenario"),
             ("Env",       "rs-theme-env"),
-            ("Reward",    "rs-theme-rewards"),
             ("Run",       "rs-theme-run"),
+            ("Reward",    "rs-theme-rewards"),
             ("ML",        "rs-theme-ml"),
             ("Faults",    "rs-theme-faults"),
             ("Data",      "rs-theme-telemetry"),
@@ -190,8 +190,8 @@ namespace RocketSim
             BuildVehicleTab(_tabContents[VehicleTab]);
             BuildScenarioTab(_tabContents[TaskTab]);
             BuildEnvironmentTab(_tabContents[EnvironmentTab]);
-            BuildRewardsTab(_tabContents[RewardsTab]);
             BuildRunTab(_tabContents[RunTab]);
+            BuildRewardsTab(_tabContents[RewardsTab]);
             BuildMLTab(_tabContents[MlTab]);
             BuildFaultsTab(_tabContents[FaultsTab]);
             BuildTelemetryTab(_tabContents[TelemetryTab]);
@@ -218,6 +218,15 @@ namespace RocketSim
             if (_runActive) return;
             ApplyCurrentScenarioHardwareDefaults();
             trainingAreaManager?.ApplyPartsConfigToAll();
+            if (envConfig.behaviorType == BehaviorType.Inference &&
+                RunIdsEqual(_loadedInferenceRunId, envConfig.runId) &&
+                !TrainingRunRepository.TryValidateInferencePolicySchema(
+                    envConfig.runId,
+                    partsConfig,
+                    out string compatibilityError))
+            {
+                ShowNotification(compatibilityError, true);
+            }
             RefreshStartButton();
         }
 
@@ -482,6 +491,10 @@ namespace RocketSim
             return HasValidRunId(envConfig.runId) &&
                    RunIdsEqual(_loadedInferenceRunId, envConfig.runId) &&
                    TrainingRunRepository.HasCompleteRunConfig(envConfig.runId) &&
+                   TrainingRunRepository.TryValidateInferencePolicySchema(
+                       envConfig.runId,
+                       partsConfig,
+                       out _) &&
                    ModelRepository.HasModel(envConfig.runId);
         }
 

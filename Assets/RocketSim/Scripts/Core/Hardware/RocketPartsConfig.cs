@@ -203,8 +203,9 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Applies scenario-specific hardware defaults before rebuilding rocket
-        /// assemblies: starting fuel and Falcon 9 octaweb burn group.
+        /// Applies the optional scenario-recommended starting fuel. Engine
+        /// layout, burn group, and every other hardware choice remain exactly
+        /// as selected by the user or vehicle preset.
         /// </summary>
         public void ApplyScenarioHardwareDefaults(ScenarioType scenario)
         {
@@ -216,21 +217,6 @@ namespace RocketSim
 
             startFuelFraction = Mathf.Clamp01(startFuelFraction);
             startFuelMass = startFuelFraction * capacity;
-
-            if (hardwarePreset != RocketHardwarePreset.Falcon9 || engineLayout != EngineLayout.Octaweb)
-                return;
-
-            switch (scenario)
-            {
-                case ScenarioType.ChopstickLanding:
-                case ScenarioType.LegLanding:
-                    octawebBurnGroup = OctawebBurnGroup.CenterPlusTwo;
-                    break;
-                default:
-                    octawebBurnGroup = OctawebBurnGroup.CenterOnly;
-                    break;
-            }
-            independentEngines = true;
         }
 
         /// <summary>

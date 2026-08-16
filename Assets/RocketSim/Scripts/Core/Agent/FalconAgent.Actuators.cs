@@ -23,6 +23,10 @@ namespace RocketSim
             if (_manualControlActive) return;
 
             var act = actions.ContinuousActions;
+            int gimbalOffset = RocketAgentSchema.GimbalActionOffset(cfg.independentEngineCount);
+            int finOffset = RocketAgentSchema.FinActionOffset(cfg.independentEngineCount);
+            int rcsOffset = RocketAgentSchema.RcsActionOffset(cfg.independentEngineCount, cfg.finCount);
+
             // Throttle: action <= 0 is off; action > 0 selects [minThrottle, 1].
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
@@ -37,7 +41,7 @@ namespace RocketSim
 
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
-                int gimbalIndex = RocketAgentSchema.GimbalActionOffset + i * 2;
+                int gimbalIndex = gimbalOffset + i * 2;
                 var x = act[gimbalIndex] * cfg.maxGimbal;
                 var y = act[gimbalIndex + 1] * cfg.maxGimbal;
                 targetGimbal[i] = ClampGimbalCone(new Vector2(x, y));
@@ -46,7 +50,7 @@ namespace RocketSim
             if (cfg.hasFins)
             {
                 for (int i = 0; i < cfg.finCount; i++)
-                    targetFinAngles[i] = act[RocketAgentSchema.FinActionOffset + i] * cfg.maxFinAngle;
+                    targetFinAngles[i] = act[finOffset + i] * cfg.maxFinAngle;
             }
             else
             {
@@ -57,7 +61,7 @@ namespace RocketSim
             {
                 for (int i = 0; i < cfg.rcsJetCount; i++)
                 {
-                    int rcsActionIndex = RocketAgentSchema.RcsActionOffset + i;
+                    int rcsActionIndex = rcsOffset + i;
                     rcsValveRequests[i] = rcsActionIndex < act.Length &&
                                           act[rcsActionIndex] > RcsValveActionThreshold
                         ? 1f

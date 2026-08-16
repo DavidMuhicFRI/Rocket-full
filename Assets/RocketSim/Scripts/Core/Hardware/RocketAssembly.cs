@@ -191,7 +191,7 @@ namespace RocketSim
 
         /// <summary>
         /// Replaces the reference hardware contribution in the configured body
-        /// mass with the hardware that is actually installed for this ablation.
+        /// mass with the hardware that is actually installed on this vehicle.
         /// </summary>
         static float AdjustDryMassForInstalledHardware(
             float scaledBodyDryMass,

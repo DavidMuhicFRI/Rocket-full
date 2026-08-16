@@ -23,8 +23,8 @@ namespace RocketSim
         [HideInInspector] public float legLandingCurriculumPeakLinearProgress;
         public const float LegLandingPadHalfSizeM = 10f;
         // Leg landing starts from a terminal-descent state, not the much slower
-        // chopstick catch envelope. The altitude increase keeps the faster
-        // initial descent recoverable by the common single-engine reference.
+        // chopstick catch envelope. The feasibility sampler clips these broad
+        // ranges to the selected vehicle's recoverable control envelope.
         public const float LegLandingInitialSpawnAltitudeMin = 250f;
         public const float LegLandingInitialSpawnAltitudeMax = 350f;
         public const float LegLandingFullSpawnAltitudeMin = 400f;

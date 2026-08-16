@@ -28,13 +28,7 @@ namespace RocketSim
     {
         Falcon9 = 0,
         SimpleSingle = 1,
-        Octaweb = 2,
-        Custom = 3,
-        AblationFull = 4,
-        AblationNoFins = 5,
-        AblationNoRcs = 6,
-        AblationTripleEngine = 7,
-        AblationSingleEngine = 8
+        Custom = 2
     }
 
     public enum FinLayout

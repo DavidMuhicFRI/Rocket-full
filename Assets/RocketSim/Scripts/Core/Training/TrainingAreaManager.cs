@@ -182,6 +182,16 @@ namespace RocketSim
 
                 if (agent)
                 {
+                    if (!TrainingRunRepository.TryValidateInferencePolicySchema(
+                            envConfig.runId,
+                            partsConfig,
+                            out string compatibilityError))
+                    {
+                        Debug.LogError($"[TrainingAreaManager] {compatibilityError}");
+                        ClearSpawnedAreas();
+                        return false;
+                    }
+
                     ModelAsset modelAsset = ModelRepository.LoadModel(envConfig.runId);
                     if (!modelAsset)
                     {

@@ -33,14 +33,14 @@ namespace RocketSim
 
         public static readonly HardwarePresetUiOption[] Presets =
         {
-            new(RocketHardwarePreset.Falcon9, "Falcon 9", "Octaweb, grid fins, RCS, center-engine + 2 landing burn"),
-            new(RocketHardwarePreset.SimpleSingle, "Simple", "Single engine only; no fins/RCS, hover-friendly timing"),
-            new(RocketHardwarePreset.Octaweb, "Octaweb Configuration", "F9 layout with hover-friendly throttle, gimbal, and timing"),
-            new(RocketHardwarePreset.AblationFull, "Ablation - Full", "Nine available engines, four grid fins, and RCS; scientific baseline"),
-            new(RocketHardwarePreset.AblationNoFins, "Ablation - No Grid Fins", "Full baseline with only grid-fin hardware removed"),
-            new(RocketHardwarePreset.AblationNoRcs, "Ablation - No RCS", "Full baseline with only reaction-control hardware removed"),
-            new(RocketHardwarePreset.AblationTripleEngine, "Ablation - Triple Engine", "Full baseline with a three-engine layout"),
-            new(RocketHardwarePreset.AblationSingleEngine, "Ablation - Single Engine", "Full baseline with a single center engine"),
+            new(
+                RocketHardwarePreset.Falcon9,
+                VehiclePresetRepository.Falcon9BuiltInName,
+                "Falcon 9-like body, octaweb, grid fins, RCS, and center + 2 active engines"),
+            new(
+                RocketHardwarePreset.SimpleSingle,
+                VehiclePresetRepository.SimpleBuiltInName,
+                "Single engine without fins/RCS and with training-friendly actuator timing"),
         };
 
         public static readonly OctawebBurnGroup[] BurnGroups =

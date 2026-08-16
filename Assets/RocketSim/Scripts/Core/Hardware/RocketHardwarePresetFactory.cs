@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Hardware/RocketHardwarePresetFactory.cs
-// Purpose: Writes complete, internally consistent Falcon 9, simple, and
-// octaweb presets into RocketPartsConfig. Custom builds are never overwritten.
+// Purpose: Writes the two built-in vehicle starting points into
+// RocketPartsConfig. Custom and user-saved vehicles are never overwritten.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -27,6 +27,12 @@ namespace RocketSim
         /// </summary>
         public static void ApplyPreset(RocketPartsConfig cfg, RocketHardwarePreset preset)
         {
+            if (preset == RocketHardwarePreset.Custom)
+            {
+                cfg.hardwarePreset = RocketHardwarePreset.Custom;
+                return;
+            }
+
             cfg.hardwarePreset = preset;
             ApplyFalcon9Base(cfg);
 
@@ -45,40 +51,6 @@ namespace RocketSim
                     cfg.rcsEnabled = false;
                     break;
 
-                case RocketHardwarePreset.Octaweb:
-                    cfg.engineLayout = EngineLayout.Octaweb;
-                    cfg.independentEngines = true;
-                    cfg.octawebBurnGroup = OctawebBurnGroup.CenterOnly;
-                    cfg.minThrottle = RocketPartsConfig.SandboxMinThrottle;
-                    cfg.maxGimbalAngle = RocketPartsConfig.SandboxMaxGimbalDeg;
-                    ApplySandboxEngineTiming(cfg);
-                    cfg.engineSpacing = 0.9f;
-                    break;
-
-                // Thesis ablation presets deliberately keep Falcon 9 engine
-                // timing and throttle limits. Each non-baseline preset changes
-                // exactly one hardware family relative to AblationFull.
-                case RocketHardwarePreset.AblationFull:
-                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
-                    break;
-
-                case RocketHardwarePreset.AblationNoFins:
-                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
-                    cfg.finsEnabled = false;
-                    break;
-
-                case RocketHardwarePreset.AblationNoRcs:
-                    ConfigureAblationEngineSet(cfg, EngineLayout.Octaweb, OctawebBurnGroup.AllNine);
-                    cfg.rcsEnabled = false;
-                    break;
-
-                case RocketHardwarePreset.AblationTripleEngine:
-                    ConfigureAblationEngineSet(cfg, EngineLayout.Triple, OctawebBurnGroup.CenterPlusTwo);
-                    break;
-
-                case RocketHardwarePreset.AblationSingleEngine:
-                    ConfigureAblationEngineSet(cfg, EngineLayout.Single, OctawebBurnGroup.CenterOnly);
-                    break;
             }
 
             cfg.ClampPhysicalRanges();
@@ -140,20 +112,6 @@ namespace RocketSim
             cfg.engineShutdownTransient = RocketPartsConfig.SandboxEngineShutdownTransientS;
             cfg.engineMinimumRunTime = RocketPartsConfig.SandboxEngineMinimumRunTimeS;
             cfg.engineRestartCooldown = RocketPartsConfig.SandboxEngineRestartCooldownS;
-        }
-
-        /// <summary>
-        /// Selects the installed/available engine set for an ablation condition
-        /// while retaining the common Falcon 9 actuator parameters.
-        /// </summary>
-        static void ConfigureAblationEngineSet(
-            RocketPartsConfig cfg,
-            EngineLayout layout,
-            OctawebBurnGroup burnGroup)
-        {
-            cfg.engineLayout = layout;
-            cfg.independentEngines = true;
-            cfg.octawebBurnGroup = burnGroup;
         }
     }
 }

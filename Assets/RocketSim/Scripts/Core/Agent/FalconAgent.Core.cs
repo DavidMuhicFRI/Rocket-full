@@ -170,27 +170,22 @@ namespace RocketSim
             // 5. Actuator state (throttle/gimbal, engine mode and timing,
             // fins, and RCS jets). Engine timing makes the actuator dynamics
             // Markov for a feed-forward policy during low-mass pulse control.
-            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
-                sensor.AddObservation(i < cfg.independentEngineCount ? throttle[i] : 0f);
-            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
-                sensor.AddObservation(i < cfg.independentEngineCount
-                    ? gimbal[i] / Mathf.Max(cfg.maxGimbal, 1f)
-                    : Vector2.zero);
-            for (int i = 0; i < RocketAgentSchema.MaxEngineChannels; i++)
+            for (int i = 0; i < cfg.independentEngineCount; i++)
+                sensor.AddObservation(throttle[i]);
+            for (int i = 0; i < cfg.independentEngineCount; i++)
+                sensor.AddObservation(gimbal[i] / Mathf.Max(cfg.maxGimbal, 1f));
+            for (int i = 0; i < cfg.independentEngineCount; i++)
             {
-                bool available = i < cfg.independentEngineCount;
-                sensor.AddObservation(available && engineStates[i] == EngineRunState.Off ? 1f : 0f);
-                sensor.AddObservation(available && engineStates[i] == EngineRunState.Starting ? 1f : 0f);
-                sensor.AddObservation(available && engineStates[i] == EngineRunState.Running ? 1f : 0f);
-                sensor.AddObservation(available && engineStates[i] == EngineRunState.Shutdown ? 1f : 0f);
-                sensor.AddObservation(available ? EngineConstraintTimeRemaining01(i) : 0f);
+                sensor.AddObservation(engineStates[i] == EngineRunState.Off ? 1f : 0f);
+                sensor.AddObservation(engineStates[i] == EngineRunState.Starting ? 1f : 0f);
+                sensor.AddObservation(engineStates[i] == EngineRunState.Running ? 1f : 0f);
+                sensor.AddObservation(engineStates[i] == EngineRunState.Shutdown ? 1f : 0f);
+                sensor.AddObservation(EngineConstraintTimeRemaining01(i));
             }
-            for (int i = 0; i < RocketAgentSchema.MaxFinChannels; i++)
-                sensor.AddObservation(cfg.hasFins && i < cfg.finCount
-                    ? finAngles[i] / Mathf.Max(cfg.maxFinAngle, 1f)
-                    : 0f);
-            for (int i = 0; i < RocketAgentSchema.MaxRcsChannels; i++)
-                sensor.AddObservation(cfg.hasRCS && i < cfg.rcsJetCount ? RcsJetCommand(i) : 0f);
+            for (int i = 0; i < cfg.finCount; i++)
+                sensor.AddObservation(finAngles[i] / Mathf.Max(cfg.maxFinAngle, 1f));
+            for (int i = 0; i < cfg.rcsJetCount; i++)
+                sensor.AddObservation(RcsJetCommand(i));
 
             // 6. Fuel fraction (1)
             sensor.AddObservation(fuel / Mathf.Max(cfg.startFuelMass, 1f));

@@ -30,8 +30,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Applies scenario-specific fuel and engine defaults to the panel's
-        /// editable parts config.
+        /// Applies optional scenario-recommended fuel to the panel's editable
+        /// parts config. Task changes never modify engine hardware.
         /// </summary>
         void ApplyCurrentScenarioHardwareDefaults()
         {

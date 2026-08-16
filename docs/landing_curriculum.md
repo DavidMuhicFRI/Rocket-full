@@ -49,7 +49,7 @@ retaining the same success-limit interpolation shown above:
 | Pitch/roll range | 0.5 deg | 8 deg |
 | Angular-speed max | 0 deg/s | 12 deg/s |
 
-The sampler couples altitude and velocity through conservative braking/lateral-control checks rather than sampling impossible combinations independently. For the leg-landing hardware comparison, this check uses one fixed single-engine Falcon reference envelope so every ablation receives the same seeded task distribution. Actual vehicle TWR is still validated/reported separately.
+The sampler couples altitude and velocity through conservative braking/lateral-control checks rather than sampling impossible combinations independently. Both landing tasks derive this envelope from the selected vehicle's current mass, active engines, gimbal authority, and startup delay, so custom vehicles are not assigned obviously unreachable starts.
 
 In the default objective, the altitude-escape rule allows 100 m above the episode's starting landing-frame altitude and the planar-flyaway rule allows 150 m of horizontal error. Both rules and thresholds are configurable.
 

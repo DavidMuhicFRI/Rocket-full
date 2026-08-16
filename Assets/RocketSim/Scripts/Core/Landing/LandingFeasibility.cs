@@ -214,18 +214,10 @@ namespace RocketSim
 
                 LandingCurriculumProfile initialProfile = env.GetActiveLandingCurriculumProfile(0f);
                 LandingCurriculumProfile fullProfile = env.GetActiveLandingCurriculumProfile(1f);
-                float samplerMass = env.scenario == ScenarioType.LegLanding
-                    ? LegLandingReferenceEnvelope.ReferenceVehicleMassKg
-                    : startMass;
-                float samplerThrustPerEngine = env.scenario == ScenarioType.LegLanding
-                    ? LegLandingReferenceEnvelope.MaxThrustPerEngineN
-                    : cfg.maxThrust;
-                int samplerEngineCount = env.scenario == ScenarioType.LegLanding
-                    ? LegLandingReferenceEnvelope.ActiveEngineCount
-                    : engines;
-                float samplerStartupDelay = env.scenario == ScenarioType.LegLanding
-                    ? LegLandingReferenceEnvelope.StartupDelayS
-                    : cfg.engineStartupDelay;
+                float samplerMass = startMass;
+                float samplerThrustPerEngine = cfg.maxThrust;
+                int samplerEngineCount = engines;
+                float samplerStartupDelay = cfg.engineStartupDelay;
                 float samplerNetAcceleration = LandingFeasibility.NetUpwardAcceleration(
                     samplerThrustPerEngine,
                     samplerEngineCount,

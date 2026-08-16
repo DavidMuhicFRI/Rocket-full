@@ -123,17 +123,35 @@ namespace RocketSim
                 initializeFromField.AddToClassList("rs-enum-field");
                 initializeFromField.AddToClassList("rs-initialize-from-field");
                 initializeFromField.tooltip =
-                    "Starts a new run from a prior checkpoint. Use this for Hover -> Landing transfer; Resume continues the same run instead. Keep the hardware preset matched for the thesis comparison.";
+                    "Starts a new run from a prior checkpoint and restores that run's saved reward setup. Resume continues the same run instead.";
                 initializeFromField.SetEnabled(!_resumeRun);
                 initializeFromField.RegisterValueChangedCallback(evt =>
                 {
                     _initializeFromRunId = evt.newValue == "None" ? string.Empty : evt.newValue;
+                    if (!string.IsNullOrWhiteSpace(_initializeFromRunId))
+                    {
+                        try
+                        {
+                            ApplyRunRewards(_initializeFromRunId);
+                            BuildRewardsTab(_tabContents[RewardsTab]);
+                            ShowNotification(
+                                $"Applied reward setup from '{_initializeFromRunId}'.",
+                                false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[Panel] Failed to load run rewards: {ex.Message}");
+                            _initializeFromRunId = string.Empty;
+                            initializeFromField.SetValueWithoutNotify("None");
+                            ShowNotification("Could not load the selected run's rewards.", true);
+                        }
+                    }
                     Dirty();
                     RefreshStartButton();
                 });
                 c.Add(initializeFromField);
                 c.Add(BuildGroupDetail(
-                    "Transfer requires the canonical policy dimensions and matching PPO network settings. The launcher checks technical compatibility; the experiment protocol also requires the same hardware preset."));
+                    "Initialization restores the source reward setup and requires matching engine, fin, and RCS policy channels plus matching network settings."));
             }
 
             var banner = new VisualElement();
@@ -159,7 +177,7 @@ namespace RocketSim
 
             // Explains why changing a restored training configuration is risky.
             string LoadedConfigBannerText() =>
-                $"Applied rocket configuration from \"{envConfig.runId}\"\nDo not make any changes to the rocket configuration for best results.";
+                $"Applied run configuration and rewards from \"{envConfig.runId}\"\nReward edits are saved as a new revision when this run resumes.";
 
             // Finds the canonical saved spelling of an id, ignoring letter case.
             string FindExistingRun(string id)
@@ -643,9 +661,24 @@ namespace RocketSim
             partsConfig = loaded.partsConfig;
             mlConfig    = loaded.mlConfig;
             ApplyCurrentScenarioHardwareDefaults();
+            ApplyObjectiveDerivedState(envConfig.scenario);
 
             SyncManagerConfigs();
             Dirty();
+        }
+
+        /// <summary>
+        /// Restores only a source run's complete reward objective. Initialize
+        /// From intentionally leaves the target task, environment, vehicle, and
+        /// trainer settings under the user's control while reusing its checkpoint.
+        /// </summary>
+        void ApplyRunRewards(string runId)
+        {
+            envConfig.trainingObjective =
+                TrainingRunRepository.LoadTrainingObjective(runId);
+            envConfig.EnsureTrainingObjective();
+            ApplyObjectiveDerivedState(envConfig.scenario);
+            SyncManagerConfigs();
         }
     }
 }

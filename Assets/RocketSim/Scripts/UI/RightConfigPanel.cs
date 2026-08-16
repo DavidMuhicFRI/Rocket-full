@@ -27,8 +27,8 @@ namespace RocketSim
         const int VehicleTab = 0;
         const int TaskTab = 1;
         const int EnvironmentTab = 2;
-        const int RewardsTab = 3;
-        const int RunTab = 4;
+        const int RunTab = 3;
+        const int RewardsTab = 4;
         const int MlTab = 5;
         const int FaultsTab = 6;
         const int TelemetryTab = 7;
@@ -82,6 +82,11 @@ namespace RocketSim
         private bool _showLoadedRunBanner;
         private bool _autoScaleTrainingAreas;
         private bool _runActive;
+        private string _selectedUserVehiclePresetName;
+        private string _vehiclePresetNameDraft = "";
+        // Vehicle edits rebuild this tab frequently. Keep the user's explicit
+        // foldout choice instead of resetting it as a side effect of that rebuild.
+        private bool _vehiclePresetsExpanded;
         private float _panelWidth = DefaultPanelWidth;
         private float _resizeStartPointerX;
         private float _resizeStartWidth;

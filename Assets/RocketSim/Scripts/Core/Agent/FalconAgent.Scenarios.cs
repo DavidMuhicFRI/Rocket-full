@@ -241,9 +241,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Selects the feasibility model used to clip sampled starts. Physical
-        /// leg ablations share a single-engine Falcon 9 reference so their
-        /// seeded training/evaluation states stay identical across hardware.
+        /// Supplies the selected vehicle's live mass and actuator authority to
+        /// the feasibility sampler so custom vehicles receive reachable starts.
         /// </summary>
         void LandingFeasibilityInputs(
             out float vehicleMass,
@@ -252,16 +251,6 @@ namespace RocketSim
             out float maxGimbalDeg,
             out float startupDelay)
         {
-            if (envConfig.scenario == ScenarioType.LegLanding)
-            {
-                vehicleMass = LegLandingReferenceEnvelope.ReferenceVehicleMassKg;
-                maxThrust = LegLandingReferenceEnvelope.MaxThrustPerEngineN;
-                activeEngineCount = LegLandingReferenceEnvelope.ActiveEngineCount;
-                maxGimbalDeg = LegLandingReferenceEnvelope.MaxGimbalDeg;
-                startupDelay = LegLandingReferenceEnvelope.StartupDelayS;
-                return;
-            }
-
             vehicleMass = cfg.dryMass + fuel + rcsPropellant;
             maxThrust = cfg.maxThrust;
             activeEngineCount = cfg.activeEngineCount;

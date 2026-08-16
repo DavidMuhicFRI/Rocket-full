@@ -235,7 +235,7 @@ namespace RocketSim.Tests
             ObjectiveValidationResult validation =
                 ObjectiveValidator.Validate(ScenarioType.Hover, objective);
             Assert.That(validation.HasErrors, Is.False,
-                "A zero reward vector is allowed for deliberate ablation experiments.");
+                "A zero reward vector is allowed for deliberate custom experiments.");
             Assert.That(validation.issues.Any(issue => issue.code == "reward.all_zero"), Is.True,
                 "The validator should still explain why an all-zero objective is usually unhelpful.");
         }
@@ -611,6 +611,63 @@ namespace RocketSim.Tests
         }
 
         [Test]
+        public void ResumeAllowsARewardRevisionUnderTheSameRunId()
+        {
+            using var fixture = new ResumeContractFixture();
+            SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
+            requestedEnvironment
+                .GetTrainingObjective(ScenarioType.Hover)
+                .rewards
+                .hoverAltitudeProximityRewardRate += 0.25f;
+
+            bool accepted = fixture.TryValidate(
+                requestedEnvironment,
+                fixture.CloneParts(),
+                fixture.CloneMl(),
+                out string error);
+
+            Assert.That(accepted, Is.True,
+                "Reward changes are revisioned at launch rather than rejected by Resume.");
+            Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void TrainingLaunchOverwritesLatestRewardSnapshotAndKeepsRevisionHistory()
+        {
+            using var fixture = new ResumeContractFixture();
+            SimEnvironmentConfig revisedEnvironment = fixture.CloneEnvironment();
+            revisedEnvironment
+                .GetTrainingObjective(ScenarioType.Hover)
+                .rewards
+                .hoverAltitudeProximityRewardRate += 0.5f;
+
+            fixture.SaveTrainingConfigs(revisedEnvironment, resumed: true);
+
+            TrainingObjectiveConfig loaded = fixture.LoadTrainingObjective();
+            Assert.That(
+                JsonUtility.ToJson(loaded),
+                Is.EqualTo(JsonUtility.ToJson(revisedEnvironment.EnsureTrainingObjective())),
+                "RewardConfig.json must be the latest setup applied to the run.");
+
+            TrainingRunManifest manifest = JsonUtility.FromJson<TrainingRunManifest>(
+                File.ReadAllText(Path.Combine(fixture.RunRoot, "RunManifest.json")));
+            Assert.That(manifest.rewardConfigRevision, Is.EqualTo(2));
+            Assert.That(manifest.rewardConfigChangedOnLastLaunch, Is.True);
+
+            string[] history = File.ReadAllLines(
+                Path.Combine(fixture.RunRoot, "RewardConfigHistory.jsonl"));
+            Assert.That(history, Has.Length.EqualTo(1));
+            TrainingRewardRevision revision =
+                JsonUtility.FromJson<TrainingRewardRevision>(history[0]);
+            Assert.That(revision.revision, Is.EqualTo(2));
+            Assert.That(revision.resumed, Is.True);
+            Assert.That(revision.changedFromPreviousLaunch, Is.True);
+            Assert.That(
+                JsonUtility.ToJson(revision.trainingObjective),
+                Is.EqualTo(JsonUtility.ToJson(revisedEnvironment.EnsureTrainingObjective())));
+        }
+
+        [Test]
         public void ResumeIgnoresOnlyThePreservedEvaluatorFields()
         {
             using var fixture = new ResumeContractFixture();
@@ -712,17 +769,19 @@ namespace RocketSim.Tests
         }
 
         [Test]
-        public void AgentSchemaIsCanonicalAcrossHardwareAblations()
+        public void AgentSchemaContainsOnlyConfiguredHardwareChannels()
         {
-            var full = new RocketPartsConfig();
-            full.ApplyPreset(RocketHardwarePreset.AblationFull);
-            var single = new RocketPartsConfig();
-            single.ApplyPreset(RocketHardwarePreset.AblationSingleEngine);
+            RocketPartsConfig simple = Preset(RocketHardwarePreset.SimpleSingle);
+            RocketPartsConfig falcon = Preset(RocketHardwarePreset.Falcon9);
+            RocketPartsConfig allNine = Preset(RocketHardwarePreset.Falcon9);
+            allNine.octawebBurnGroup = OctawebBurnGroup.AllNine;
 
-            Assert.That(RocketAgentSchema.ObservationSize(full), Is.EqualTo(109));
-            Assert.That(RocketAgentSchema.ObservationSize(single), Is.EqualTo(109));
-            Assert.That(RocketAgentSchema.ContinuousActionSize(full), Is.EqualTo(39));
-            Assert.That(RocketAgentSchema.ContinuousActionSize(single), Is.EqualTo(39));
+            Assert.That(RocketAgentSchema.ObservationSize(simple), Is.EqualTo(33));
+            Assert.That(RocketAgentSchema.ContinuousActionSize(simple), Is.EqualTo(3));
+            Assert.That(RocketAgentSchema.ObservationSize(falcon), Is.EqualTo(61));
+            Assert.That(RocketAgentSchema.ContinuousActionSize(falcon), Is.EqualTo(21));
+            Assert.That(RocketAgentSchema.ObservationSize(allNine), Is.EqualTo(109));
+            Assert.That(RocketAgentSchema.ContinuousActionSize(allNine), Is.EqualTo(39));
         }
 
         [Test]
@@ -1048,55 +1107,40 @@ namespace RocketSim.Tests
         }
 
         [Test]
-        public void AblationPresetsChangeExactlyOneHardwareFamily()
+        public void BuiltInVehiclePresetsCoverFullAndSimpleStartingPoints()
         {
-            RocketPartsConfig full = Preset(RocketHardwarePreset.AblationFull);
-            RocketPartsConfig noFins = Preset(RocketHardwarePreset.AblationNoFins);
-            RocketPartsConfig noRcs = Preset(RocketHardwarePreset.AblationNoRcs);
-            RocketPartsConfig triple = Preset(RocketHardwarePreset.AblationTripleEngine);
-            RocketPartsConfig single = Preset(RocketHardwarePreset.AblationSingleEngine);
+            RocketPartsConfig falcon = Preset(RocketHardwarePreset.Falcon9);
+            RocketPartsConfig simple = Preset(RocketHardwarePreset.SimpleSingle);
+            RocketHardwarePreset[] presets =
+                (RocketHardwarePreset[])System.Enum.GetValues(typeof(RocketHardwarePreset));
 
-            Assert.That(full.GetEngineCount(), Is.EqualTo(9));
-            Assert.That(full.GetActiveEngineCount(), Is.EqualTo(9));
-            Assert.That(full.finsEnabled, Is.True);
-            Assert.That(full.rcsEnabled, Is.True);
-
-            Assert.That(noFins.GetActiveEngineCount(), Is.EqualTo(9));
-            Assert.That(noFins.finsEnabled, Is.False);
-            Assert.That(noFins.rcsEnabled, Is.True);
-
-            Assert.That(noRcs.GetActiveEngineCount(), Is.EqualTo(9));
-            Assert.That(noRcs.finsEnabled, Is.True);
-            Assert.That(noRcs.rcsEnabled, Is.False);
-
-            Assert.That(triple.GetEngineCount(), Is.EqualTo(3));
-            Assert.That(triple.finsEnabled, Is.True);
-            Assert.That(triple.rcsEnabled, Is.True);
-            Assert.That(single.GetEngineCount(), Is.EqualTo(1));
-            Assert.That(single.finsEnabled, Is.True);
-            Assert.That(single.rcsEnabled, Is.True);
-
-            Assert.That(noFins.minThrottle, Is.EqualTo(full.minThrottle).Within(Epsilon));
-            Assert.That(noRcs.engineStartupDelay, Is.EqualTo(full.engineStartupDelay).Within(Epsilon));
-            Assert.That(triple.maxThrustPerEngine, Is.EqualTo(full.maxThrustPerEngine).Within(Epsilon));
-            Assert.That(single.maxGimbalAngle, Is.EqualTo(full.maxGimbalAngle).Within(Epsilon));
+            CollectionAssert.AreEquivalent(
+                new[]
+                {
+                    RocketHardwarePreset.Falcon9,
+                    RocketHardwarePreset.SimpleSingle,
+                    RocketHardwarePreset.Custom
+                },
+                presets);
+            Assert.That(falcon.GetEngineCount(), Is.EqualTo(9));
+            Assert.That(falcon.finsEnabled, Is.True);
+            Assert.That(falcon.rcsEnabled, Is.True);
+            Assert.That(simple.GetEngineCount(), Is.EqualTo(1));
+            Assert.That(simple.GetActiveEngineCount(), Is.EqualTo(1));
+            Assert.That(simple.independentEngines, Is.False);
+            Assert.That(simple.finsEnabled, Is.False);
+            Assert.That(simple.rcsEnabled, Is.False);
         }
 
         [Test]
-        public void ManifestDryMassEstimateMatchesAblationHardwareRemoval()
+        public void DryMassEstimateMatchesBuiltInVehicleHardware()
         {
             const float massToleranceKg = 0.01f;
-            float full = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.AblationFull));
-            float noFins = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.AblationNoFins));
-            float noRcs = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.AblationNoRcs));
-            float triple = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.AblationTripleEngine));
-            float single = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.AblationSingleEngine));
+            float falcon = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.Falcon9));
+            float simple = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.SimpleSingle));
 
-            Assert.That(full, Is.EqualTo(22200f).Within(massToleranceKg));
-            Assert.That(noFins, Is.EqualTo(21400f).Within(massToleranceKg));
-            Assert.That(noRcs, Is.EqualTo(21950f).Within(massToleranceKg));
-            Assert.That(triple, Is.EqualTo(19380f).Within(massToleranceKg));
-            Assert.That(single, Is.EqualTo(18440f).Within(massToleranceKg));
+            Assert.That(falcon, Is.EqualTo(22200f).Within(massToleranceKg));
+            Assert.That(simple, Is.EqualTo(17390f).Within(massToleranceKg));
         }
 
         [Test]
@@ -1322,12 +1366,31 @@ namespace RocketSim.Tests
         }
 
         [Test]
-        public void LegReferenceEnvelopeIsSingleEngineAndHardwareIndependent()
+        public void ScenarioFuelUpdateDoesNotChangeSelectedEngineConfiguration()
         {
-            Assert.That(LegLandingReferenceEnvelope.ActiveEngineCount, Is.EqualTo(1));
-            Assert.That(LegLandingReferenceEnvelope.ReferenceVehicleMassKg, Is.GreaterThan(50000f));
-            Assert.That(LegLandingReferenceEnvelope.MaxThrustPerEngineN,
-                Is.EqualTo(Falcon9Reference.MerlinSeaLevelThrustN).Within(Epsilon));
+            RocketPartsConfig vehicle = Preset(RocketHardwarePreset.Falcon9);
+            vehicle.octawebBurnGroup = OctawebBurnGroup.AllNine;
+            vehicle.independentEngines = false;
+
+            vehicle.ApplyScenarioHardwareDefaults(ScenarioType.LegLanding);
+
+            Assert.That(vehicle.octawebBurnGroup, Is.EqualTo(OctawebBurnGroup.AllNine));
+            Assert.That(vehicle.independentEngines, Is.False);
+            Assert.That(vehicle.startFuelFraction,
+                Is.EqualTo(ScenarioProfile.StartFuelFraction(ScenarioType.LegLanding)).Within(Epsilon));
+        }
+
+        [Test]
+        public void VehiclePresetNamesProtectBuiltInsAndRejectBlankNames()
+        {
+            Assert.That(VehiclePresetRepository.IsBuiltInName("falcon 9"), Is.True);
+            Assert.That(VehiclePresetRepository.IsBuiltInName(" SIMPLE "), Is.True);
+            Assert.That(VehiclePresetRepository.TryNormalizeName(
+                "  My landing vehicle  ", out string normalized, out _), Is.True);
+            Assert.That(normalized, Is.EqualTo("My landing vehicle"));
+            Assert.That(VehiclePresetRepository.TryNormalizeName(
+                "   ", out _, out string error), Is.False);
+            Assert.That(error, Does.Contain("Enter a name"));
         }
 
         static void AssertResumeRejected(
@@ -1346,6 +1409,8 @@ namespace RocketSim.Tests
         sealed class ResumeContractFixture : System.IDisposable
         {
             readonly System.Reflection.MethodInfo _validateDestination;
+            readonly System.Reflection.MethodInfo _saveTrainingConfigs;
+            readonly System.Reflection.MethodInfo _loadTrainingObjective;
             readonly bool _safeToDelete;
 
             public readonly string RunId;
@@ -1376,6 +1441,14 @@ namespace RocketSim.Tests
                     "TryValidateRunDestination",
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
                 Assert.That(_validateDestination, Is.Not.Null);
+                _saveTrainingConfigs = repositoryType.GetMethod(
+                    "SaveTrainingConfigs",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                Assert.That(_saveTrainingConfigs, Is.Not.Null);
+                _loadTrainingObjective = repositoryType.GetMethod(
+                    "LoadTrainingObjective",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                Assert.That(_loadTrainingObjective, Is.Not.Null);
 
                 SavedEnvironment = new SimEnvironmentConfig
                 {
@@ -1396,6 +1469,8 @@ namespace RocketSim.Tests
                     schemaVersion = TrainingRunManifest.CurrentSchemaVersion,
                     runId = RunId,
                     scenario = SavedEnvironment.scenario.ToString(),
+                    rewardConfigRevision = 1,
+                    rewardConfigChangedOnLastLaunch = true,
                     trainingObjectiveSha256 = Sha256Hex(
                         JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective())),
                     partsConfigSha256 = Sha256Hex(partsJson),
@@ -1408,6 +1483,9 @@ namespace RocketSim.Tests
                     File.WriteAllText(Path.Combine(RunRoot, "EnvConfig.json"), environmentJson);
                     File.WriteAllText(Path.Combine(RunRoot, "PartsConfig.json"), partsJson);
                     File.WriteAllText(Path.Combine(RunRoot, "TrainingConfig.yaml"), mlYaml);
+                    File.WriteAllText(
+                        Path.Combine(RunRoot, "RewardConfig.json"),
+                        JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective(), true));
                     File.WriteAllText(
                         Path.Combine(RunRoot, "RunManifest.json"),
                         JsonUtility.ToJson(manifest));
@@ -1438,6 +1516,35 @@ namespace RocketSim.Tests
                 bool accepted = (bool)_validateDestination.Invoke(null, arguments);
                 error = arguments[5] as string;
                 return accepted;
+            }
+
+            public void SaveTrainingConfigs(
+                SimEnvironmentConfig environment,
+                bool resumed)
+            {
+                object[] arguments =
+                {
+                    RunId,
+                    CloneMl(),
+                    environment,
+                    CloneParts(),
+                    "TrainingConfig.yaml",
+                    "EnvConfig.json",
+                    "PartsConfig.json",
+                    new TelemetryConfig(),
+                    resumed,
+                    string.Empty,
+                    new TrainingEnvironmentProvenance(),
+                    "cpu"
+                };
+                _saveTrainingConfigs.Invoke(null, arguments);
+            }
+
+            public TrainingObjectiveConfig LoadTrainingObjective()
+            {
+                return (TrainingObjectiveConfig)_loadTrainingObjective.Invoke(
+                    null,
+                    new object[] { RunId });
             }
 
             public void Dispose()
