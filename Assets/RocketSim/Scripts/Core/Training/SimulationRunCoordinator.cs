@@ -130,7 +130,11 @@ namespace RocketSim
                             ? request.SourceRunId
                             : string.Empty,
                         torchDevice = torchDevice,
-                        trainerSeed = requestedSession.learning.trainerSeed
+                        trainerSeed = requestedSession.learning.trainerSeed,
+                        trainerLogFilePath = System.IO.Path.Combine(
+                            SimulationRunService.RunRoot(runId),
+                            "run_logs",
+                            $"trainer_revision_{snapshot.Revision:D4}.log")
                     }, manager);
                     SetState(RunState.Launching);
                 }

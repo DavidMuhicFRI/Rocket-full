@@ -7,7 +7,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
+using System.Threading;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -76,6 +79,31 @@ namespace RocketSim.Tests
             Assert.That(scenes.Length, Is.GreaterThan(0));
             Assert.That(scenes[0].enabled, Is.True);
             Assert.That(scenes[0].path, Is.EqualTo("Assets/Scenes/ConfigScene.unity"));
+        }
+
+        [Test]
+        public void TrainerReadinessCheckDoesNotConsumeTheListeningConnection()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                bool detected = false;
+                for (int attempt = 0; attempt < 10 && !detected; attempt++)
+                {
+                    detected = TrainingProcessLauncher.TcpPortIsListening(port);
+                    if (!detected) Thread.Sleep(10);
+                }
+
+                Assert.That(detected, Is.True, "The OS listener check should detect a ready trainer port.");
+                Assert.That(listener.Pending(), Is.False,
+                    "A readiness check must not occupy ML-Agents' Unity connection.");
+            }
+            finally
+            {
+                listener.Stop();
+            }
         }
 
         [Test]

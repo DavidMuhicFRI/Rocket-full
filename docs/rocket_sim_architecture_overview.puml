@@ -40,7 +40,8 @@ package "Launch boundary" {
   [SimulationRunCoordinator\nvalidate + choose run path] as Coordinator
   [SimulationSessionSnapshotFactory\nimmutable launch snapshot] as SnapshotFactory
   [SimulationSessionStore\nmanifest + immutable revisions\n+ mutable runtime state] as Store
-  [TrainingRunController\nPython process + port handshake] as Training
+  [TrainingRunController\nPython process + safe port readiness\n+ lifetime monitoring] as Training
+  [TrainingProcessHandle\nrevision-numbered trainer log] as TrainerProcess
   [EvaluationRunController\nfixed evaluation suite] as Evaluation
 }
 
@@ -82,6 +83,7 @@ SnapshotFactory --> Host : independent runtime copy
 Coordinator --> Training : training only
 Coordinator --> Evaluation : standard evaluation only
 Training --> Host : spawn when trainer is ready
+Training --> TrainerProcess : launch + monitor
 Evaluation --> Host : spawn inference area
 
 Host --> Curriculum : apply/advance selected task

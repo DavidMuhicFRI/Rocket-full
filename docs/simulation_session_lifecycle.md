@@ -32,6 +32,9 @@ results/<run-id>/
   RunManifest.json
   RuntimeState.json
   TrainingConfig.yaml
+  run_logs/
+    trainer_revision_0001.log
+    trainer_revision_0002.log
   revisions/
     0001/
       Session.json
@@ -45,7 +48,10 @@ Revision directories are immutable. `RunManifest.json` is only an index to the
 latest revision and contains the resolved policy dimensions needed for model
 compatibility checks. `TrainingConfig.yaml` at the run root is a generated copy
 for the ML-Agents command line; the authoritative YAML is stored with its
-revision.
+revision. Each `run_logs/trainer_revision_####.log` preserves Python's complete
+standard output and error stream for that launch, including failures that would
+otherwise disappear when an external terminal closes. Live logs remain outside
+the immutable revision directories.
 
 ## Resume rules
 

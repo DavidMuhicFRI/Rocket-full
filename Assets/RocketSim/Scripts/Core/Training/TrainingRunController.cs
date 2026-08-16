@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Diagnostics;
 using UnityEngine;
 
 namespace RocketSim
@@ -12,7 +11,7 @@ namespace RocketSim
     internal sealed class TrainingRunController
     {
         readonly MonoBehaviour _coroutineOwner;
-        Process _trainerProcess;
+        TrainingProcessHandle _trainerProcess;
         SimulationAreaHost _areaHost;
         Coroutine _waitForTrainer;
 
@@ -32,6 +31,8 @@ namespace RocketSim
             Stop();
             _areaHost = areaHost ?? throw new ArgumentNullException(nameof(areaHost));
             _trainerProcess = TrainingProcessLauncher.LaunchCondaMlAgents(request);
+            UnityEngine.Debug.Log(
+                $"[TrainingRunController] Python started. Trainer output: {_trainerProcess.LogFilePath}");
             _waitForTrainer = _coroutineOwner.StartCoroutine(WaitForTrainer());
         }
 
@@ -42,13 +43,19 @@ namespace RocketSim
 
             while (timeoutSeconds > 0f)
             {
-                if (_trainerProcess == null || _trainerProcess.HasExited)
+                if (_trainerProcess == null)
                 {
-                    Fail("The ML-Agents trainer stopped before opening its communicator port.");
+                    Fail("The ML-Agents trainer process is unavailable.");
+                    yield break;
+                }
+                if (_trainerProcess.HasExited)
+                {
+                    Fail(DescribeTrainerExit(
+                        "The ML-Agents trainer stopped before opening its communicator port."));
                     yield break;
                 }
 
-                if (TrainingProcessLauncher.TcpPortIsOpen(port))
+                if (TrainingProcessLauncher.TcpPortIsListening(port))
                 {
                     UnityEngine.Debug.Log("[TrainingRunController] Python is ready. Spawning agents.");
                     if (!_areaHost.SpawnAreas())
@@ -57,6 +64,7 @@ namespace RocketSim
                         yield break;
                     }
                     Connected?.Invoke();
+                    _waitForTrainer = _coroutineOwner.StartCoroutine(MonitorTrainer());
                     yield break;
                 }
 
@@ -67,11 +75,40 @@ namespace RocketSim
             Fail("Timed out waiting for the ML-Agents trainer on port 5004.");
         }
 
+        /// <summary>
+        /// Keeps watching Python after the initial handshake. A trainer error
+        /// is now reported with its exit code, log path, and recent output.
+        /// </summary>
+        IEnumerator MonitorTrainer()
+        {
+            while (_trainerProcess != null && !_trainerProcess.HasExited)
+                yield return new WaitForSecondsRealtime(1f);
+
+            if (_trainerProcess == null)
+                yield break;
+
+            Fail(DescribeTrainerExit("The ML-Agents trainer exited unexpectedly."));
+        }
+
+        string DescribeTrainerExit(string summary)
+        {
+            _trainerProcess.FinishReadingOutput();
+            string recentOutput = _trainerProcess.ReadRecentOutput();
+            string details = string.IsNullOrWhiteSpace(recentOutput)
+                ? string.Empty
+                : $"\nRecent trainer output:\n{recentOutput}";
+            return $"{summary} Exit code: {_trainerProcess.ExitCode}. " +
+                   $"Full log: {_trainerProcess.LogFilePath}{details}";
+        }
+
         void Fail(string message)
         {
             SimulationAreaHost failedHost = _areaHost;
             Stop();
-            failedHost?.CancelPreparedRuntime();
+            // The same path handles startup failures and a trainer that dies
+            // after areas were spawned. It always clears the frozen runtime
+            // and restores the editable preview.
+            failedHost?.StopActiveRunAndShowPreview();
             Failed?.Invoke(message);
         }
 
@@ -86,34 +123,14 @@ namespace RocketSim
             if (_trainerProcess != null)
             {
                 if (!_trainerProcess.HasExited)
-                    KillProcessTree(_trainerProcess);
+                    _trainerProcess.TerminateProcessTree();
+                else
+                    _trainerProcess.FinishReadingOutput();
                 _trainerProcess.Dispose();
                 _trainerProcess = null;
             }
             _areaHost = null;
         }
 
-        static void KillProcessTree(Process process)
-        {
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-            try
-            {
-                using Process treeKiller = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "taskkill.exe",
-                    Arguments = $"/PID {process.Id} /T /F",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
-                treeKiller?.WaitForExit(3000);
-            }
-            catch
-            {
-                process.Kill();
-            }
-#else
-            process.Kill();
-#endif
-        }
     }
 }

@@ -15,7 +15,9 @@ The maintained project documentation lives under the repository-level `docs/` di
 The executable reward narrative is `Scripts/Core/Rewards/reward_functions.md`.
 Each result directory stores full immutable session revisions below `revisions/`,
 the latest revision and hash in `RunManifest.json`, and mutable curriculum
-progress in `RuntimeState.json`.
+progress in `RuntimeState.json`. Each launch writes a revision-numbered log under
+`run_logs/`, preserving ML-Agents Python output for diagnosis and provenance
+without modifying the immutable session revision.
 Generated PNG/SVG architecture diagrams sit beside their PlantUML sources. Update
 both diagram sources and renderings whenever runtime ownership or major data flow
 changes.

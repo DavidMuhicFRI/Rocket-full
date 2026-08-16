@@ -21,8 +21,11 @@ RightConfigPanel
   compatibility checks, immutable revision storage, and runtime-state storage.
 - `SimulationRunCoordinator` validates and freezes a draft, then chooses the
   training or inference path.
-- `TrainingRunController` owns the Python process and communicator-port
-  handshake. It does not persist sessions or build UI.
+- `TrainingRunController` owns the Python process, communicator-port handshake,
+  and post-connection lifetime monitoring. It does not persist sessions or
+  build UI.
+- `TrainingProcessHandle` captures Python output in the run's revision-numbered
+  trainer log and supplies a short diagnostic tail when Python exits early.
 - `EvaluationRunController` owns evaluation outcome collection, summary output,
   and safe end-of-frame completion.
 - `SimulationAreaHost` creates and removes simulation areas from a private
@@ -94,7 +97,9 @@ and produces landing diagnostics, keeping reporting out of the lifecycle file.
 The coordinator validates the complete session, checks checkpoint compatibility,
 saves the immutable run revision, gives a runtime copy to the area host, starts
 telemetry, and delegates Python startup to `TrainingRunController`. Agents are
-spawned only after the trainer port is ready.
+spawned only after the trainer port is ready. Readiness is detected from the
+operating system's listener table; the check never opens a connection because
+the ML-Agents endpoint is reserved for the real Unity communicator.
 
 ## Inference and evaluation
 
@@ -107,5 +112,7 @@ training session.
 ## Stop and failure
 
 A failure before spawning drops the prepared runtime and returns the preview to
-the draft. Stop terminates the Python process tree when present, ends evaluation
-subscriptions, removes active areas, disables logging, and rebuilds the preview.
+the draft. A trainer that exits after connecting is also detected and reported
+with its exit code, revision log path, and recent output. Stop terminates the
+Python process tree when present, ends evaluation subscriptions, removes active
+areas, disables logging, and rebuilds the preview.
