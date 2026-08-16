@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Components/RCS/RcsGeometryBuilder.cs
-// Purpose: Generates simple pod, nozzle, plume, light, particle, and material
+// File: Assets/RocketSim/Scripts/Core/Presentation/RcsGeometryPresenter.cs
+// Purpose: Presents simple pod, nozzle, plume, light, particle, and material
 // objects for the Falcon-style RCS without requiring a separate prefab asset.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    internal static class RcsGeometryBuilder
+    internal static class RcsGeometryPresenter
     {
         static Material _podMaterial;
         static Material _nozzleMaterial;
@@ -39,56 +39,56 @@ namespace RocketSim
             body.localScale = new Vector3(podDepth, podHeight, podWidth);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsJetLayout.NozzleName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, NozzleMaterial()).transform,
                 Vector3.down,
                 new Vector3(podDepth * 0.35f, -podHeight * 0.5f - nozzleLength * 0.4f, 0f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsJetLayout.NozzleName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, NozzleMaterial()).transform,
                 Vector3.right,
                 new Vector3(podDepth + nozzleLength * 0.45f, 0f, 0f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsJetLayout.NozzleName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, NozzleMaterial()).transform,
                 Vector3.forward,
                 new Vector3(podDepth * 0.35f, 0f, podWidth * 0.5f + nozzleLength * 0.4f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsJetLayout.NozzleName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, NozzleMaterial()).transform,
                 Vector3.back,
                 new Vector3(podDepth * 0.35f, 0f, -podWidth * 0.5f - nozzleLength * 0.4f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlacePlume(
-                EnsurePrimitive(pod, RcsJetLayout.PlumeName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, PlumeMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.PlumeName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, PlumeMaterial()).transform,
                 Vector3.down,
                 new Vector3(podDepth * 0.35f, -podHeight * 0.5f - nozzleLength - plumeLength * 0.45f, 0f),
                 plumeLength,
                 plumeDiameter);
 
             PlacePlume(
-                EnsurePrimitive(pod, RcsJetLayout.PlumeName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, PlumeMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.PlumeName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, PlumeMaterial()).transform,
                 Vector3.right,
                 new Vector3(podDepth + nozzleLength + plumeLength * 0.45f, 0f, 0f),
                 plumeLength,
                 plumeDiameter);
 
             PlacePlume(
-                EnsurePrimitive(pod, RcsJetLayout.PlumeName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, PlumeMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.PlumeName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, PlumeMaterial()).transform,
                 Vector3.forward,
                 new Vector3(podDepth * 0.35f, 0f, podWidth * 0.5f + nozzleLength + plumeLength * 0.45f),
                 plumeLength,
                 plumeDiameter);
 
             PlacePlume(
-                EnsurePrimitive(pod, RcsJetLayout.PlumeName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, PlumeMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.PlumeName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, PlumeMaterial()).transform,
                 Vector3.back,
                 new Vector3(podDepth * 0.35f, 0f, -podWidth * 0.5f - nozzleLength - plumeLength * 0.45f),
                 plumeLength,
@@ -165,8 +165,8 @@ namespace RocketSim
         {
             PlaceNozzle(plume, localDirection, localPosition, length, diameter);
             PlumeBaseScales[plume] = plume.localScale;
-            RcsVisualController.EnsurePlumeLight(plume, length);
-            RcsVisualController.EnsureColdGasParticles(plume, length, diameter, ParticleMaterial());
+            RcsPlumePresenter.EnsurePlumeLight(plume, length);
+            RcsPlumePresenter.EnsureColdGasParticles(plume, length, diameter, ParticleMaterial());
             plume.gameObject.SetActive(false);
         }
 

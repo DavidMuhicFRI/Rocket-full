@@ -148,7 +148,7 @@ namespace RocketSim
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
                 throttle[i] = Mathf.MoveTowards(throttle[i], targetThrottle[i], cfg.throttleSpoolRate * dt);
-                float gimbalSpeedScale = 1f - ActiveFaultSeverity(RocketFaultType.GimbalJam, i);
+                float gimbalSpeedScale = 1f - _episodeFaults.Severity(RocketFaultType.GimbalJam, i, _episodeElapsedSeconds);
                 gimbal[i] = Vector2.MoveTowards(gimbal[i], targetGimbal[i], cfg.gimbalSlewRate * gimbalSpeedScale * dt);
             }
             for (int i = 0; i < cfg.finCount; i++) finAngles[i] = Mathf.MoveTowards(finAngles[i], targetFinAngles[i], cfg.finSlewRate * dt);
@@ -217,7 +217,7 @@ namespace RocketSim
             // Independent control starts only the center channel. With shared
             // control, channel zero drives every engine in the configured group.
             int runningEngineCount = cfg.independentEngines ? 1 : Mathf.Max(1, cfg.activeEngineCount);
-            float faultScale = 1f - ActiveFaultSeverity(RocketFaultType.EngineThrustLoss, 0);
+            float faultScale = 1f - _episodeFaults.Severity(RocketFaultType.EngineThrustLoss, 0, _episodeElapsedSeconds);
             float effectiveMaxThrust = cfg.maxThrust * CurrentEngineThrustScale() * faultScale;
             float initialThrottle = HoverThrustInitialization.EquilibriumThrottle(
                 rb.mass,
@@ -369,8 +369,8 @@ namespace RocketSim
         float EffectiveRcsValveCommand(int index)
         {
             float command = rcsValveStates[index];
-            float stuckClosed = ActiveFaultSeverity(RocketFaultType.RcsStuckClosed, index);
-            float stuckOpen = ActiveFaultSeverity(RocketFaultType.RcsStuckOpen, index);
+            float stuckClosed = _episodeFaults.Severity(RocketFaultType.RcsStuckClosed, index, _episodeElapsedSeconds);
+            float stuckOpen = _episodeFaults.Severity(RocketFaultType.RcsStuckOpen, index, _episodeElapsedSeconds);
             return Mathf.Max(command * (1f - stuckClosed), stuckOpen);
         }
 
@@ -380,7 +380,13 @@ namespace RocketSim
         /// </summary>
         void StepRcsValves(int jetCount, float dt)
         {
-            RcsValveBank.Step(rcsValveRequests, rcsValveStates, rcsPulseTimeRemaining, jetCount, dt, cfg.rcsMinimumPulseDuration);
+            RcsActuatorStateMachine.Step(
+                rcsValveRequests,
+                rcsValveStates,
+                rcsPulseTimeRemaining,
+                jetCount,
+                dt,
+                cfg.rcsMinimumPulseDuration);
         }
 
         /// <summary>

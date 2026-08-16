@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Components/RCS/RcsJetLayout.cs
+// File: Assets/RocketSim/Scripts/Core/Hardware/RcsHardwareLayout.cs
 // Purpose: Defines the shared two-pod/eight-jet indexing, names, angles, and
 // local nozzle directions used by RCS geometry, visuals, physics, and tests.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    internal static class RcsJetLayout
+    internal static class RcsHardwareLayout
     {
         public const int FalconPodCount = 2;
         public const int NozzlesPerPod = 4;

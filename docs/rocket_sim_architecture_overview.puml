@@ -60,7 +60,7 @@ package "Runtime orchestration" {
 package "Rocket construction" {
   [RocketAssembly\nconfig -> hardware + physics] as Assembly
   [Hardware components\nBodyComponent\nThrusterComponent\nFinComponent\nRcsComponent\nLandingLegComponent] as Hardware
-  [RCS helpers\nLayout / Geometry / Visuals / ForceMapper] as RcsHelpers
+  [RCS support\nRcsHardwareLayout\nGeometry + plume presenters] as RcsHelpers
   [RocketPhysicsConfig\nruntime physics constants] as PhysicsConfig
 }
 
@@ -72,7 +72,7 @@ package "Simulation agent" {
   [FalconAgent.ChopstickLanding\nlogical capture state] as ChopstickLanding
   [FalconAgent.LegLanding\nphysical foot-contact state] as LegLanding
   [FalconAgent.Telemetry\nmeasured terms/log rows] as AgentTelemetry
-  [Pure helpers\nEngineStateMachine / RcsValveBank\nAtmosphere / FinAerodynamics\nRocketMassProperties\nChopstickCaptureEvaluator\nLegLandingContactEvaluator] as AgentHelpers
+  [Runtime services\nEngine/RCS state machines\nWindEnvironmentRuntime\nEpisodeFaultRuntime\nAtmosphere / aerodynamics / mass] as AgentHelpers
 }
 
 package "Learning feedback" {

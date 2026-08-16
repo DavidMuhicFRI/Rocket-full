@@ -48,6 +48,20 @@ fins, and RCS channels are absent, and the four foot-contact observations exist
 only for leg landing. Consequently, a model may be resumed or loaded only when
 both the vehicle controls and task-specific observation count are compatible.
 
+## Environment, faults, and actuators
+
+`WindEnvironmentRuntime` owns prevailing wind and gust state for one area. The
+agent reads its current vector when calculating relative airspeed and telemetry.
+`EpisodeFaultRuntime` independently selects seeded training faults or activates
+the configured evaluation fault, then exposes only the resulting severity for a
+specific actuator. This keeps wind and fault selection out of agent physics.
+
+Engine and RCS timing rules live in `EngineActuatorStateMachine` and
+`RcsActuatorStateMachine`. `FalconAgent.Actuators` translates policy commands,
+advances those state machines, and applies their final state to the vehicle.
+RCS indexing is defined once in `RcsHardwareLayout`; the component owns pod and
+force-point lookup, while presentation helpers own generated geometry and plumes.
+
 ## Training
 
 The coordinator validates the complete session, checks checkpoint compatibility,

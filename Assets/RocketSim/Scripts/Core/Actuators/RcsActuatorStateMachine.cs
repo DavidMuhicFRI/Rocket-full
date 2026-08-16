@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Actuators/RcsValveBank.cs
+// File: Assets/RocketSim/Scripts/Core/Actuators/RcsActuatorStateMachine.cs
 // Purpose: Converts momentary binary RCS requests into valve states that remain
 // open for at least the configured minimum pulse duration.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    internal static class RcsValveBank
+    internal static class RcsActuatorStateMachine
     {
         /// <summary>
         /// Advances the binary RCS valve states for one physics step, enforcing

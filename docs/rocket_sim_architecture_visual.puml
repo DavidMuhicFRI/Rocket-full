@@ -87,11 +87,9 @@ package "Rocket assembly + hardware components" as HardwarePkg {
   [FinComponent.cs] as Fins
   [RcsComponent.cs] as RCS
 
-  [RcsJetLayout.cs] as RcsLayoutData
-  [RcsLayoutBuilder.cs] as RcsLayoutBuilder
-  [RcsGeometryBuilder.cs] as RcsGeometry
-  [RcsVisualController.cs] as RcsVisuals
-  [RcsForceMapper.cs] as RcsForce
+  [RcsHardwareLayout.cs] as RcsLayoutData
+  [RcsGeometryPresenter.cs] as RcsGeometry
+  [RcsPlumePresenter.cs] as RcsVisuals
 }
 
 package "FalconAgent runtime" as AgentPkg {
@@ -107,7 +105,9 @@ package "FalconAgent runtime" as AgentPkg {
   [EngineActuatorStateMachine.cs\nstate machine + timing + run state] as EngineSM
   [EngineTimingConfig] as EngineTiming
   [EngineRunState] as EngineRunState
-  [RcsValveBank.cs] as RcsValveBank
+  [RcsActuatorStateMachine.cs] as RcsStateMachine
+  [WindEnvironmentRuntime.cs] as WindRuntime
+  [EpisodeFaultRuntime.cs] as FaultRuntime
   [AtmosphereModel.cs] as Atmosphere
   [FinAerodynamicsModel.cs] as FinAero
   [RocketMassProperties.cs] as MassProps
@@ -251,13 +251,10 @@ Assembly --> Fins : create/position fins
 Assembly --> RCS : create/position RCS
 
 ' RCS internals
-RCS --> RcsLayoutBuilder : Reposition pods
-RCS --> RcsForce : jet world position/force direction
+RCS --> RcsLayoutData : indexing, names, directions
 RCS --> RcsVisuals : ShowCommands/ClearVisuals
-RcsLayoutBuilder --> RcsLayoutData : pod names/angles
-RcsLayoutBuilder --> RcsGeometry : build procedural visuals
+RCS --> RcsGeometry : build procedural visuals
 RcsGeometry --> RcsVisuals : plume lights/particles
-RcsForce --> RcsLayoutData : nozzle directions/names
 RcsVisuals --> RcsLayoutData : command-to-plume mapping
 
 ' FalconAgent partials
@@ -283,7 +280,7 @@ AgentAnchor --> PhysicsConfig : current physics config
 AgentAct --> EngineSM : anti-PWM engine lifecycle
 AgentAct --> EngineTiming : timing DTO/clamps
 EngineSM --> EngineRunState : state enum
-AgentAct --> RcsValveBank : minimum pulse stepping
+AgentAct --> RcsStateMachine : minimum pulse stepping
 AgentAct --> HardwareTypes : active engine inclusion
 AgentAct --> Fins : ApplyDeflections
 AgentAct --> RCS : ShowCommands
@@ -293,6 +290,8 @@ AgentPhys --> Atmosphere : pressure/density/thrust scale
 AgentPhys --> FinAero : per-fin force
 AgentPhys --> MassProps : CoM/inertia tensor
 AgentPhys --> Thrusters : force application points
+AgentCore --> WindRuntime : begin/step episode wind
+AgentPhys --> FaultRuntime : read actuator severity
 AgentPhys --> RCS : RCS force application points
 AgentPhys --> Fins : fin transforms
 

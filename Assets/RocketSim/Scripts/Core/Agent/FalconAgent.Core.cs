@@ -56,7 +56,7 @@ namespace RocketSim
             RefreshConfig();
             EnsureActuatorBuffers(true);
 
-            wind = targetWind = Vector3.zero;
+            _windEnvironment.Clear();
         }
 
         /// <summary>
@@ -116,7 +116,13 @@ namespace RocketSim
                 return;
             }
 
-            ConfigureEpisodeFaults();
+            _episodeElapsedSeconds = 0f;
+            _episodeFaults.BeginEpisode(
+                envConfig?.faults,
+                envConfig != null ? envConfig.behaviorType : BehaviorType.Training,
+                cfg,
+                _areaIndex,
+                _episode);
             
             fuel = cfg.startFuelMass > 0f ? cfg.startFuelMass : cfg.maxFuelMass;
             rcsPropellant = cfg.hasRCS ? cfg.rcsPropellantMass : 0f;
@@ -132,7 +138,7 @@ namespace RocketSim
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
 
-            ResetWindForEpisode();
+            _windEnvironment.BeginEpisode(envConfig, ref _episodeRandom);
             SpawnForScenario();
             InitializeHoverEngineAtEquilibrium();
             CaptureLandingEpisodeStartAltitude();
@@ -275,7 +281,7 @@ namespace RocketSim
 
             ResetEpisodeRandom();
             CaptureObjectiveDifficulty();
-            ResetWindForEpisode();
+            _windEnvironment.BeginEpisode(envConfig, ref _episodeRandom);
             q = 0f;
             aoaDeg = 0f;
             ClearRcsCommands();
@@ -307,7 +313,7 @@ namespace RocketSim
 
             UpdateMassProperties();
             StepActuators();
-            StepWind();
+            _windEnvironment.Step(envConfig, ref _episodeRandom, Time.fixedDeltaTime);
             float thrustForceMag = ApplyEngines();
             
             // ── Compute aero forces and capture magnitudes for sensor package ──

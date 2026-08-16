@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Components/RCS/RcsVisualController.cs
+// File: Assets/RocketSim/Scripts/Core/Presentation/RcsPlumePresenter.cs
 // Purpose: Mirrors RCS valve commands with generated cold-gas meshes, lights,
 // and particles. It changes presentation only, never physical thrust.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    internal static class RcsVisualController
+    internal static class RcsPlumePresenter
     {
         /// <summary>
         /// Shows, scales, and animates each generated plume according to the
@@ -24,15 +24,15 @@ namespace RocketSim
                 return;
             }
 
-            for (int i = 0; i < RcsJetLayout.FalconPodCount; i++)
+            for (int i = 0; i < RcsHardwareLayout.FalconPodCount; i++)
             {
-                Transform pod = RcsLayoutBuilder.GetPod(root, i);
+                Transform pod = FindDirectChild(root, RcsHardwareLayout.PodName(i));
                 if (!pod) continue;
 
-                SetPlume(pod, RcsComponent.RcsNozzle.Aft, RcsJetLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.Aft));
-                SetPlume(pod, RcsComponent.RcsNozzle.Outboard, RcsJetLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.Outboard));
-                SetPlume(pod, RcsComponent.RcsNozzle.TangentialPositive, RcsJetLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.TangentialPositive));
-                SetPlume(pod, RcsComponent.RcsNozzle.TangentialNegative, RcsJetLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.TangentialNegative));
+                SetPlume(pod, RcsComponent.RcsNozzle.Aft, RcsHardwareLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.Aft));
+                SetPlume(pod, RcsComponent.RcsNozzle.Outboard, RcsHardwareLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.Outboard));
+                SetPlume(pod, RcsComponent.RcsNozzle.TangentialPositive, RcsHardwareLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.TangentialPositive));
+                SetPlume(pod, RcsComponent.RcsNozzle.TangentialNegative, RcsHardwareLayout.CommandValue(commands, i, RcsComponent.RcsNozzle.TangentialNegative));
             }
         }
 
@@ -119,7 +119,7 @@ namespace RocketSim
         /// </summary>
         static void SetPlume(Transform pod, RcsComponent.RcsNozzle nozzle, float strength)
         {
-            Transform plume = pod.Find(RcsJetLayout.PlumeName(nozzle));
+            Transform plume = pod.Find(RcsHardwareLayout.PlumeName(nozzle));
             if (!plume) return;
 
             bool active = strength > 0.03f;
@@ -139,7 +139,7 @@ namespace RocketSim
 
             plume.gameObject.SetActive(true);
 
-            Vector3 baseScale = RcsGeometryBuilder.GetPlumeBaseScale(plume);
+            Vector3 baseScale = RcsGeometryPresenter.GetPlumeBaseScale(plume);
             float pulse = 1f + Mathf.Sin(Time.time * 42f + plume.GetSiblingIndex() * 1.7f) * 0.16f;
             float lengthScale = Mathf.Lerp(0.95f, 1.9f, Mathf.Clamp01(strength)) * pulse;
             float widthScale = Mathf.Lerp(1.1f, 1.6f, Mathf.Clamp01(strength));
@@ -155,6 +155,17 @@ namespace RocketSim
             var particles = plume.GetComponent<ParticleSystem>();
             if (particles && !particles.isPlaying)
                 particles.Play();
+        }
+
+        static Transform FindDirectChild(Transform root, string childName)
+        {
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (child.name == childName)
+                    return child;
+            }
+            return null;
         }
     }
 }

@@ -86,18 +86,13 @@ namespace RocketSim
         float[] rcsValveStates;
         float[] rcsPulseTimeRemaining;
 
-        // ── Wind ──────────────────────────────────────────────────────────────
-        Vector3 wind, targetWind;
-        Vector3 _episodePrevailingWind;
+        // ── Environment ───────────────────────────────────────────────────────
+        readonly WindEnvironmentRuntime _windEnvironment = new();
+        Vector3 wind => _windEnvironment.Current;
         DeterministicRandom _episodeRandom;
         int _episodeSeed;
 
-        // Up to three simple actuator faults can be active in one episode.
-        // Fixed arrays avoid allocations inside the physics loop.
-        readonly RocketFaultType[] _episodeFaultTypes = new RocketFaultType[3];
-        readonly int[] _episodeFaultTargets = new int[3];
-        readonly float[] _episodeFaultSeverities = new float[3];
-        int _episodeFaultCount;
+        readonly EpisodeFaultRuntime _episodeFaults = new();
         float _episodeElapsedSeconds;
         bool _hardwareTestMode;
         bool _manualControlActive;
@@ -248,14 +243,6 @@ namespace RocketSim
             _landingEpisodeProfileInitialized = true;
         }
 
-        Vector3 RandomPlanarVector(float maxMagnitude)
-        {
-            if (maxMagnitude <= 0f) return Vector3.zero;
-
-            float angle = RandomRange(0f, Mathf.PI * 2f);
-            float magnitude = RandomRange(0f, maxMagnitude);
-            return new Vector3(Mathf.Cos(angle) * magnitude, 0f, Mathf.Sin(angle) * magnitude);
-        }
         static string PassFail(bool passed) => passed ? "PASS" : "FAIL";
     }
 }
