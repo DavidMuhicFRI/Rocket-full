@@ -208,10 +208,11 @@ namespace RocketSim
             sensor.AddObservation(Mathf.Sin(headingErrorRad));
             sensor.AddObservation(Mathf.Cos(headingErrorRad));
 
-            // 11. Four fixed landing-foot contact slots. They remain zero in
-            // non-leg scenarios so Hover -> Landing models stay shape-compatible.
-            for (int i = 0; i < RocketAgentSchema.LandingFootObservationCount; i++)
-                sensor.AddObservation(envConfig.scenario == ScenarioType.LegLanding && IsLandingFootOnPad(i) ? 1f : 0f);
+            // 11. Leg touchdown policies need one contact bit per foot. Other
+            // tasks omit these channels entirely instead of padding the model.
+            if (envConfig.scenario == ScenarioType.LegLanding)
+                for (int i = 0; i < RocketAgentSchema.LandingFootObservationCount; i++)
+                    sensor.AddObservation(IsLandingFootOnPad(i) ? 1f : 0f);
         }
 
         /// <summary>

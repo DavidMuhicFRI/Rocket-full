@@ -19,7 +19,7 @@ namespace RocketSim
     public static class RocketAgentSchema
     {
         public const int LandingFootObservationCount = 4;
-        public const int BaseObservationCount = 21 + LandingFootObservationCount;
+        public const int BaseObservationCount = 21;
         public const int EngineTimingObservationCount = 5;
         public const int EngineObservationCount = 3 + EngineTimingObservationCount;
         public const int CanonicalDecisionPeriod = 3;
@@ -28,17 +28,24 @@ namespace RocketSim
 
         /// <summary>
         /// Returns the fixed flight-state observations plus only the actuator
-        /// state channels that exist on the selected vehicle.
+        /// state channels that exist on the selected vehicle. Task-specific
+        /// channels are included only when that task uses them; models are not
+        /// padded for hardware or task features that do not exist.
         /// </summary>
-        public static int ObservationSize(RocketPartsConfig parts)
+        public static int ObservationSize(RocketPartsConfig parts, ScenarioType scenario)
         {
-            if (parts == null) return BaseObservationCount;
+            if (parts == null) return BaseObservationCount + TaskObservationCount(scenario);
 
             return BaseObservationCount +
+                   TaskObservationCount(scenario) +
                    EngineObservationCount * parts.GetIndependentEngineCount() +
                    parts.GetFinCount() +
                    parts.GetRCSCount();
         }
+
+        /// <summary>Returns observations used only by the selected task.</summary>
+        public static int TaskObservationCount(ScenarioType scenario) =>
+            scenario == ScenarioType.LegLanding ? LandingFootObservationCount : 0;
 
         /// <summary>
         /// Returns throttle plus two-axis gimbal control for every engine
@@ -81,12 +88,13 @@ namespace RocketSim
         public static void ConfigureBehavior(
             BehaviorParameters behavior,
             RocketPartsConfig parts,
+            ScenarioType scenario,
             BehaviorType mode,
             ModelAsset model = null)
         {
             if (!behavior) return;
 
-            behavior.BrainParameters.VectorObservationSize = ObservationSize(parts);
+            behavior.BrainParameters.VectorObservationSize = ObservationSize(parts, scenario);
             behavior.BrainParameters.ActionSpec = new ActionSpec(
                 ContinuousActionSize(parts),
                 DiscreteActionBranches(parts));

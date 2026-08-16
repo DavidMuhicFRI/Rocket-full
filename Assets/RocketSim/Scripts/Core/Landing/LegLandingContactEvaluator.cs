@@ -13,7 +13,7 @@ namespace RocketSim
         public static int CountFeet(int footMask)
         {
             int count = 0;
-            for (int i = 0; i < LandingLegAssembly.LegCount; i++)
+            for (int i = 0; i < LandingLegComponent.LegCount; i++)
                 if ((footMask & (1 << i)) != 0)
                     count++;
             return count;
@@ -58,7 +58,7 @@ namespace RocketSim
             LandingCurriculumProfile profile,
             int minimumStableFeet)
         {
-            int requiredFeet = Mathf.Clamp(minimumStableFeet, 1, LandingLegAssembly.LegCount);
+            int requiredFeet = Mathf.Clamp(minimumStableFeet, 1, LandingLegComponent.LegCount);
             return CountFeet(footMask) >= requiredFeet &&
                    !footOutsidePad &&
                    !structuralStrike &&

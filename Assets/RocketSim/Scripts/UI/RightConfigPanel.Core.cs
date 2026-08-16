@@ -220,6 +220,7 @@ namespace RocketSim
                 !SimulationRunService.TryValidatePolicySchema(
                     envConfig.runId,
                     partsConfig,
+                    envConfig.scenario,
                     out string compatibilityError))
             {
                 ShowNotification(compatibilityError, true);
@@ -408,6 +409,7 @@ namespace RocketSim
                 !SimulationRunService.TryValidateInitializationSource(
                     _initializeFromRunId,
                     partsConfig,
+                    envConfig.scenario,
                     mlConfig,
                     out string initializationError))
             {
@@ -502,6 +504,7 @@ namespace RocketSim
                    SimulationRunService.TryValidatePolicySchema(
                        envConfig.runId,
                        partsConfig,
+                       envConfig.scenario,
                        out _) &&
                    ModelRepository.HasModel(envConfig.runId);
         }

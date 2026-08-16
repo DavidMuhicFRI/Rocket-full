@@ -211,9 +211,10 @@ namespace RocketSim
 
                 if (agent)
                 {
-                    if (!SimulationRunService.TryValidatePolicySchema(
+                        if (!SimulationRunService.TryValidatePolicySchema(
                             envConfig.runId,
                             partsConfig,
+                            envConfig.scenario,
                             out string compatibilityError))
                     {
                         Debug.LogError($"[SimulationAreaHost] {compatibilityError}");
@@ -480,6 +481,7 @@ namespace RocketSim
             RocketAgentSchema.ConfigureBehavior(
                 agent.GetComponent<BehaviorParameters>(),
                 partsConfig,
+                envConfig.scenario,
                 behaviorOverride ?? envConfig.behaviorType,
                 modelAsset);
             RocketAgentSchema.ConfigureDecisionRequester(agent.GetComponent<DecisionRequester>());
@@ -499,6 +501,7 @@ namespace RocketSim
                 RocketAgentSchema.ConfigureBehavior(
                     behavior,
                     partsConfig,
+                    envConfig.scenario,
                     envConfig.behaviorType,
                     behavior ? behavior.Model : null);
                 RocketAgentSchema.ConfigureDecisionRequester(agent.GetComponent<DecisionRequester>());

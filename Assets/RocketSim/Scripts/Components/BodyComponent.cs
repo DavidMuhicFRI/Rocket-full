@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Components/RocketBody.cs
+// File: Assets/RocketSim/Scripts/Components/BodyComponent.cs
 // Purpose: Applies editable body dimensions to the scene mesh and derives the
 // aerodynamic areas, structural-mass estimate, and fuel capacity from that size.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    public class RocketBody : MonoBehaviour
+    public class BodyComponent : MonoBehaviour
     {
         [Header("Dimensions — written by RocketAssembly.ApplyPartsConfig")]
         public float radius       = 1.83f;

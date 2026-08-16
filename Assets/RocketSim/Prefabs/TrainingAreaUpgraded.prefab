@@ -64366,6 +64366,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 8776197568274017376, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2680513703187121671}
+    - targetCorrespondingSourceObject: {fileID: 8776197568274017376, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7770000000000000001}
     - targetCorrespondingSourceObject: {fileID: 6086631430785808698, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8338981686719882950}
@@ -64386,7 +64389,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7f76754a4e73420ea8cbb01386d4890c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.RocketBody
+  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.BodyComponent
   radius: 1.83
   height: 41.2
   baseDryMass: 22200
@@ -64413,6 +64416,19 @@ MonoBehaviour:
   thrusters: {fileID: 1017208702370245666}
   fins: {fileID: 8276981051618782204}
   rcs: {fileID: 6273839354975095869}
+  landingLegs: {fileID: 7770000000000000001}
+--- !u!114 &7770000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2938874553081310782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b067cd4d56c142c681736764cfa02b96, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.LandingLegComponent
 --- !u!4 &2995973119889803290 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 8687582531985377860, guid: 4dc79d0dcdb3f3d45bceb7a662560010, type: 3}

@@ -30,6 +30,24 @@ RightConfigPanel
 - `VehiclePreviewController` creates and freezes only the dummy vehicle shown
   while configuration is editable.
 
+## Vehicle hardware
+
+`RocketAssembly` is the one adapter between the saved vehicle configuration and
+the scene vehicle. It forwards body, engine, fin, RCS, and landing-gear settings
+to their matching component. Components own their geometry and presentation;
+the agent reads their resulting physical state but does not construct hardware.
+
+The landing-gear component is serialized on the vehicle prefab and enabled only
+for leg landing. Its simple struts and feet are resized from the configured body
+dimensions when the vehicle is prepared. They provide contact and stability only:
+landing-leg drag, deployment dynamics, and structural deformation are outside
+the simulator model.
+
+The policy interface is derived from the selected session. Disabled engines,
+fins, and RCS channels are absent, and the four foot-contact observations exist
+only for leg landing. Consequently, a model may be resumed or loaded only when
+both the vehicle controls and task-specific observation count are compatible.
+
 ## Training
 
 The coordinator validates the complete session, checks checkpoint compatibility,

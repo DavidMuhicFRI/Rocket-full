@@ -254,8 +254,8 @@ namespace RocketSim
                     : 0f;
                 string guidanceFrame = env.scenario == ScenarioType.LegLanding ? "feetFrame" : "catchFrame";
                 float guidanceFrameLocalY = env.scenario == ScenarioType.LegLanding
-                    ? LandingLegAssembly.ReferenceFootPlaneLocalY *
-                      cfg.radius / LandingLegAssembly.ReferenceBodyRadiusM
+                    ? LandingLegComponent.ReferenceFootPlaneLocalY *
+                      cfg.radius / LandingLegComponent.ReferenceBodyRadiusM
                     : cfg.finLocalY;
                 Debug.Log(
                     $"[SimulatorPreflight] landing capability: startMass={startMass:F0} kg, " +

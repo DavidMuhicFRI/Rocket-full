@@ -82,7 +82,7 @@ package "Configuration domain" as ConfigPkg {
 
 package "Rocket assembly + hardware components" as HardwarePkg {
   [RocketAssembly.cs] as Assembly
-  [RocketBody.cs] as Body
+  [BodyComponent.cs] as Body
   [ThrusterComponent.cs] as Thrusters
   [FinComponent.cs] as Fins
   [RcsComponent.cs] as RCS
@@ -114,7 +114,7 @@ package "FalconAgent runtime" as AgentPkg {
   [ChopstickCatchPlatformFactory.cs] as LandingFactory
   [ChopstickCaptureEvaluator.cs] as LandingEval
   [ChopstickCatchPlatform.cs] as LandingPlatform
-  [LandingLegAssembly.cs] as LandingLegs
+  [LandingLegComponent.cs] as LandingLegs
   [LandingPadSurface.cs] as LandingPad
   [LegLandingContactEvaluator.cs] as LegLandingEval
 }

@@ -99,7 +99,11 @@ namespace RocketSim
             }
 
             SimulationSessionConfig saved = SimulationSessionStore.LoadLatest(runId);
-            if (!PolicySchemaMatches(saved.vehicle, requestedParts))
+            if (!PolicySchemaMatches(
+                    saved.vehicle,
+                    saved.environment.scenario,
+                    requestedParts,
+                    requestedEnvironment.scenario))
             {
                 error = "The modified vehicle/task exposes a different policy interface. Start a new compatible run instead of resuming this checkpoint.";
                 return false;
@@ -152,6 +156,7 @@ namespace RocketSim
         public static bool TryValidateInitializationSource(
             string sourceRunId,
             RocketPartsConfig targetParts,
+            ScenarioType targetScenario,
             MLAgentsConfig targetMl,
             out string error)
         {
@@ -170,7 +175,11 @@ namespace RocketSim
             }
 
             SimulationSessionConfig source = SimulationSessionStore.LoadLatest(sourceRunId);
-            if (!PolicySchemaMatches(source.vehicle, targetParts))
+            if (!PolicySchemaMatches(
+                    source.vehicle,
+                    source.environment.scenario,
+                    targetParts,
+                    targetScenario))
             {
                 error = $"Initialization run '{sourceRunId}' has a different observation/action interface.";
                 return false;
@@ -186,6 +195,7 @@ namespace RocketSim
         public static bool TryValidatePolicySchema(
             string runId,
             RocketPartsConfig currentParts,
+            ScenarioType currentScenario,
             out string error)
         {
             error = string.Empty;
@@ -201,7 +211,7 @@ namespace RocketSim
                 return false;
             }
 
-            bool compatible = manifest.vectorObservationSize == RocketAgentSchema.ObservationSize(currentParts) &&
+            bool compatible = manifest.vectorObservationSize == RocketAgentSchema.ObservationSize(currentParts, currentScenario) &&
                               manifest.continuousActionSize == RocketAgentSchema.ContinuousActionSize(currentParts) &&
                               manifest.engineControlChannels == currentParts.GetIndependentEngineCount() &&
                               manifest.finCount == currentParts.GetFinCount() &&
@@ -287,10 +297,15 @@ namespace RocketSim
             return JsonUtility.FromJson<TrainingObjectiveConfig>(JsonUtility.ToJson(session.objective));
         }
 
-        static bool PolicySchemaMatches(RocketPartsConfig left, RocketPartsConfig right)
+        static bool PolicySchemaMatches(
+            RocketPartsConfig left,
+            ScenarioType leftScenario,
+            RocketPartsConfig right,
+            ScenarioType rightScenario)
         {
             if (left == null || right == null) return false;
-            return RocketAgentSchema.ObservationSize(left) == RocketAgentSchema.ObservationSize(right) &&
+            return RocketAgentSchema.ObservationSize(left, leftScenario) ==
+                       RocketAgentSchema.ObservationSize(right, rightScenario) &&
                    RocketAgentSchema.ContinuousActionSize(left) == RocketAgentSchema.ContinuousActionSize(right) &&
                    left.GetIndependentEngineCount() == right.GetIndependentEngineCount() &&
                    left.GetFinCount() == right.GetFinCount() &&

@@ -21,10 +21,22 @@ namespace RocketSim
         const float GridFinDryMassKg = 200f;     // grid fin + actuator proxy
         
         [Header("Components — wire inside prefab")]
-        public RocketBody        body;
+        public BodyComponent     body;
         public ThrusterComponent thrusters; // Thrusters parent GO
         public FinComponent      fins;     // Fins parent GO
         public RcsComponent      rcs;      // RCS parent GO
+        public LandingLegComponent landingLegs;
+
+        /// <summary>The serialized landing-gear component owned by this vehicle.</summary>
+        public LandingLegComponent LandingLegs
+        {
+            get
+            {
+                if (!landingLegs)
+                    landingLegs = GetComponentInChildren<LandingLegComponent>(true);
+                return landingLegs;
+            }
+        }
         
         public static RocketPhysicsConfig Falcon9StaticFallback => Falcon9Fallback;
 

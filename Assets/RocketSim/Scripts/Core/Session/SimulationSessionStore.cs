@@ -125,7 +125,7 @@ namespace RocketSim
                 currentRevision = snapshot.Revision,
                 currentSessionSha256 = snapshot.Sha256,
                 scenario = config.environment.scenario.ToString(),
-                vectorObservationSize = RocketAgentSchema.ObservationSize(vehicle),
+                vectorObservationSize = RocketAgentSchema.ObservationSize(vehicle, config.environment.scenario),
                 continuousActionSize = RocketAgentSchema.ContinuousActionSize(vehicle),
                 engineControlChannels = vehicle.GetIndependentEngineCount(),
                 finCount = vehicle.GetFinCount(),

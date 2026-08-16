@@ -89,6 +89,7 @@ namespace RocketSim
                      !SimulationRunService.TryValidateInitializationSource(
                          request.SourceRunId,
                          requestedSession.vehicle,
+                         requestedSession.environment.scenario,
                          requestedSession.learning,
                          out initializationError)))
                 {

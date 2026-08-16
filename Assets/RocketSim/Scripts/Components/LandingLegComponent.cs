@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/LandingLegAssembly.cs
+// File: Assets/RocketSim/Scripts/Components/LandingLegComponent.cs
 // Purpose: Builds a documented, configurable four-leg Falcon 9-like landing
 // footprint with compound colliders and no aerodynamic contribution.
 // -----------------------------------------------------------------------------
@@ -15,7 +15,7 @@ namespace RocketSim
     /// is treated as already including landing gear, so this collider assembly
     /// does not add a second leg mass or an aerodynamic term.
     /// </summary>
-    public sealed class LandingLegAssembly : MonoBehaviour
+    public sealed class LandingLegComponent : MonoBehaviour
     {
         public const int LegCount = 4;
         public const float ReferenceBodyRadiusM = Falcon9Reference.BodyRadiusM;
@@ -38,15 +38,15 @@ namespace RocketSim
         public float FootPlaneLocalY { get; private set; } = ReferenceFootPlaneLocalY;
         public float FootEdgeMarginM { get; private set; } = ReferenceFootEdgeMarginM;
 
-        public static LandingLegAssembly Ensure(Transform rocketRoot)
+        public static LandingLegComponent Ensure(Transform rocketRoot)
         {
             if (!rocketRoot) return null;
-            LandingLegAssembly existing = rocketRoot.GetComponentInChildren<LandingLegAssembly>(true);
+            LandingLegComponent existing = rocketRoot.GetComponentInChildren<LandingLegComponent>(true);
             if (existing) return existing;
 
-            var go = new GameObject("LandingLegAssembly");
+            var go = new GameObject("LandingLegs");
             go.transform.SetParent(rocketRoot, false);
-            return go.AddComponent<LandingLegAssembly>();
+            return go.AddComponent<LandingLegComponent>();
         }
 
         /// <summary>Builds/resizes the four deployed legs and toggles collision.</summary>

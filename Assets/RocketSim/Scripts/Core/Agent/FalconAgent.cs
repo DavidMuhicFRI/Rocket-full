@@ -118,7 +118,7 @@ namespace RocketSim
         bool _landingPlatformStable;
         bool _landingPlatformBecameStable;
         float _landingPlatformStableTime;
-        LandingLegAssembly _landingLegs;
+        LandingLegComponent _landingLegs;
         LandingPadSurface _landingPadSurface;
         int _legPendingFootMask;
         int _legFootMask;

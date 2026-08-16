@@ -20,7 +20,9 @@ namespace RocketSim
         /// </summary>
         void ConfigureLegLandingHardware()
         {
-            _landingLegs ??= LandingLegAssembly.Ensure(transform);
+            _landingLegs ??= assembly ? assembly.LandingLegs : null;
+            if (!_landingLegs)
+                Debug.LogError("[FalconAgent] LandingLegComponent is missing from RocketAssembly.", this);
             _landingPadSurface = LandingPadSurface.Ensure(targetPad);
 
             bool active = envConfig != null && envConfig.scenario == ScenarioType.LegLanding;
@@ -151,7 +153,7 @@ namespace RocketSim
             ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y;
 
         bool IsLandingFootOnPad(int index) =>
-            index >= 0 && index < LandingLegAssembly.LegCount &&
+            index >= 0 && index < LandingLegComponent.LegCount &&
             (_legFootMask & (1 << index)) != 0;
 
         void OnCollisionEnter(Collision collision) => RecordLegLandingCollision(collision, null);

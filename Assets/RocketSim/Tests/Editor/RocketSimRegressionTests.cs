@@ -845,11 +845,14 @@ namespace RocketSim.Tests
             RocketPartsConfig allNine = Preset(RocketHardwarePreset.Falcon9);
             allNine.octawebBurnGroup = OctawebBurnGroup.AllNine;
 
-            Assert.That(RocketAgentSchema.ObservationSize(simple), Is.EqualTo(33));
+            Assert.That(RocketAgentSchema.ObservationSize(simple, ScenarioType.Hover), Is.EqualTo(29));
+            Assert.That(RocketAgentSchema.ObservationSize(simple, ScenarioType.LegLanding), Is.EqualTo(33));
             Assert.That(RocketAgentSchema.ContinuousActionSize(simple), Is.EqualTo(3));
-            Assert.That(RocketAgentSchema.ObservationSize(falcon), Is.EqualTo(61));
+            Assert.That(RocketAgentSchema.ObservationSize(falcon, ScenarioType.Hover), Is.EqualTo(57));
+            Assert.That(RocketAgentSchema.ObservationSize(falcon, ScenarioType.LegLanding), Is.EqualTo(61));
             Assert.That(RocketAgentSchema.ContinuousActionSize(falcon), Is.EqualTo(21));
-            Assert.That(RocketAgentSchema.ObservationSize(allNine), Is.EqualTo(109));
+            Assert.That(RocketAgentSchema.ObservationSize(allNine, ScenarioType.Hover), Is.EqualTo(105));
+            Assert.That(RocketAgentSchema.ObservationSize(allNine, ScenarioType.LegLanding), Is.EqualTo(109));
             Assert.That(RocketAgentSchema.ContinuousActionSize(allNine), Is.EqualTo(39));
         }
 
@@ -1249,7 +1252,7 @@ namespace RocketSim.Tests
         public void LegGeometryFitsCenteredPadAndHardContactUsesProfileLimits()
         {
             Assert.That(
-                LandingLegAssembly.ReferenceFootRadiusM + LandingLegAssembly.ReferenceFootEdgeMarginM,
+                LandingLegComponent.ReferenceFootRadiusM + LandingLegComponent.ReferenceFootEdgeMarginM,
                 Is.LessThan(SimEnvironmentConfig.LegLandingPadHalfSizeM),
                 "A centered rocket must fit all four physical feet on the standard pad at any yaw.");
 
@@ -1310,11 +1313,11 @@ namespace RocketSim.Tests
             try
             {
                 FalconAgent owner = root.AddComponent<FalconAgent>();
-                LandingLegAssembly legs = LandingLegAssembly.Ensure(root.transform);
+                LandingLegComponent legs = LandingLegComponent.Ensure(root.transform);
                 legs.Configure(true, Falcon9Reference.BodyRadiusM, Falcon9Reference.BodyHeightM);
                 LandingGearCollider[] markers = root.GetComponentsInChildren<LandingGearCollider>();
 
-                Assert.That(markers.Length, Is.EqualTo(LandingLegAssembly.LegCount * 2));
+                Assert.That(markers.Length, Is.EqualTo(LandingLegComponent.LegCount * 2));
                 foreach (LandingGearCollider marker in markers)
                     Assert.That(marker.Owner, Is.SameAs(owner));
             }

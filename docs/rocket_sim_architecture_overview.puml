@@ -59,7 +59,7 @@ package "Runtime orchestration" {
 
 package "Rocket construction" {
   [RocketAssembly\nconfig -> hardware + physics] as Assembly
-  [Hardware components\nRocketBody\nThrusterComponent\nFinComponent\nRcsComponent] as Hardware
+  [Hardware components\nBodyComponent\nThrusterComponent\nFinComponent\nRcsComponent\nLandingLegComponent] as Hardware
   [RCS helpers\nLayout / Geometry / Visuals / ForceMapper] as RcsHelpers
   [RocketPhysicsConfig\nruntime physics constants] as PhysicsConfig
 }
