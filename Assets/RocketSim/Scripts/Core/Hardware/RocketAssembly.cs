@@ -29,7 +29,7 @@ namespace RocketSim
         public static RocketPhysicsConfig Falcon9StaticFallback => Falcon9Fallback;
 
         // ── Apply shared config to this instance ──────────────────────────────
-        // Called by TrainingAreaManager after spawn and whenever panel changes a value.
+        // Called by SimulationAreaHost after spawn and whenever panel changes a value.
         public void ApplyPartsConfig(RocketPartsConfig cfg)
         {
             // Body

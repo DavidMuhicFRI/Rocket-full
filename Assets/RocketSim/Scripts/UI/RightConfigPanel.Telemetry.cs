@@ -126,7 +126,7 @@ namespace RocketSim
             }));
             root.Add(UIHelper.ActionButton("Open Training Results", () =>
             {
-                string results = TrainingRunRepository.GetResultsRoot();
+                string results = SimulationRunService.GetResultsRoot();
                 Directory.CreateDirectory(results);
                 Application.OpenURL(new Uri(results).AbsoluteUri);
             }));

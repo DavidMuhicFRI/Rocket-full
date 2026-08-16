@@ -16,7 +16,7 @@ namespace RocketSim
         [Header("Stylesheet — drag RocketSimStyles.uss here")]
         public StyleSheet rocketStyles;
 
-        public TrainingLauncher launcher;
+        public SimulationRunCoordinator runCoordinator;
 
         const float DefaultPanelWidth = 460f;
         const float MinPanelWidth = 400f;
@@ -46,7 +46,8 @@ namespace RocketSim
 
         // ── Set by ConfigBridge ───────────────────────────────────────────────
         private SimulationSessionDraft _sessionDraft;
-        [HideInInspector] public TrainingAreaManager trainingAreaManager;
+        private readonly SimulationSessionLoader _sessionLoader = new();
+        [HideInInspector] public SimulationAreaHost areaHost;
 
         private SimulationSessionConfig _trainingSessionSnapshot;
 

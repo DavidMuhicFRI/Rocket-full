@@ -36,7 +36,7 @@ namespace UI
     public sealed class RocketCameraController : MonoBehaviour
     {
         [Header("Scene references")]
-        public TrainingAreaManager trainingAreaManager;
+        public SimulationAreaHost trainingAreaManager;
         public RocketHUD hud;
         public TextMeshProUGUI selectorLabel;
 
@@ -92,7 +92,7 @@ namespace UI
         void Start()
         {
             if (!trainingAreaManager)
-                trainingAreaManager = FindAnyObjectByType<TrainingAreaManager>();
+                trainingAreaManager = FindAnyObjectByType<SimulationAreaHost>();
 
             EnsureHud();
             OnAgentsReady();
@@ -121,12 +121,12 @@ namespace UI
 
         /// <summary>
         /// Refreshes the watched rocket after the manager has replaced or spawned
-        /// training areas. Called by <see cref="TrainingAreaManager"/>.
+        /// training areas. Called by <see cref="SimulationAreaHost"/>.
         /// </summary>
         public void OnAgentsReady()
         {
             if (!trainingAreaManager)
-                trainingAreaManager = FindAnyObjectByType<TrainingAreaManager>();
+                trainingAreaManager = FindAnyObjectByType<SimulationAreaHost>();
 
             FalconAgent nextAgent = null;
             if (trainingAreaManager != null)

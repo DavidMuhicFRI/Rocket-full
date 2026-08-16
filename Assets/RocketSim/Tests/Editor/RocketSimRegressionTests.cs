@@ -678,7 +678,7 @@ namespace RocketSim.Tests
                 .rewards
                 .hoverAltitudeProximityRewardRate += 0.5f;
 
-            fixture.SaveTrainingConfigs(revisedEnvironment, resumed: true);
+            fixture.SaveTrainingLaunch(revisedEnvironment, resumed: true);
 
             TrainingObjectiveConfig loaded = fixture.LoadTrainingObjective();
             Assert.That(
@@ -1477,9 +1477,6 @@ namespace RocketSim.Tests
 
         sealed class ResumeContractFixture : System.IDisposable
         {
-            readonly System.Reflection.MethodInfo _validateDestination;
-            readonly System.Reflection.MethodInfo _saveTrainingConfigs;
-            readonly System.Reflection.MethodInfo _loadTrainingObjective;
             readonly bool _safeToDelete;
 
             public readonly string RunId;
@@ -1503,22 +1500,6 @@ namespace RocketSim.Tests
                 Assert.That(_safeToDelete, Is.True,
                     "The test run must stay inside the project results directory.");
 
-                System.Type repositoryType = typeof(TrainingLauncher).Assembly.GetType(
-                    "RocketSim.TrainingRunRepository",
-                    throwOnError: true);
-                _validateDestination = repositoryType.GetMethod(
-                    "TryValidateRunDestination",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                Assert.That(_validateDestination, Is.Not.Null);
-                _saveTrainingConfigs = repositoryType.GetMethod(
-                    "SaveTrainingConfigs",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                Assert.That(_saveTrainingConfigs, Is.Not.Null);
-                _loadTrainingObjective = repositoryType.GetMethod(
-                    "LoadTrainingObjective",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                Assert.That(_loadTrainingObjective, Is.Not.Null);
-
                 SavedEnvironment = new SimEnvironmentConfig
                 {
                     scenario = ScenarioType.Hover,
@@ -1532,7 +1513,7 @@ namespace RocketSim.Tests
 
                 try
                 {
-                    SaveTrainingConfigs(SavedEnvironment, resumed: false);
+                    SaveTrainingLaunch(SavedEnvironment, resumed: false);
                 }
                 catch
                 {
@@ -1562,39 +1543,35 @@ namespace RocketSim.Tests
                 MLAgentsConfig ml,
                 out string error)
             {
-                object[] arguments = { RunId, true, environment, parts, ml, null };
-                bool accepted = (bool)_validateDestination.Invoke(null, arguments);
-                error = arguments[5] as string;
-                return accepted;
+                return SimulationRunService.TryValidateTrainingDestination(
+                    RunId,
+                    true,
+                    environment,
+                    parts,
+                    ml,
+                    out error);
             }
 
-            public void SaveTrainingConfigs(
+            public void SaveTrainingLaunch(
                 SimEnvironmentConfig environment,
                 bool resumed)
             {
-                object[] arguments =
-                {
-                    RunId,
-                    CloneMl(),
-                    environment,
-                    CloneParts(),
-                    "TrainingConfig.yaml",
-                    "EnvConfig.json",
-                    "PartsConfig.json",
-                    new TelemetryConfig(),
-                    resumed,
-                    string.Empty,
+                SimulationRunService.SaveTrainingLaunch(
+                    SimulationSessionConfig.Capture(
+                        CloneParts(),
+                        environment,
+                        CloneMl(),
+                        new TelemetryConfig()),
+                    new RunLaunchRequest(
+                        RunId,
+                        resumed ? RunLaunchMode.ResumeTraining : RunLaunchMode.NewTraining),
                     new TrainingEnvironmentProvenance(),
-                    "cpu"
-                };
-                _saveTrainingConfigs.Invoke(null, arguments);
+                    "cpu");
             }
 
             public TrainingObjectiveConfig LoadTrainingObjective()
             {
-                return (TrainingObjectiveConfig)_loadTrainingObjective.Invoke(
-                    null,
-                    new object[] { RunId });
+                return SimulationRunService.LoadTrainingObjective(RunId);
             }
 
             public SimulationSessionConfig LoadSessionRevision(int revision) =>

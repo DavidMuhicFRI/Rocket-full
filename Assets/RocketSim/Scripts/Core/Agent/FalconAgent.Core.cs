@@ -346,7 +346,7 @@ namespace RocketSim
                 if (envConfig.scenario == ScenarioType.HoverTracking &&
                     _hoverTrackTargetReachedThisStep)
                 {
-                    assembly.GetComponentInParent<TrainingAreaManager>()?.NotifyHoverTrackTargetReached();
+                    assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyHoverTrackTargetReached();
 
                     if (envConfig.moveTargetEnabled && !_episodeEndedThisStep)
                     {
@@ -528,7 +528,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Notifies the owning TrainingAreaManager that a real episode ended so
+        /// Notifies the owning SimulationAreaHost that a real episode ended so
         /// shared curriculum counters can advance.
         /// </summary>
         void NotifyEpisodeCompleted()
@@ -544,7 +544,7 @@ namespace RocketSim
             };
             bool includeInCurriculumEstimate =
                 !envConfig.scenario.IsLanding() || !_landingEpisodeUsesEasierReplay;
-            assembly.GetComponentInParent<TrainingAreaManager>()?.NotifyEpisodeEnd(
+            assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyEpisodeEnd(
                 successfulEpisode,
                 includeInCurriculumEstimate);
         }

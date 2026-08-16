@@ -40,10 +40,10 @@ namespace RocketSim
         /// <summary>Called once by ConfigBridge before the panel builds.</summary>
         public void BindSession(
             SimulationSessionDraft sessionDraft,
-            TrainingAreaManager areaManager)
+            SimulationAreaHost areaManager)
         {
             _sessionDraft = sessionDraft ?? throw new ArgumentNullException(nameof(sessionDraft));
-            trainingAreaManager = areaManager ?? throw new ArgumentNullException(nameof(areaManager));
+            areaHost = areaManager ?? throw new ArgumentNullException(nameof(areaManager));
         }
 
         SimulationSessionDraft RequireSession()

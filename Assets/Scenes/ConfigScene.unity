@@ -408,7 +408,7 @@ GameObject:
   - component: {fileID: 1529266046}
   - component: {fileID: 1529266045}
   m_Layer: 0
-  m_Name: TrainingAreaManager
+  m_Name: SimulationAreaHost
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -454,7 +454,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3a4b1838774e409388b037f42063e122, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.TrainingAreaManager
+  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.SimulationAreaHost
   trainingAreaPrefab: {fileID: 2752251439145396623, guid: 4b8b53b4e9efa434f9d738b62bf7c5eb, type: 3}
   dummyAreaPrefab: {fileID: 8129013310290068911, guid: 56f41ab37f999fb43a451008a55c23fa, type: 3}
   instanceCount: 16
@@ -465,6 +465,8 @@ MonoBehaviour:
     bodyHeight: 41.2
     baseDryMass: 22200
     baseFuelMass: 400000
+    useScenarioRecommendedFuel: 1
+    startFuelFraction: 0.08
     startFuelMass: 32000
     engineLayout: 2
     independentEngines: 1
@@ -503,27 +505,155 @@ MonoBehaviour:
     logEnvironmentMetrics: 0
     logRewardMetrics: 1
     logRewardBreakdown: 0
+    trainingStepLogInterval: 10
     activeEngineCount: 1
     independentEngines: 1
     activeFinCount: 4
     scenario: 0
   envConfig:
+    moveTargetEnabled: 0
+    targetMoveInterval: 35
+    targetMoveRadius: 16
+    hoverTrackCurriculumEnabled: 1
+    hoverTrackCurriculumSuccesses: 0
+    hoverTrackCurriculumEpisodeCount: 0
+    hoverTrackCurriculumSuccessfulEpisodes: 0
+    hoverTrackCurriculumRecentSuccessRate: 0
+    hoverTrackCurriculumLinearProgress: 0
+    hoverTrackCurriculumProgress: 0
+    hoverTrackStartMoveRadius: 16
+    hoverTrackEndMoveRadius: 50
+    hoverTrackCurriculumBatchesToMostlyHard: 120
+    curriculumDifficultyIncreaseSpeed: 1
+    landingCurriculumMode: 0
+    landingCurriculumEnabled: 1
+    landingCurriculumSuccesses: 0
+    landingCurriculumEpisodeCount: 0
+    landingCurriculumSuccessfulEpisodes: 0
+    landingCurriculumBatchEpisodeCount: 0
+    landingCurriculumRecentSuccessRate: 0
+    landingCurriculumLinearProgress: 0
+    landingCurriculumProgress: 0
+    landingCurriculumPeakLinearProgress: 0
+    landingCurriculumBatchesToFullDifficulty: 360
+    landingCurriculumPromotionSuccessRate: 0.8
+    landingCurriculumRetreatSuccessRate: 0.5
+    landingCurriculumRetreatSpeedMultiplier: 0.5
+    landingCurriculumMaximumRetreat: 0.2
+    landingCurriculumMaximumStepPerBatch: 0.02
+    landingCurriculumEasierReplayProbability: 0.15
+    landingCurriculumEasierReplayOffset: 0.2
+    landingTargetYawDeg: 0
+    landingCatchAltitude: 60
+    landingPlatformEnabled: 1
+    landingPlatformHalfSizeInitial: 8
+    landingPlatformHalfSizeFull: 3
+    legLandingCurriculumMode: 0
+    legLandingCurriculumEnabled: 1
+    legLandingCurriculumSuccesses: 0
+    legLandingCurriculumEpisodeCount: 0
+    legLandingCurriculumSuccessfulEpisodes: 0
+    legLandingCurriculumBatchEpisodeCount: 0
+    legLandingCurriculumRecentSuccessRate: 0
+    legLandingCurriculumLinearProgress: 0
+    legLandingCurriculumProgress: 0
+    legLandingCurriculumPeakLinearProgress: 0
     windEnabled: 0
     windSpeed: 0
     windGustAmplitude: 0
     windChangeRate: 0
+    windDirectionDeg: 0
+    randomizeWindDirectionEachEpisode: 1
+    gustFrequencyHz: 0.25
     savedWindSpeed: 8
     savedWindGustAmplitude: 5
     savedWindChangeRate: 0.04
     weather: 0
+    airDensityMultiplier: 1
     scenario: 0
-    moveTargetEnabled: 0
-    targetMoveInterval: 35
-    targetMoveRadius: 16
-    hoverTrackCurriculumSuccesses: 0
-    hoverTrackCurriculumProgress: 0
-    landingTargetYawDeg: 0
-    landingCatchAltitude: 60
+    inferenceScenarios:
+      chopstickLanding:
+        initialized: 0
+        randomizeEachEpisode: 1
+        altitudeMin: 0
+        altitudeMax: 0
+        horizontalOffsetMax: 0
+        verticalSpeedMin: 0
+        verticalSpeedMax: 0
+        horizontalSpeedMin: 0
+        horizontalSpeedMax: 0
+        baseTiltDeg: 0
+        tiltVariationDeg: 0
+        yawMinDeg: 0
+        yawMaxDeg: 0
+        angularSpeedMaxDegS: 0
+      legLanding:
+        initialized: 0
+        randomizeEachEpisode: 1
+        altitudeMin: 0
+        altitudeMax: 0
+        horizontalOffsetMax: 0
+        verticalSpeedMin: 0
+        verticalSpeedMax: 0
+        horizontalSpeedMin: 0
+        horizontalSpeedMax: 0
+        baseTiltDeg: 0
+        tiltVariationDeg: 0
+        yawMinDeg: 0
+        yawMaxDeg: 0
+        angularSpeedMaxDegS: 0
+      hover:
+        initialized: 0
+        randomizeEachEpisode: 1
+        altitudeMin: 0
+        altitudeMax: 0
+        horizontalOffsetMax: 0
+        verticalSpeedMin: 0
+        verticalSpeedMax: 0
+        horizontalSpeedMin: 0
+        horizontalSpeedMax: 0
+        baseTiltDeg: 0
+        tiltVariationDeg: 0
+        yawMinDeg: 0
+        yawMaxDeg: 0
+        angularSpeedMaxDegS: 0
+      hoverTracking:
+        initialized: 0
+        randomizeEachEpisode: 1
+        altitudeMin: 0
+        altitudeMax: 0
+        horizontalOffsetMax: 0
+        verticalSpeedMin: 0
+        verticalSpeedMax: 0
+        horizontalSpeedMin: 0
+        horizontalSpeedMax: 0
+        baseTiltDeg: 0
+        tiltVariationDeg: 0
+        yawMinDeg: 0
+        yawMaxDeg: 0
+        angularSpeedMaxDegS: 0
+    inferencePurpose: 0
+    evaluation:
+      episodeCount: 200
+      seed: 20257
+    faults:
+      allowDuringTraining: 0
+      faultyEpisodeProbability: 0.2
+      trainingSeverityMin: 0.2
+      trainingSeverityMax: 0.6
+      allowEngineThrustLoss: 1
+      allowGimbalJam: 1
+      allowFinEffectivenessLoss: 0
+      allowRcsStuckClosed: 0
+      allowRcsStuckOpen: 0
+      maxSimultaneousFaults: 1
+      evaluationFaultEnabled: 0
+      evaluationFaultType: 1
+      evaluationTargetIndex: 0
+      evaluationOnsetSeconds: 5
+      evaluationDurationSeconds: 0
+      evaluationSeverity: 0.5
+      seed: 12345
     runId: ReusableBoosterDefaultRun
     behaviorType: 0
     environmentSeed: 1
@@ -538,6 +668,11 @@ MonoBehaviour:
     lambd: 0.98
     numEpoch: 6
     lrSchedule: 0
+    bufferInitSteps: 5000
+    tau: 0.005
+    stepsPerUpdate: 1
+    initialEntropyCoefficient: 1
+    saveReplayBuffer: 0
     normalize: 1
     hiddenUnits: 512
     numLayers: 3
@@ -551,6 +686,9 @@ MonoBehaviour:
     timeHorizon: 1024
     summaryFreq: 20000
     threaded: 1
+    checkpointInterval: 500000
+    keepCheckpoints: 20
+    trainerSeed: 1
 --- !u!1 &1661786655
 GameObject:
   m_ObjectHideFlags: 0
@@ -621,106 +759,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.RightConfigPanel
   rocketStyles: {fileID: 7433441132597879392, guid: 92aff44238de412b8ae4e10c4d5b6f71, type: 3}
-  launcher: {fileID: 0}
+  runCoordinator: {fileID: 0}
   engineImg1: {fileID: 2800000, guid: 79d727be37e28c44ab5bfe517718c875, type: 3}
   engineImg3: {fileID: 2800000, guid: be20394c7f6a486448bba847b8cd1b03, type: 3}
   engineImg9: {fileID: 2800000, guid: 1653d29dd38dc5542b9dfe9d3fc32cdc, type: 3}
   finImg1: {fileID: 2800000, guid: c23e89ca5c901c84e83f1f5cdbbafda0, type: 3}
   finImg2: {fileID: 2800000, guid: 421c8ca9227171e45b9ba12918650afe, type: 3}
   finImg3: {fileID: 2800000, guid: bcc411797acdc5746a338ebce6c1807d, type: 3}
-  partsConfig:
-    hardwarePreset: 0
-    bodyRadius: 1.83
-    bodyHeight: 41.2
-    baseDryMass: 22200
-    baseFuelMass: 400000
-    startFuelMass: 32000
-    engineLayout: 2
-    independentEngines: 1
-    octawebBurnGroup: 0
-    maxThrustPerEngine: 845000
-    minThrottle: 0.57
-    engineSpacing: 0.8
-    specificImpulse: 282
-    throttleSpoolRate: 5
-    gimbalSlewRate: 30
-    maxGimbalAngle: 5
-    engineStartupDelay: 0.85
-    engineShutdownTransient: 0.25
-    engineMinimumRunTime: 2
-    engineRestartCooldown: 2
-    finsEnabled: 1
-    finLayout: 1
-    finWidthX: 1.59
-    finWidthZ: 1.23
-    finThickness: 0.3
-    maxFinAngle: 35
-    finSlewRate: 50
-    liftScale: 0.5
-    rcsEnabled: 1
-    rcsThrust: 750
-    rcsSpecificImpulse: 70
-    rcsMinimumPulseDuration: 0.1
-    rcsPropellantMass: 150
-    rcsDryMass: 250
-  telemetryConfig:
-    logGoalMetrics: 1
-    logAttitudeMetrics: 1
-    logVelocityMetrics: 1
-    logControlMetrics: 1
-    logAeroLoadMetrics: 1
-    logEnvironmentMetrics: 0
-    logRewardMetrics: 1
-    logRewardBreakdown: 0
-    activeEngineCount: 1
-    independentEngines: 1
-    activeFinCount: 4
-    scenario: 0
-  envConfig:
-    windEnabled: 0
-    windSpeed: 0
-    windGustAmplitude: 0
-    windChangeRate: 0
-    savedWindSpeed: 8
-    savedWindGustAmplitude: 5
-    savedWindChangeRate: 0.04
-    weather: 0
-    scenario: 0
-    moveTargetEnabled: 0
-    targetMoveInterval: 35
-    targetMoveRadius: 16
-    hoverTrackCurriculumSuccesses: 0
-    hoverTrackCurriculumProgress: 0
-    landingTargetYawDeg: 0
-    landingCatchAltitude: 60
-    runId: ReusableBoosterDefaultRun
-    behaviorType: 0
-    environmentSeed: 1
-  mlConfig:
-    behaviorName: Rocket
-    trainerType: 0
-    batchSize: 4096
-    bufferSize: 40960
-    learningRate: 0.0002
-    beta: 0.01
-    epsilon: 0.2
-    lambd: 0.98
-    numEpoch: 6
-    lrSchedule: 0
-    normalize: 1
-    hiddenUnits: 512
-    numLayers: 3
-    extrinsicGamma: 0.9995
-    extrinsicStrength: 1
-    curiosityEnabled: 0
-    curiosityGamma: 0.99
-    curiosityStrength: 0.01
-    curiosityLR: 0.0001
-    maxSteps: 10000000
-    timeHorizon: 1024
-    summaryFreq: 20000
-    threaded: 1
-  trainingAreaManager: {fileID: 0}
+  areaHost: {fileID: 0}
 --- !u!114 &1661786659
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -732,13 +778,8 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c9b5a85864be4cd0a4bd9ad97e5b702e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.TrainingLauncher
+  m_EditorClassIdentifier: Assembly-CSharp::RocketSim.SimulationRunCoordinator
   condaEnvName: mlagents_gpu
-  runId: FalconRun
-  mlConfigPath: TrainingConfig.yaml
-  partsConfigPath: PartsConfig.json
-  envConfigPath: EnvConfig.json
-  resumeIfExists: 0
 --- !u!1 &1903355639
 GameObject:
   m_ObjectHideFlags: 0
@@ -891,6 +932,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UI.RocketCameraController
   trainingAreaManager: {fileID: 1529266046}
   hud: {fileID: 0}
+  selectorLabel: {fileID: 0}
   startDistance: 70
   minDistance: 5
   maxDistance: 400
@@ -901,10 +943,12 @@ MonoBehaviour:
   maxElevation: 80
   followSmoothing: 8
   switchSmoothing: 5
-  selectorLabel: {fileID: 0}
   sideViewDistance: 80
   eagleViewDistance: 120
   closeViewDistance: 24
+  initialView: 0
+  initialOrbitYaw: 25
+  initialOrbitElevation: 15
 --- !u!1 &2042047586
 GameObject:
   m_ObjectHideFlags: 0

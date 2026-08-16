@@ -4,6 +4,7 @@ The maintained project documentation lives under the repository-level `docs/` di
 
 - `../../docs/simulator_user_workflow.md` - vehicle presets, tasks, training, evaluation, and example workflows
 - `../../docs/simulation_session_lifecycle.md` - draft, immutable launch revisions, runtime state, and resume rules
+- `../../docs/runtime_flow.md` - UI, run service, coordinator, training, evaluation, area-host, and preview ownership
 - `../../docs/evaluation_protocol.md` - deterministic standard-evaluation contract and output artifacts
 - `../../TrainingConfig.yaml` - synchronized manual-CLI PPO reference; UI launches use the generated run-local copy
 - `../../docs/landing_curriculum.md` - independent continuous curricula for chopstick and physical leg landing

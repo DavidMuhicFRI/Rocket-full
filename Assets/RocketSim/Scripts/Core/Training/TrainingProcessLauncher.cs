@@ -204,7 +204,7 @@ namespace RocketSim
             string cmd = $"\"{activatePath}\" {env} && {mlAgentsArgs}";
 
             psi.FileName = "cmd.exe";
-            // /c closes the shell when training ends, so TrainingLauncher can
+            // /c closes the shell when training ends, so TrainingRunController can
             // detect a failed trainer instead of watching an idle /k window.
             psi.Arguments = $"/c \"{cmd}\"";
             psi.UseShellExecute = true;

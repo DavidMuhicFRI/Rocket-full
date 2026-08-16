@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Training/TrainingAreaManager.cs
-// Purpose: Owns shared configs, spawns training/inference areas, applies part changes, and starts hardware tests.
-// Main flow: the panel edits shared configs -> this manager creates isolated
-// areas -> every spawned agent receives the same configs -> Stop restores the preview.
+// File: Assets/RocketSim/Scripts/Core/Runtime/SimulationAreaHost.cs
+// Purpose: Hosts preview and active simulation areas and wires agents to one frozen runtime session.
+// Main flow: panel edits draft -> coordinator freezes a snapshot -> this host
+// creates isolated areas from a runtime copy -> Stop restores the draft preview.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -16,14 +16,12 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    // Spawns N copies of TrainingArea.prefab in a square grid.
-    // Holds the four shared config objects that ConfigBridge later passes to
-    // RightConfigPanel.  All agents share the same SimEnvironmentConfig reference
-    // — the panel writes once and every agent reads it automatically.
+    // Spawns copies of TrainingArea.prefab and wires each agent to one runtime
+    // configuration. The editable draft is never handed to active agents.
     //
     // [DefaultExecutionOrder(-10)] ensures Awake runs before ConfigBridge.Start().
     [DefaultExecutionOrder(-10)]
-    public class TrainingAreaManager : MonoBehaviour
+    public class SimulationAreaHost : MonoBehaviour
     {
         [Header("Prefab")] public GameObject trainingAreaPrefab;
 
@@ -32,29 +30,28 @@ namespace RocketSim
         [Header("Grid")] [Range(1, 64)] public int instanceCount = 16;
         [Range(250f, 2000f)] public float spacing = 500f;
 
-        [Header("Shared Configs — written by panel, read by all agents")]
-        public RocketPartsConfig partsConfig = new();
-
-        public TelemetryConfig telemetryConfig = new();
-        public SimEnvironmentConfig envConfig = new();
-        public MLAgentsConfig mlConfig = new();
+        [Header("Initial Simulation Session")]
+        [SerializeField] SimulationSessionConfig initialSession = new();
 
         /// <summary>
-        /// Canonical mutable setup used by the configuration UI. The four
-        /// serialized fields above bootstrap a new scene; after Awake all
-        /// consumers use the sections owned by this draft.
+        /// Canonical mutable setup used by the configuration UI.
         /// </summary>
         public SimulationSessionDraft SessionDraft { get; private set; }
+        SimulationSessionConfig CurrentSession =>
+            _runtimeSession ?? SessionDraft?.Config ?? initialSession;
+        public RocketPartsConfig partsConfig => CurrentSession.vehicle;
+        public SimEnvironmentConfig envConfig => CurrentSession.environment;
+        public MLAgentsConfig mlConfig => CurrentSession.learning;
+        public TelemetryConfig telemetryConfig => CurrentSession.telemetry;
 
         readonly List<RocketAssembly> _assemblies = new();
         readonly List<FalconAgent> _agents = new();
 
-        readonly List<RocketAssembly> _dummyAssemblies = new();
-        readonly Dictionary<Rigidbody, PreviewRigidbodyPose> _dummyRigidbodyPoses = new();
-
         int _totalEpisodes;
         bool _activeRunSpawned;
+        SimulationSessionConfig _runtimeSession;
         HardwareTestController _hardwareTests;
+        VehiclePreviewController _preview;
 
         public IReadOnlyList<FalconAgent> Agents => _agents;
         public IReadOnlyList<RocketAssembly> Assemblies => _assemblies;
@@ -67,40 +64,24 @@ namespace RocketSim
         /// </summary>
         void Awake()
         {
+            initialSession ??= new SimulationSessionConfig();
+            initialSession.EnsureSections();
             partsConfig.NormalizeSelectedPreset();
             ApplyCurrentScenarioHardwareDefaults();
-            SessionDraft = new SimulationSessionDraft(SimulationSessionConfig.Capture(
-                partsConfig,
-                envConfig,
-                mlConfig,
-                telemetryConfig));
+            SessionDraft = new SimulationSessionDraft(initialSession);
             SessionDraft.Changed += OnSessionDraftChanged;
-            BindSessionSections();
+            _preview = new VehiclePreviewController(transform, dummyAreaPrefab);
 
             if (trainingAreaPrefab == null)
             {
-                Debug.LogError("[TrainingAreaManager] trainingAreaPrefab not assigned.");
+                Debug.LogError("[SimulationAreaHost] trainingAreaPrefab not assigned.");
             }
 
             if (dummyAreaPrefab == null)
             {
-                Debug.LogError("[TrainingAreaManager] dummyAreaPrefab not assigned.");
+                Debug.LogError("[SimulationAreaHost] dummyAreaPrefab not assigned.");
             }
-            else SpawnDummyAreas();
-        }
-
-        /// <summary>
-        /// Points the manager's temporary section aliases at the one session
-        /// draft. These aliases keep the runtime code readable while ownership
-        /// remains unambiguous.
-        /// </summary>
-        void BindSessionSections()
-        {
-            SimulationSessionConfig session = SessionDraft.Config;
-            partsConfig = session.vehicle;
-            envConfig = session.environment;
-            mlConfig = session.learning;
-            telemetryConfig = session.telemetry;
+            else _preview.Spawn(partsConfig);
         }
 
         /// <summary>
@@ -109,8 +90,7 @@ namespace RocketSim
         /// </summary>
         void OnSessionDraftChanged(SessionChangeKind change)
         {
-            BindSessionSections();
-            if (_activeRunSpawned) return;
+            if (_runtimeSession != null) return;
 
             if (change == SessionChangeKind.All ||
                 change == SessionChangeKind.Vehicle ||
@@ -119,22 +99,28 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Spawns the non-training preview rocket and freezes its physics so UI
-        /// hardware edits can be inspected without running an agent.
+        /// Installs a private runtime copy before an active area is created.
+        /// The coordinator is the only caller allowed to cross this boundary.
         /// </summary>
-        void SpawnDummyAreas()
+        public void PrepareRuntime(SimulationSessionSnapshot snapshot)
         {
-            ApplyCurrentScenarioHardwareDefaults();
-            var go = Instantiate(dummyAreaPrefab, new Vector3(0f, 0f, 0f), Quaternion.identity, transform);
-            go.name = "DummyArea";
-            var dummyAssembly = go.GetComponentInChildren<RocketAssembly>();
-            if (dummyAssembly)
-            {
-                _dummyAssemblies.Add(dummyAssembly);
-                dummyAssembly.ApplyPartsConfig(partsConfig); // sync initial config
-            }
+            if (snapshot == null)
+                throw new System.ArgumentNullException(nameof(snapshot));
+            if (_activeRunSpawned)
+                throw new System.InvalidOperationException("Stop the active simulation before preparing another runtime.");
 
-            LockDummyPhysics(go, capturePose: true);
+            _runtimeSession = snapshot.CreateRuntimeConfig();
+        }
+
+        /// <summary>
+        /// Drops a prepared runtime when launch fails before areas are active.
+        /// The existing preview then points back to the editable draft.
+        /// </summary>
+        public void CancelPreparedRuntime()
+        {
+            if (_activeRunSpawned) return;
+            _runtimeSession = null;
+            ApplyPartsConfigToAll();
         }
 
         /// <summary>
@@ -145,7 +131,7 @@ namespace RocketSim
             ClearSpawnedAreas();
             if (!trainingAreaPrefab)
             {
-                Debug.LogError("[TrainingAreaManager] Cannot start: training area prefab is missing.");
+                Debug.LogError("[SimulationAreaHost] Cannot start: training area prefab is missing.");
                 return false;
             }
 
@@ -185,7 +171,7 @@ namespace RocketSim
                         // warnings and therefore do not block an experiment.
                         if (idx == 0 && !SimulatorPreflightValidator.ValidateAndLog(asm.GetPhysicsConfig(), envConfig))
                         {
-                            Debug.LogError("[TrainingAreaManager] Objective preflight errors prevented agent startup.");
+                            Debug.LogError("[SimulationAreaHost] Objective preflight errors prevented agent startup.");
                             ClearSpawnedAreas();
                             return false;
                         }
@@ -217,7 +203,7 @@ namespace RocketSim
                     asm.ApplyPartsConfig(partsConfig);
                     if (!SimulatorPreflightValidator.ValidateAndLog(asm.GetPhysicsConfig(), envConfig))
                     {
-                        Debug.LogError("[TrainingAreaManager] Objective preflight errors prevented inference startup.");
+                        Debug.LogError("[SimulationAreaHost] Objective preflight errors prevented inference startup.");
                         ClearSpawnedAreas();
                         return false;
                     }
@@ -225,12 +211,12 @@ namespace RocketSim
 
                 if (agent)
                 {
-                    if (!TrainingRunRepository.TryValidateInferencePolicySchema(
+                    if (!SimulationRunService.TryValidatePolicySchema(
                             envConfig.runId,
                             partsConfig,
                             out string compatibilityError))
                     {
-                        Debug.LogError($"[TrainingAreaManager] {compatibilityError}");
+                        Debug.LogError($"[SimulationAreaHost] {compatibilityError}");
                         ClearSpawnedAreas();
                         return false;
                     }
@@ -251,7 +237,7 @@ namespace RocketSim
 
             if (_assemblies.Count == 0 || _agents.Count == 0)
             {
-                Debug.LogError("[TrainingAreaManager] Cannot start: the area prefab must contain both RocketAssembly and FalconAgent.");
+                Debug.LogError("[SimulationAreaHost] Cannot start: the area prefab must contain both RocketAssembly and FalconAgent.");
                 ClearSpawnedAreas();
                 return false;
             }
@@ -311,8 +297,9 @@ namespace RocketSim
             CommunicatorFactory.Enabled = false;
             ClearSpawnedAreas();
             _activeRunSpawned = false;
+            _runtimeSession = null;
             if (dummyAreaPrefab != null)
-                SpawnDummyAreas();
+                _preview.Spawn(partsConfig);
         }
 
         /// <summary>
@@ -324,7 +311,7 @@ namespace RocketSim
         {
             if (trainingAreaPrefab == null)
             {
-                Debug.LogError("[TrainingAreaManager] trainingAreaPrefab not assigned.");
+                Debug.LogError("[SimulationAreaHost] trainingAreaPrefab not assigned.");
                 return null;
             }
 
@@ -380,47 +367,7 @@ namespace RocketSim
             foreach (var agent in _agents)
                 RefreshAgentAfterPartsChange(agent);
 
-            foreach (var asm in _dummyAssemblies)
-            {
-                if (!asm) continue;
-
-                asm.ApplyPartsConfig(partsConfig);
-                LockDummyPhysics(asm.gameObject, capturePose: false);
-            }
-        }
-
-        /// <summary>
-        /// Restores and freezes all dummy-area rigidbodies so preview rockets
-        /// remain still after hardware changes.
-        /// </summary>
-        void LockDummyPhysics(GameObject root, bool capturePose)
-        {
-            if (!root) return;
-
-            foreach (var rb in root.GetComponentsInChildren<Rigidbody>(true))
-            {
-                if (capturePose || !_dummyRigidbodyPoses.ContainsKey(rb))
-                {
-                    _dummyRigidbodyPoses[rb] = new PreviewRigidbodyPose
-                    {
-                        localPosition = rb.transform.localPosition,
-                        localRotation = rb.transform.localRotation
-                    };
-                }
-
-                var pose = _dummyRigidbodyPoses[rb];
-                rb.transform.SetLocalPositionAndRotation(pose.localPosition, pose.localRotation);
-                // Unity rejects velocity writes while a body is kinematic.
-                rb.isKinematic = false;
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                rb.useGravity = false;
-                rb.isKinematic = true;
-                rb.constraints = RigidbodyConstraints.FreezeAll;
-                rb.Sleep();
-            }
-
-            Physics.SyncTransforms();
+            _preview.Apply(partsConfig);
         }
 
         /// <summary>
@@ -474,11 +421,11 @@ namespace RocketSim
 
             try
             {
-                TrainingRunRepository.SaveEnvironmentState(envConfig.runId, envConfig);
+                SimulationRunService.SaveRuntimeState(envConfig.runId, envConfig);
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[TrainingAreaManager] Could not persist curriculum state: {ex.Message}");
+                Debug.LogError($"[SimulationAreaHost] Could not persist curriculum state: {ex.Message}");
             }
         }
 
@@ -510,9 +457,6 @@ namespace RocketSim
         /// </summary>
         public void PrepareTelemetrySchema()
         {
-            partsConfig ??= new RocketPartsConfig();
-            telemetryConfig ??= new TelemetryConfig();
-            envConfig ??= new SimEnvironmentConfig();
             ApplyCurrentScenarioHardwareDefaults();
 
             telemetryConfig.activeEngineCount = partsConfig.GetActiveEngineCount();
@@ -576,14 +520,7 @@ namespace RocketSim
 
             _assemblies.Clear();
             _agents.Clear();
-            _dummyAssemblies.Clear();
-            _dummyRigidbodyPoses.Clear();
-        }
-
-        struct PreviewRigidbodyPose
-        {
-            public Vector3 localPosition;
-            public Quaternion localRotation;
+            _preview?.ClearReferences();
         }
     }
 

@@ -33,7 +33,7 @@ namespace RocketSim
 
     public partial class HardwareTestController : MonoBehaviour
     {
-        public TrainingAreaManager manager;
+        public SimulationAreaHost manager;
 
         public FalconAgent Agent { get; private set; }
         public RocketHardwareTestType ActiveTest { get; private set; }

@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Runtime/ConfigBridge.cs
-// Purpose: Gives the right panel TrainingAreaManager's canonical session draft
+// Purpose: Gives the right panel SimulationAreaHost's canonical session draft
 // before the panel builds, preventing duplicate configuration state.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
@@ -20,7 +20,7 @@ namespace RocketSim
     {
         [Header("Assign in Inspector")]
         public RightConfigPanel    panel;
-        public TrainingAreaManager manager;
+        public SimulationAreaHost manager;
 
         /// <summary>
         /// Wires shared config objects before the panel builds its tabs.

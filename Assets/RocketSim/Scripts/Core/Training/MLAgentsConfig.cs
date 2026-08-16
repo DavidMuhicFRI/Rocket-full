@@ -27,7 +27,7 @@ namespace RocketSim
 
     /// <summary>
     /// ML-Agents trainer configuration that maps directly to the generated YAML
-    /// used by TrainingLauncher.
+    /// used by SimulationRunCoordinator.
     /// </summary>
     [Serializable]
     public class MLAgentsConfig

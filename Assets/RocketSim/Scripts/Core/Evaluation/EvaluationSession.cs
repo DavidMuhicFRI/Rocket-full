@@ -78,7 +78,7 @@ namespace RocketSim
     }
 
     /// <summary>
-    /// Pure session accumulator used by TrainingLauncher. It has no dependency
+    /// Pure result accumulator used by EvaluationRunController. It has no dependency
     /// on Agent lifecycle, which keeps confidence-interval and summary behavior
     /// independently testable.
     /// </summary>

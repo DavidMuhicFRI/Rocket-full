@@ -47,13 +47,13 @@ namespace RocketSim
         {
             c.Add(UIHelper.SectionLabel("Run Configuration"));
 
-            if (trainingAreaManager == null)
+            if (areaHost == null)
             {
-                c.Add(BuildGroupDetail("TrainingAreaManager is not wired yet, so scenario and launch controls cannot be built."));
+                c.Add(BuildGroupDetail("SimulationAreaHost is not wired yet, so scenario and launch controls cannot be built."));
                 return false;
             }
 
-            string[] existingRuns = TrainingRunRepository.ScanExistingRuns();
+            string[] existingRuns = _sessionLoader.ListRunIds();
 
             var runIdRow = new VisualElement();
             runIdRow.AddToClassList("rs-field-row");
@@ -203,7 +203,7 @@ namespace RocketSim
             bool RunExists(string id)
             {
                 string existingRun = FindExistingRun(id);
-                return existingRun != null && TrainingRunRepository.HasCompleteRunConfig(existingRun);
+                return existingRun != null && _sessionLoader.HasRun(existingRun);
             }
 
             // Clears state that became invalid after the Run ID changed.
@@ -226,7 +226,7 @@ namespace RocketSim
                 string sanitised = Regex.Replace(raw ?? "", @"[^\w\-]", "_");
                 string canonicalRun = FindExistingRun(sanitised);
                 string nextRunId = canonicalRun ?? sanitised;
-                bool canResume = canonicalRun != null && TrainingRunRepository.HasCompleteRunConfig(canonicalRun);
+                bool canResume = canonicalRun != null && _sessionLoader.HasRun(canonicalRun);
                 bool changed = !RunIdsEqual(envConfig.runId, nextRunId);
 
                 if (updateField && runIdField.value != nextRunId)
@@ -273,7 +273,7 @@ namespace RocketSim
 
                 foreach (var run in matches)
                 {
-                    var info = TrainingRunRepository.LoadRunInfo(run);
+                    var info = _sessionLoader.GetSummary(run);
                     var item = new VisualElement();
                     item.AddToClassList("rs-run-item");
                     item.pickingMode = PickingMode.Position;
@@ -325,7 +325,7 @@ namespace RocketSim
                     initializeFromField?.SetValueWithoutNotify("None");
                     try
                     {
-                        if (!TrainingRunRepository.HasCompleteRunConfig(envConfig.runId))
+                        if (!_sessionLoader.HasRun(envConfig.runId))
                             throw new InvalidOperationException($"Config files missing in run '{envConfig.runId}'.");
 
                         ApplyRunConfigs(envConfig.runId, preserveBehaviorType: true);
@@ -372,32 +372,32 @@ namespace RocketSim
             {
                 _autoScaleTrainingAreas = v;
                 if (v)
-                    trainingAreaManager.instanceCount = AutoDetectedTrainingAreaCount();
+                    areaHost.instanceCount = AutoDetectedTrainingAreaCount();
                 UpdateScalingUI(c, v);
                 RefreshEnvDisplay(c);
             }));
 
             var sliderContainer = new VisualElement { name = "manual-slider-container" };
-            sliderContainer.Add(UIHelper.IntSlider("Manual Count", trainingAreaManager.instanceCount, 1, 64, v =>
+            sliderContainer.Add(UIHelper.IntSlider("Manual Count", areaHost.instanceCount, 1, 64, v =>
             {
-                trainingAreaManager.instanceCount = v;
+                areaHost.instanceCount = v;
                 RefreshEnvDisplay(c);
             }, "Sets how many simulation areas collect training experience in parallel."));
             c.Add(sliderContainer);
 
             UpdateScalingUI(c, _autoScaleTrainingAreas);
 
-            c.Add(UIHelper.Slider("Area spacing (m)", trainingAreaManager.spacing, 250f, 2000f, v =>
+            c.Add(UIHelper.Slider("Area spacing (m)", areaHost.spacing, 250f, 2000f, v =>
             {
-                trainingAreaManager.spacing = v;
+                areaHost.spacing = v;
                 RefreshEnvDisplay(c);
             }, "Sets the distance between parallel areas so their rockets cannot interact."));
 
-            var countRow = UIHelper.ReadOnly("Active Areas", $"{trainingAreaManager.instanceCount}");
+            var countRow = UIHelper.ReadOnly("Active Areas", $"{areaHost.instanceCount}");
             countRow.name = "label-active-areas";
             c.Add(countRow);
 
-            var spacingRow = UIHelper.ReadOnly("Area Spacing", $"{trainingAreaManager.spacing} m");
+            var spacingRow = UIHelper.ReadOnly("Area Spacing", $"{areaHost.spacing} m");
             spacingRow.name = "label-area-spacing";
             c.Add(spacingRow);
 
@@ -525,9 +525,9 @@ namespace RocketSim
         /// </summary>
         void RefreshEnvDisplay(VisualElement root)
         {
-            if (trainingAreaManager == null) return;
-            UpdateLabelText(root, "label-active-areas", $"{trainingAreaManager.instanceCount}");
-            UpdateLabelText(root, "label-area-spacing", $"{trainingAreaManager.spacing:F0} m");
+            if (areaHost == null) return;
+            UpdateLabelText(root, "label-active-areas", $"{areaHost.instanceCount}");
+            UpdateLabelText(root, "label-area-spacing", $"{areaHost.spacing:F0} m");
         }
 
         /// <summary>
@@ -558,13 +558,13 @@ namespace RocketSim
         {
             gridContainer.Clear();
 
-            string[] runs = TrainingRunRepository.ScanExistingRuns();
+            string[] runs = _sessionLoader.ListRunIds();
 
             if (runs.Length == 0)
             {
                 var empty = new Label(
                     "No saved runs found.\nComplete a training session first.\n\n" +
-                    $"Expected path:\n{TrainingRunRepository.GetResultsRoot()}");
+                    $"Expected path:\n{SimulationRunService.GetResultsRoot()}");
                 empty.AddToClassList("rs-empty-state");
                 gridContainer.Add(empty);
                 return;
@@ -576,7 +576,7 @@ namespace RocketSim
 
             foreach (var run in runs)
             {
-                var info = TrainingRunRepository.LoadRunInfo(run);
+                var info = _sessionLoader.GetSummary(run);
                 var capturedRun = run;
                 var card = new VisualElement();
                 card.AddToClassList("rs-inference-card");
@@ -584,7 +584,7 @@ namespace RocketSim
                 card.pickingMode = PickingMode.Position;
 
                 bool hasModel = ModelRepository.HasModel(run);
-                bool hasCompleteConfig = TrainingRunRepository.HasCompleteRunConfig(run);
+                bool hasCompleteConfig = _sessionLoader.HasRun(run);
                 bool canLoadRun = hasModel && hasCompleteConfig;
 
                 var nameLabel = new Label(run);
@@ -663,7 +663,7 @@ namespace RocketSim
             bool preserveBehaviorType,
             bool includeRuntimeState = true)
         {
-            var loaded = TrainingRunRepository.LoadRunConfigs(runId, includeRuntimeState);
+            SimulationSessionConfig imported = _sessionLoader.Load(runId, includeRuntimeState);
 
             if (preserveBehaviorType)
             {
@@ -673,20 +673,11 @@ namespace RocketSim
                 InferencePurpose preservedPurpose = envConfig.inferencePurpose;
                 EvaluationConfig preservedEvaluation = JsonUtility.FromJson<EvaluationConfig>(
                     JsonUtility.ToJson(envConfig.EnsureEvaluationConfig()));
-                loaded.envConfig.behaviorType = envConfig.behaviorType;
-                loaded.envConfig.inferencePurpose = preservedPurpose;
-                loaded.envConfig.evaluation = preservedEvaluation;
+                imported.environment.behaviorType = envConfig.behaviorType;
+                imported.environment.inferencePurpose = preservedPurpose;
+                imported.environment.evaluation = preservedEvaluation;
             }
-            loaded.envConfig.runId = runId;
-
-            var imported = new SimulationSessionConfig
-            {
-                vehicle = loaded.partsConfig,
-                environment = loaded.envConfig,
-                objective = loaded.envConfig.EnsureTrainingObjective(),
-                learning = loaded.mlConfig,
-                telemetry = loaded.telemetryConfig
-            };
+            imported.environment.runId = runId;
             imported.EnsureSections();
             RequireSession().ApplyImportedSession(imported);
             ApplyCurrentScenarioHardwareDefaults();

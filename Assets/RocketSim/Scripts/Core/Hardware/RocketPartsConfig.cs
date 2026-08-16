@@ -12,7 +12,7 @@ namespace RocketSim
 {
     /// <summary>
     /// User-tunable rocket hardware parameters. One shared instance lives on
-    /// TrainingAreaManager; the UI edits it and RocketAssembly applies it to
+    /// SimulationAreaHost; the UI edits it and RocketAssembly applies it to
     /// every active training/inference area.
     /// </summary>
     [Serializable]

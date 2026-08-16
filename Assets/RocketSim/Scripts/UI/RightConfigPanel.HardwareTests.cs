@@ -54,7 +54,7 @@ namespace RocketSim
 
             _stopHardwareTestButton = UIHelper.DangerButton("Stop test", () =>
             {
-                trainingAreaManager?.StopHardwareTest();
+                areaHost?.StopHardwareTest();
                 RefreshHardwareTestStatus();
             });
             _hardwareTestOptions.Add(_stopHardwareTestButton);
@@ -90,13 +90,13 @@ namespace RocketSim
         {
             if (_runActive) return;
             Dirty();
-            if (trainingAreaManager == null)
+            if (areaHost == null)
             {
-                Debug.LogError("[Panel] TrainingAreaManager not assigned.");
+                Debug.LogError("[Panel] SimulationAreaHost not assigned.");
                 return;
             }
 
-            trainingAreaManager.RunHardwareTest(testType);
+            areaHost.RunHardwareTest(testType);
             RefreshHardwareTestStatus();
         }
         /// <summary>
@@ -104,15 +104,15 @@ namespace RocketSim
         /// </summary>
         void RefreshHardwareTestStatus()
         {
-            bool isRunning = trainingAreaManager != null &&
-                             trainingAreaManager.HardwareTests != null &&
-                             trainingAreaManager.HardwareTests.IsRunning;
+            bool isRunning = areaHost != null &&
+                             areaHost.HardwareTests != null &&
+                             areaHost.HardwareTests.IsRunning;
 
             if (_stopHardwareTestButton != null)
                 _stopHardwareTestButton.style.display = isRunning ? DisplayStyle.Flex : DisplayStyle.None;
 
             if (_hardwareTestStatusLabel == null) return;
-            _hardwareTestStatusLabel.text = trainingAreaManager ? trainingAreaManager.HardwareTestStatus : "No hardware test manager assigned.";
+            _hardwareTestStatusLabel.text = areaHost ? areaHost.HardwareTestStatus : "No simulation area host assigned.";
         }
     }
 }

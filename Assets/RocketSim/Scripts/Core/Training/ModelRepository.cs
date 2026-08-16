@@ -31,6 +31,6 @@ namespace RocketSim
         /// <summary>
         /// Builds the error text shown when inference cannot find a run's model.
         /// </summary>
-        public static string MissingModelMessage(string runId) => $"[TrainingAreaManager] Model not found in Resources/{ResourcePath(runId)} " + $"— ensure the .onnx is at Assets/RocketSim/Resources/Models/{runId}.onnx";
+        public static string MissingModelMessage(string runId) => $"[SimulationAreaHost] Model not found in Resources/{ResourcePath(runId)} " + $"- ensure the .onnx is at Assets/RocketSim/Resources/Models/{runId}.onnx";
     }
 }

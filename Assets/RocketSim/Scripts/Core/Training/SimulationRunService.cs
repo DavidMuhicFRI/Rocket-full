@@ -4,14 +4,14 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    public sealed class RunConfigInfo
+    public sealed class SavedRunSummary
     {
         public ScenarioType scenario;
         public int revision;
         public string sessionSha256;
     }
 
-    public sealed class TrainingRunConfigs
+    public sealed class LoadedSimulationRun
     {
         public SimEnvironmentConfig envConfig;
         public RocketPartsConfig partsConfig;
@@ -41,11 +41,10 @@ namespace RocketSim
     }
 
     /// <summary>
-    /// Compatibility facade used by the current UI and launcher while session
-    /// ownership is moved into application services. Persistence itself belongs
-    /// exclusively to SimulationSessionStore.
+    /// Application service for discovering, validating, loading, and saving
+    /// runs. UI and launch code use this API instead of touching files.
     /// </summary>
-    internal static class TrainingRunRepository
+    public static class SimulationRunService
     {
         public static string GetResultsRoot() => SimulationSessionStore.ResultsRoot;
         public static string RunRoot(string runId) => SimulationSessionStore.RunRoot(runId);
@@ -55,7 +54,7 @@ namespace RocketSim
         /// configuration change only when the saved policy interface and network
         /// remain compatible with the checkpoint.
         /// </summary>
-        public static bool TryValidateRunDestination(
+        public static bool TryValidateTrainingDestination(
             string runId,
             bool resume,
             SimEnvironmentConfig requestedEnvironment,
@@ -117,25 +116,17 @@ namespace RocketSim
         /// Freezes and stores the complete session before the Python process is
         /// started. Every launch gets an immutable numbered revision.
         /// </summary>
-        public static string SaveTrainingConfigs(
-            string runId,
-            MLAgentsConfig mlConfig,
-            SimEnvironmentConfig envConfig,
-            RocketPartsConfig partsConfig,
-            string mlConfigPath,
-            string envConfigPath,
-            string partsConfigPath,
-            TelemetryConfig telemetryConfig,
-            bool resumed,
-            string initializedFromRunId,
+        public static SimulationSessionSnapshot SaveTrainingLaunch(
+            SimulationSessionConfig session,
+            RunLaunchRequest request,
             TrainingEnvironmentProvenance trainingEnvironment,
             string configuredTorchDevice)
         {
-            SimulationSessionConfig session = SimulationSessionConfig.Capture(
-                partsConfig,
-                envConfig,
-                mlConfig,
-                telemetryConfig);
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            string runId = request.RunId;
+            session = session.DeepCopy();
+            SimEnvironmentConfig envConfig = session.environment;
             int revision = SimulationSessionStore.NextRevision(runId);
             if (!SimulationSessionSnapshotFactory.TryCreate(
                     session,
@@ -144,12 +135,6 @@ namespace RocketSim
                     out SessionValidationResult validation))
                 throw new InvalidDataException(FirstValidationError(validation));
 
-            RunLaunchMode mode = resumed
-                ? RunLaunchMode.ResumeTraining
-                : string.IsNullOrWhiteSpace(initializedFromRunId)
-                    ? RunLaunchMode.NewTraining
-                    : RunLaunchMode.InitializeTraining;
-            var request = new RunLaunchRequest(runId, mode, initializedFromRunId);
             string runRoot = SimulationSessionStore.SaveSnapshot(
                 runId,
                 snapshot,
@@ -159,9 +144,9 @@ namespace RocketSim
 
             // ML-Agents receives a stable root-level path. The authoritative
             // copy remains beside the immutable session revision.
-            File.WriteAllText(Path.Combine(runRoot, mlConfigPath), session.learning.ToYAML());
+            File.WriteAllText(Path.Combine(runRoot, "TrainingConfig.yaml"), session.learning.ToYAML());
             SimulationSessionStore.SaveRuntimeState(runId, RunRuntimeState.Capture(envConfig));
-            return runRoot;
+            return snapshot;
         }
 
         public static bool TryValidateInitializationSource(
@@ -198,7 +183,7 @@ namespace RocketSim
             return true;
         }
 
-        public static bool TryValidateInferencePolicySchema(
+        public static bool TryValidatePolicySchema(
             string runId,
             RocketPartsConfig currentParts,
             out string error)
@@ -230,7 +215,7 @@ namespace RocketSim
         }
 
         /// <summary>Persists live curriculum progress without changing the frozen session.</summary>
-        public static void SaveEnvironmentState(string runId, SimEnvironmentConfig envConfig)
+        public static void SaveRuntimeState(string runId, SimEnvironmentConfig envConfig)
         {
             if (string.IsNullOrWhiteSpace(runId) || envConfig == null ||
                 !SimulationSessionStore.HasCurrentSession(runId))
@@ -238,7 +223,7 @@ namespace RocketSim
             SimulationSessionStore.SaveRuntimeState(runId, RunRuntimeState.Capture(envConfig));
         }
 
-        public static string[] ScanExistingRuns()
+        public static string[] ListRunIds()
         {
             try
             {
@@ -246,21 +231,21 @@ namespace RocketSim
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[TrainingRunRepository] Could not scan runs: {ex.Message}");
+                Debug.LogError($"[SimulationRunService] Could not scan runs: {ex.Message}");
                 return Array.Empty<string>();
             }
         }
 
-        public static bool HasCompleteRunConfig(string runId) =>
+        public static bool HasRun(string runId) =>
             SimulationSessionStore.HasCurrentSession(runId);
 
-        public static RunConfigInfo LoadRunInfo(string runId)
+        public static SavedRunSummary GetSummary(string runId)
         {
             try
             {
                 SimulationSessionConfig session = SimulationSessionStore.LoadLatest(runId);
                 SimulationSessionStore.TryLoadManifest(runId, out SimulationRunManifest manifest);
-                return new RunConfigInfo
+                return new SavedRunSummary
                 {
                     scenario = session.environment.scenario,
                     revision = manifest?.currentRevision ?? 0,
@@ -273,7 +258,7 @@ namespace RocketSim
             }
         }
 
-        public static TrainingRunConfigs LoadRunConfigs(
+        public static LoadedSimulationRun Load(
             string runId,
             bool includeRuntimeState = true)
         {
@@ -285,7 +270,7 @@ namespace RocketSim
             }
             session.environment.runId = runId;
             SimulationSessionStore.TryLoadManifest(runId, out SimulationRunManifest manifest);
-            return new TrainingRunConfigs
+            return new LoadedSimulationRun
             {
                 envConfig = session.environment,
                 partsConfig = session.vehicle,

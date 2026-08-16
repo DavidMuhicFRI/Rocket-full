@@ -35,10 +35,10 @@ namespace RocketSim
         void Awake()
         {
             _doc = GetComponent<UIDocument>();
-            launcher ??= GetComponent<TrainingLauncher>();
+            runCoordinator ??= GetComponent<SimulationRunCoordinator>();
 
-            if (launcher != null)
-                launcher.OnStateChanged += OnLauncherStateChanged;
+            if (runCoordinator != null)
+                runCoordinator.OnStateChanged += OnRunStateChanged;
 
             RequireSession().Config.EnsureSections();
         }
@@ -217,7 +217,7 @@ namespace RocketSim
             NotifySessionChanged();
             if (envConfig.behaviorType == BehaviorType.Inference &&
                 RunIdsEqual(_loadedInferenceRunId, envConfig.runId) &&
-                !TrainingRunRepository.TryValidateInferencePolicySchema(
+                !SimulationRunService.TryValidatePolicySchema(
                     envConfig.runId,
                     partsConfig,
                     out string compatibilityError))
@@ -228,7 +228,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Pushes pending UI changes, prepares telemetry, and asks the launcher
+        /// Pushes pending UI changes, freezes the draft, and asks the coordinator
         /// to start either training or inference.
         /// </summary>
         void OnLaunchClicked()
@@ -240,9 +240,9 @@ namespace RocketSim
                 ShowNotification(error, true);
                 return;
             }
-            if (trainingAreaManager.envConfig.behaviorType == BehaviorType.Inference && !CanStartLoadedInferenceRun())
+            if (areaHost.envConfig.behaviorType == BehaviorType.Inference && !CanStartLoadedInferenceRun())
             {
-                Debug.LogError($"[Panel] Cannot start inference because run '{trainingAreaManager.envConfig.runId}' has not been loaded with complete configs and a model.");
+                Debug.LogError($"[Panel] Cannot start inference because run '{areaHost.envConfig.runId}' has not been loaded with complete configs and a model.");
                 return;
             }
 
@@ -253,8 +253,6 @@ namespace RocketSim
                 _resumeRun = false;
             }
 
-            launcher.resumeIfExists = canResumeLoadedRun;
-            launcher.initializeFromRunId = canResumeLoadedRun ? string.Empty : _initializeFromRunId;
             // Launching accepts the imported preview as the current draft.
             RequireSession().CommitImport();
             _runActive = true;
@@ -264,7 +262,18 @@ namespace RocketSim
             {
                 // Mark the UI active before Launch so a synchronous Failed event
                 // can reliably unlock it again.
-                launcher.Launch(trainingAreaManager);
+                RunLaunchMode launchMode = envConfig.behaviorType == BehaviorType.Inference
+                    ? envConfig.inferencePurpose == InferencePurpose.StandardEvaluation
+                        ? RunLaunchMode.Evaluation
+                        : RunLaunchMode.ManualInference
+                    : canResumeLoadedRun
+                        ? RunLaunchMode.ResumeTraining
+                        : string.IsNullOrWhiteSpace(_initializeFromRunId)
+                            ? RunLaunchMode.NewTraining
+                            : RunLaunchMode.InitializeTraining;
+                runCoordinator.Launch(
+                    areaHost,
+                    new RunLaunchRequest(envConfig.runId, launchMode, _initializeFromRunId));
             }
             catch (Exception ex)
             {
@@ -281,8 +290,8 @@ namespace RocketSim
         /// </summary>
         void OnStopClicked()
         {
-            launcher?.StopTraining();
-            trainingAreaManager?.StopActiveRunAndShowPreview();
+            runCoordinator?.StopRun();
+            areaHost?.StopActiveRunAndShowPreview();
             _runActive = false;
             SetConfigurationLocked(false);
             ShowNotification("Run stopped. Settings can be edited again.", false);
@@ -292,19 +301,19 @@ namespace RocketSim
         /// Handles asynchronous launcher failure. A failed Python process must
         /// unlock the panel because no later Stop event is guaranteed to arrive.
         /// </summary>
-        void OnLauncherStateChanged(TrainingLauncher.TrainingState state)
+        void OnRunStateChanged(SimulationRunCoordinator.RunState state)
         {
-            if (state == TrainingLauncher.TrainingState.Failed)
+            if (state == SimulationRunCoordinator.RunState.Failed)
             {
                 _runActive = false;
                 SetConfigurationLocked(false);
                 ShowNotification("Training could not start. Check the Unity console and trainer environment.", true);
             }
-            else if (state == TrainingLauncher.TrainingState.Completed)
+            else if (state == SimulationRunCoordinator.RunState.Completed)
             {
                 _runActive = false;
                 SetConfigurationLocked(false);
-                string summary = launcher != null ? launcher.LastEvaluationSummaryPath : null;
+                string summary = runCoordinator != null ? runCoordinator.LastEvaluationSummaryPath : null;
                 ShowNotification(
                     string.IsNullOrWhiteSpace(summary)
                         ? "Evaluation completed."
@@ -325,7 +334,7 @@ namespace RocketSim
                     ? "Start Evaluation"
                     : "Start Manual Inference";
 
-            bool canStart = launcher != null && trainingAreaManager != null && HasValidRunId(envConfig.runId);
+            bool canStart = runCoordinator != null && areaHost != null && HasValidRunId(envConfig.runId);
 
             if (canStart && envConfig.behaviorType == BehaviorType.Inference)
                 canStart = CanStartLoadedInferenceRun();
@@ -344,8 +353,8 @@ namespace RocketSim
         {
             error = "";
             warning = "";
-            if (launcher == null) { error = "TrainingLauncher is not assigned."; return false; }
-            if (trainingAreaManager == null) { error = "TrainingAreaManager is not assigned."; return false; }
+            if (runCoordinator == null) { error = "SimulationRunCoordinator is not assigned."; return false; }
+            if (areaHost == null) { error = "SimulationAreaHost is not assigned."; return false; }
             if (!HasValidRunId(envConfig.runId)) { error = "Run ID cannot be empty."; return false; }
             if (partsConfig.GetActiveEngineCount() <= 0) { error = "The vehicle needs at least one active engine."; return false; }
             if (partsConfig.EstimatedMaxFuelCapacity() <= 0f || partsConfig.startFuelMass <= 0f) { error = "Starting fuel must be greater than zero."; return false; }
@@ -383,7 +392,7 @@ namespace RocketSim
                     : $"{warning}\n{objectiveWarning}";
             }
             if (envConfig.behaviorType == BehaviorType.Training &&
-                !TrainingRunRepository.TryValidateRunDestination(
+                !SimulationRunService.TryValidateTrainingDestination(
                     envConfig.runId,
                     _resumeRun,
                     envConfig,
@@ -396,7 +405,7 @@ namespace RocketSim
             }
             if (envConfig.behaviorType == BehaviorType.Training &&
                 !_resumeRun &&
-                !TrainingRunRepository.TryValidateInitializationSource(
+                !SimulationRunService.TryValidateInitializationSource(
                     _initializeFromRunId,
                     partsConfig,
                     mlConfig,
@@ -489,8 +498,8 @@ namespace RocketSim
         {
             return HasValidRunId(envConfig.runId) &&
                    RunIdsEqual(_loadedInferenceRunId, envConfig.runId) &&
-                   TrainingRunRepository.HasCompleteRunConfig(envConfig.runId) &&
-                   TrainingRunRepository.TryValidateInferencePolicySchema(
+                   SimulationRunService.HasRun(envConfig.runId) &&
+                   SimulationRunService.TryValidatePolicySchema(
                        envConfig.runId,
                        partsConfig,
                        out _) &&
@@ -641,8 +650,8 @@ namespace RocketSim
         /// </summary>
         void OnDestroy()
         {
-            if (launcher != null)
-                launcher.OnStateChanged -= OnLauncherStateChanged;
+            if (runCoordinator != null)
+                runCoordinator.OnStateChanged -= OnRunStateChanged;
             if (_previewCamera != null)
                 _previewCamera.rect = new Rect(0f, 0f, 1f, 1f);
             RestoreDefaultCursor();

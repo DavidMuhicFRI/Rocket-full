@@ -15,7 +15,7 @@ namespace RocketSim
     //
     //  Physics constants come from RocketAssembly.GetPhysicsConfig()
     //
-    //  envConfig is a SHARED reference set by TrainingAreaManager at spawn time.
+    //  envConfig is a frozen runtime reference set by SimulationAreaHost at spawn time.
     //  The right-side panel writes to the same object — all agents see changes.
     //
     // ============================================================================
@@ -29,14 +29,14 @@ namespace RocketSim
         [Tooltip("Guidance/capture reference point near the grid-fin hardpoint.")]
         public Transform catchFrame;
 
-        [Header("Configs — assigned by TrainingAreaManager via ConfigBridge")]
+        [Header("Configs - assigned by SimulationAreaHost")]
         public SimEnvironmentConfig envConfig = new();
         
         // Sensors
         RocketSensorPackage _sensors = new();
         
         // Telemetry identity
-        int _areaIndex;   // set by TrainingAreaManager after spawn
+        int _areaIndex;   // set by SimulationAreaHost after spawn
         int _episode;
         int _step;
         float _stepReward;   // accumulator so we can log reward per step

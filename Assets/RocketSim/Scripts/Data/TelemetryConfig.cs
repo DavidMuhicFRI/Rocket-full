@@ -34,7 +34,7 @@ namespace RocketSim
         [Tooltip("Writes one detailed training trajectory row every N physics steps. Episode statistics still consume every physics step, and evaluation always logs every step.")]
         public int trainingStepLogInterval = 10;
 
-        // ── Set by TrainingAreaManager at Launch from partsConfig ─────────────
+        // ── Set by SimulationAreaHost at launch from the vehicle config ──────
         [HideInInspector] public int  activeEngineCount   = 1;
         [HideInInspector] public bool independentEngines  = false;
         [HideInInspector] public int  activeFinCount      = 4;
