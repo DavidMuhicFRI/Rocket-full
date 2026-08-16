@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/ChopstickCaptureEvaluator.cs
+// File: Assets/RocketSim/Scripts/Core/Tasks/Landing/ChopstickCaptureEvaluator.cs
 // Purpose: Performs the final all-limits kinematic check for chopstick capture:
 // position, total/axis speed, tilt, angular rate, uprightness, and yaw error.
 // Documentation: Comments in this file use plain language to describe intent,

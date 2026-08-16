@@ -46,6 +46,7 @@ namespace RocketSim
 
         readonly List<RocketAssembly> _assemblies = new();
         readonly List<FalconAgent> _agents = new();
+        readonly CurriculumController _curriculum = new();
 
         int _totalEpisodes;
         bool _activeRunSpawned;
@@ -136,8 +137,7 @@ namespace RocketSim
             }
 
             PrepareTelemetrySchema();
-            envConfig.ApplyHoverTrackCurriculum();
-            envConfig.ApplyActiveLandingCurriculum();
+            _curriculum.Apply(envConfig);
 
             // Inference should not trigger ML-Agents' editor trainer handshake
             // on port 5004. This must be set before the Agent enables and the
@@ -389,17 +389,13 @@ namespace RocketSim
 
             if (envConfig.behaviorType != BehaviorType.Training) return;
 
-            if (envConfig.scenario == ScenarioType.HoverTracking)
+            if (envConfig.scenario == ScenarioType.HoverTracking || envConfig.scenario.IsLanding())
             {
-                envConfig.RecordHoverTrackCurriculumEpisode(successfulEpisode, instanceCount);
-                PersistCurriculumStateIfBatchComplete();
-                return;
-            }
-
-            if (envConfig.scenario.IsLanding())
-            {
-                if (includeInCurriculumEstimate)
-                    envConfig.RecordLandingCurriculumEpisode(successfulEpisode, instanceCount);
+                _curriculum.RecordEpisode(
+                    envConfig,
+                    successfulEpisode,
+                    includeInCurriculumEstimate,
+                    instanceCount);
                 PersistCurriculumStateIfBatchComplete();
             }
         }
@@ -447,7 +443,7 @@ namespace RocketSim
             if (envConfig.scenario != ScenarioType.HoverTracking) return;
             if (envConfig.behaviorType != BehaviorType.Training) return;
 
-            envConfig.hoverTrackCurriculumSuccesses++;
+            _curriculum.RecordTargetCapture(envConfig);
         }
 
         /// <summary>

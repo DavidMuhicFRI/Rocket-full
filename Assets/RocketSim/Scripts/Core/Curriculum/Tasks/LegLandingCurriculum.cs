@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Environment/LegLandingCurriculumState.cs
+// File: Assets/RocketSim/Scripts/Core/Curriculum/Tasks/LegLandingCurriculum.cs
 // Purpose: Gives physical leg landing independent curriculum progress while
 // reusing the landing profile shape and adaptive/monotonic comparison modes.
 // -----------------------------------------------------------------------------

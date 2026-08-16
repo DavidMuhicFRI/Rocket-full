@@ -48,8 +48,9 @@ namespace RocketSim
         {
             if (envConfig != null && envConfig.scenario == ScenarioType.ChopstickLanding && catchFrame)
                 return catchFrame.position;
-            if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding && _landingLegs && _landingLegs.FeetFrame)
-                return _landingLegs.FeetFrame.position;
+            if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding &&
+                _legLanding.Legs && _legLanding.Legs.FeetFrame)
+                return _legLanding.Legs.FeetFrame.position;
             return transform.position;
         }
 
@@ -69,8 +70,8 @@ namespace RocketSim
             if (envConfig != null && envConfig.scenario == ScenarioType.ChopstickLanding && catchFrame && rb)
                 return rb.GetPointVelocity(catchFrame.position);
             if (envConfig != null && envConfig.scenario == ScenarioType.LegLanding &&
-                _landingLegs && _landingLegs.FeetFrame && rb)
-                return rb.GetPointVelocity(_landingLegs.FeetFrame.position);
+                _legLanding.Legs && _legLanding.Legs.FeetFrame && rb)
+                return rb.GetPointVelocity(_legLanding.Legs.FeetFrame.position);
             return rb ? rb.linearVelocity : Vector3.zero;
         }
 
@@ -89,56 +90,37 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Creates or finds the generated chopstick capture platform near the
-        /// target pad when the catch scenario needs it.
-        /// </summary>
-        void EnsureChopstickPlatform()
-        {
-            if (_chopstickPlatform || !targetPad)
-                return;
-
-            Transform parent = targetPad.parent ? targetPad.parent : transform.parent;
-            if (!parent)
-                return;
-
-            _chopstickPlatform = ChopstickCatchPlatformFactory.Ensure(parent);
-        }
-
-        /// <summary>
         /// Reconfigures the generated visual platform and logical capture box
         /// from the episode's frozen curriculum profile.
         /// </summary>
         void UpdateChopstickPlatformGeometry()
         {
-            if (envConfig == null || envConfig.scenario != ScenarioType.ChopstickLanding || !envConfig.landingPlatformEnabled)
-            {
-                if (_chopstickPlatform)
-                    _chopstickPlatform.DisablePlatform();
-                return;
-            }
+            bool enabled = envConfig != null &&
+                           envConfig.scenario == ScenarioType.ChopstickLanding &&
+                           envConfig.landingPlatformEnabled &&
+                           targetPad;
+            Transform parent = targetPad
+                ? targetPad.parent ? targetPad.parent : transform.parent
+                : null;
+            Vector3 localCenter = targetPad
+                ? new Vector3(
+                    targetPad.localPosition.x,
+                    ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
+                    targetPad.localPosition.z)
+                : Vector3.zero;
 
-            EnsureChopstickPlatform();
-            if (!_chopstickPlatform || !targetPad)
-                return;
-
-            Vector3 localCenter = new(
-                targetPad.localPosition.x,
-                ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig),
-                targetPad.localPosition.z);
-
-            _chopstickPlatform.Configure(
+            _chopstickLanding.ConfigurePlatform(
+                enabled,
+                parent,
                 localCenter,
-                envConfig.landingTargetYawDeg,
+                envConfig != null ? envConfig.landingTargetYawDeg : 0f,
                 ActiveLandingProfile.platformHalfSize);
         }
 
         /// <summary>Clears per-episode capture and stability state.</summary>
         void ResetChopstickPlatformState()
         {
-            _landingPlatformInsideCapture = false;
-            _landingPlatformStable = false;
-            _landingPlatformBecameStable = false;
-            _landingPlatformStableTime = 0f;
+            _chopstickLanding.Reset();
             _landingEpisodeStartAltitude = 0f;
             _landingEpisodeFlyawayAltitude = 0f;
         }
@@ -169,33 +151,19 @@ namespace RocketSim
         /// </summary>
         void UpdateChopstickPlatformState(float dt)
         {
-            _landingPlatformBecameStable = false;
-            if (envConfig == null ||
-                envConfig.scenario != ScenarioType.ChopstickLanding ||
-                !envConfig.landingPlatformEnabled ||
-                !_chopstickPlatform)
-            {
-                _landingPlatformInsideCapture = false;
-                _landingPlatformStable = false;
-                _landingPlatformStableTime = 0f;
-                return;
-            }
-
-            bool wasStable = _landingPlatformStable;
-            _landingPlatformInsideCapture = _chopstickPlatform.ContainsWorldPoint(ScenarioReferenceWorldPosition());
-            bool platformReady = ChopstickPlatformKinematicsReady();
-
-            if (platformReady)
-                _landingPlatformStableTime += Mathf.Max(0f, dt);
-            else
-                _landingPlatformStableTime = 0f;
-
-            float requiredHold = envConfig
-                .GetTrainingObjective(ScenarioType.ChopstickLanding)
-                .terminations.landingStableHoldSeconds.At(_objectiveDifficulty01);
-            _landingPlatformStable = platformReady &&
-                _landingPlatformStableTime >= Mathf.Max(0f, requiredHold);
-            _landingPlatformBecameStable = !wasStable && _landingPlatformStable;
+            bool enabled = envConfig != null &&
+                           envConfig.scenario == ScenarioType.ChopstickLanding &&
+                           envConfig.landingPlatformEnabled;
+            float requiredHold = enabled
+                ? envConfig.GetTrainingObjective(ScenarioType.ChopstickLanding)
+                    .terminations.landingStableHoldSeconds.At(_objectiveDifficulty01)
+                : 0f;
+            _chopstickLanding.Step(
+                enabled,
+                ScenarioReferenceWorldPosition(),
+                ChopstickPlatformKinematicsReady,
+                requiredHold,
+                dt);
         }
 
         /// <summary>

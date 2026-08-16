@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/LegLandingContactEvaluator.cs
+// File: Assets/RocketSim/Scripts/Core/Tasks/Landing/LegLandingContactEvaluator.cs
 // Purpose: Contains pure, testable rules for safe first contact and stable
 // multi-foot pad contact.
 // -----------------------------------------------------------------------------

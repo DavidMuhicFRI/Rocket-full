@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/LandingGearCollider.cs
+// File: Assets/RocketSim/Scripts/Core/Tasks/Landing/LandingGearCollider.cs
 // Purpose: Identifies foot and strut colliders inside the generated compound
 // landing gear so contact callbacks can distinguish safe support from a strike.
 // -----------------------------------------------------------------------------

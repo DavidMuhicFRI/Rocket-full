@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/LandingPadSurface.cs
+// File: Assets/RocketSim/Scripts/Core/Tasks/Landing/LandingPadSurface.cs
 // Purpose: Identifies the reusable physical pad and exposes its measured top
 // surface/bounds to spawning, observations, and landing-contact evaluation.
 // -----------------------------------------------------------------------------

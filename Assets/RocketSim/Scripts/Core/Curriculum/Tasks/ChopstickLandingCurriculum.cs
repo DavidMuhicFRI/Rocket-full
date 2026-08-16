@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Environment/LandingCurriculumState.cs
+// File: Assets/RocketSim/Scripts/Core/Curriculum/Tasks/ChopstickLandingCurriculum.cs
 // Purpose: Defines the shared landing-profile curve and tracks the chopstick
 // task's independent continuous curriculum state.
 // Documentation: Comments in this file use plain language to describe intent,

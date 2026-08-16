@@ -62,6 +62,21 @@ advances those state machines, and applies their final state to the vehicle.
 RCS indexing is defined once in `RcsHardwareLayout`; the component owns pod and
 force-point lookup, while presentation helpers own generated geometry and plumes.
 
+## Tasks and curriculum
+
+`CurriculumController` is the single runtime entry point for applying, resetting,
+and advancing curriculum state. It routes events to the selected task package;
+the hover-tracking, chopstick-landing, and leg-landing files own only their own
+continuous profiles and success-rate progression.
+
+The agent's scenario bridge is split by purpose: `FalconAgent.Spawning` samples
+feasible initial states and `FalconAgent.Guidance` handles target geometry and
+hover capture. Landing details live under `Core/Tasks/Landing`. The kinematic
+chopstick runtime owns its generated platform and hold timer, while the physical
+leg runtime owns buffered contacts, touchdown measurements, stability, and
+rebound detection. `FalconAgent` supplies current motion and forwards Unity
+collision callbacks; it no longer stores either landing task's internal state.
+
 ## Training
 
 The coordinator validates the complete session, checks checkpoint compatibility,

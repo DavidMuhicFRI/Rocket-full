@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Environment/HoverTrackCurriculumConfig.cs
+// File: Assets/RocketSim/Scripts/Core/Curriculum/Tasks/HoverTrackingCurriculum.cs
 // Purpose: Tracks hover-target training success and continuously turns that
 // success into harder target movement while objective thresholds interpolate
 // independently from the same normalized difficulty value.

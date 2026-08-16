@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: Assets/RocketSim/Scripts/Core/Landing/ChopstickCatchPlatform.cs
+// File: Assets/RocketSim/Scripts/Core/Tasks/Landing/ChopstickCatchPlatform.cs
 // Purpose: Builds and updates the runtime chopstick-catch target, including its visible
 // non-colliding geometry and logical capture trigger.
 // Documentation: Comments in this file use plain language to describe intent,
@@ -38,6 +38,23 @@ namespace RocketSim
 
         public bool TriggerActive { get; private set; }
         public float HalfSize => _halfSize;
+
+        /// <summary>
+        /// Finds the area platform or creates it once. Platform creation belongs
+        /// to the platform type, so callers do not need a separate factory.
+        /// </summary>
+        public static ChopstickCatchPlatform Ensure(Transform parent)
+        {
+            if (!parent) return null;
+
+            ChopstickCatchPlatform existing =
+                parent.GetComponentInChildren<ChopstickCatchPlatform>(true);
+            if (existing) return existing;
+
+            var platform = new GameObject("ChopstickCatchPlatform");
+            platform.transform.SetParent(parent, false);
+            return platform.AddComponent<ChopstickCatchPlatform>();
+        }
 
         /// <summary>
         /// Positions, scales, and activates the generated catch envelope. The
