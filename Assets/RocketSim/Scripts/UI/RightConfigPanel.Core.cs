@@ -29,8 +29,8 @@ namespace RocketSim
         };
 
         /// <summary>
-        /// Initializes the panel component and keeps any config references that
-        /// ConfigBridge already wired before this Awake call.
+        /// Initializes the panel after ConfigBridge has supplied the one shared
+        /// session draft.
         /// </summary>
         void Awake()
         {
@@ -40,10 +40,7 @@ namespace RocketSim
             if (launcher != null)
                 launcher.OnStateChanged += OnLauncherStateChanged;
 
-            partsConfig ??= new RocketPartsConfig();
-            telemetryConfig ??= new TelemetryConfig();
-            envConfig ??= new SimEnvironmentConfig();
-            mlConfig ??= new MLAgentsConfig();
+            RequireSession().Config.EnsureSections();
         }
 
         /// <summary>
@@ -217,7 +214,7 @@ namespace RocketSim
         {
             if (_runActive) return;
             ApplyCurrentScenarioHardwareDefaults();
-            trainingAreaManager?.ApplyPartsConfigToAll();
+            NotifySessionChanged();
             if (envConfig.behaviorType == BehaviorType.Inference &&
                 RunIdsEqual(_loadedInferenceRunId, envConfig.runId) &&
                 !TrainingRunRepository.TryValidateInferencePolicySchema(
@@ -258,6 +255,8 @@ namespace RocketSim
 
             launcher.resumeIfExists = canResumeLoadedRun;
             launcher.initializeFromRunId = canResumeLoadedRun ? string.Empty : _initializeFromRunId;
+            // Launching accepts the imported preview as the current draft.
+            RequireSession().CommitImport();
             _runActive = true;
             SetConfigurationLocked(true);
             ShowNotification(string.IsNullOrEmpty(warning) ? "Settings are locked until the run stops." : warning, false);
@@ -673,12 +672,10 @@ namespace RocketSim
 
             if (mode == BehaviorType.Inference)
             {
-                _trainingPartsSnapshot = CloneConfig(partsConfig);
-                _trainingEnvSnapshot = CloneConfig(envConfig);
-                _trainingMlSnapshot = CloneConfig(mlConfig);
+                _trainingSessionSnapshot = RequireSession().Config.DeepCopy();
                 _loadedInferenceRunId = null;
                 envConfig.behaviorType = BehaviorType.Inference;
-                SyncManagerConfigs();
+                NotifySessionChanged(SessionChangeKind.All);
                 RebuildUI();
             }
             else
@@ -704,20 +701,16 @@ namespace RocketSim
         /// </summary>
         void RestoreTrainingMode()
         {
-            if (_trainingPartsSnapshot != null && _trainingEnvSnapshot != null)
-            {
-                partsConfig = _trainingPartsSnapshot;
-                envConfig   = _trainingEnvSnapshot;
-                if (_trainingMlSnapshot != null)
-                    mlConfig = _trainingMlSnapshot;
-            }
+            if (_trainingSessionSnapshot != null)
+                RequireSession().Replace(_trainingSessionSnapshot);
+            RequireSession().CommitImport();
 
             _showLoadedRunBanner  = false;
             _resumeRun            = false;
             _loadedConfigRunId    = null;
             _loadedInferenceRunId = null;
             envConfig.behaviorType = BehaviorType.Training;
-            SyncManagerConfigs();
+            NotifySessionChanged(SessionChangeKind.All);
 
             Dirty();
             RebuildUI();
@@ -725,24 +718,12 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Pushes the panel's current config object references into the training manager.
+        /// Notifies the manager that the panel replaced one or more session
+        /// sections. Kept as a small named operation at cross-tab call sites.
         /// </summary>
         void SyncManagerConfigs()
         {
-            if (trainingAreaManager == null) return;
-
-            trainingAreaManager.partsConfig = partsConfig;
-            trainingAreaManager.envConfig   = envConfig;
-            trainingAreaManager.mlConfig    = mlConfig;
-        }
-
-        /// <summary>
-        /// Creates an independent JSON copy of a serializable config before
-        /// inference temporarily replaces the training configuration.
-        /// </summary>
-        static T CloneConfig<T>(T config)
-        {
-            return JsonUtility.FromJson<T>(JsonUtility.ToJson(config));
+            NotifySessionChanged(SessionChangeKind.All);
         }
 
         /// <summary>

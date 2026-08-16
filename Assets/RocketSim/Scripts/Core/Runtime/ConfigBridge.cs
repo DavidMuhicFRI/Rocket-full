@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Runtime/ConfigBridge.cs
-// Purpose: Points the right panel at TrainingAreaManager's canonical shared
-// configuration objects before the panel builds, preventing duplicate config state.
+// Purpose: Gives the right panel TrainingAreaManager's canonical session draft
+// before the panel builds, preventing duplicate configuration state.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -10,9 +10,8 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    // Wires the four shared config objects from TrainingAreaManager into
-    // RightConfigPanel, then triggers a full UI rebuild so the panel
-    // displays the current values.
+    // Gives the panel the manager-owned session draft. Both sides then read the
+    // same sections instead of synchronizing four replaceable object references.
     //
     // Runs before RightConfigPanel.Start() so the panel builds from the
     // manager-owned config objects instead of temporary local defaults.
@@ -34,12 +33,7 @@ namespace RocketSim
                 return;
             }
 
-            // Point panel at the manager's canonical config objects
-            panel.partsConfig         = manager.partsConfig;
-            panel.telemetryConfig     = manager.telemetryConfig;
-            panel.envConfig           = manager.envConfig;
-            panel.mlConfig            = manager.mlConfig;
-            panel.trainingAreaManager = manager;
+            panel.BindSession(manager.SessionDraft, manager);
         }
 
     }

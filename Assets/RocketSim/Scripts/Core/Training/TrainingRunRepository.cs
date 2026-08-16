@@ -273,11 +273,16 @@ namespace RocketSim
             }
         }
 
-        public static TrainingRunConfigs LoadRunConfigs(string runId)
+        public static TrainingRunConfigs LoadRunConfigs(
+            string runId,
+            bool includeRuntimeState = true)
         {
             SimulationSessionConfig session = SimulationSessionStore.LoadLatest(runId);
-            RunRuntimeState runtimeState = SimulationSessionStore.LoadRuntimeState(runId);
-            runtimeState.ApplyTo(session.environment);
+            if (includeRuntimeState)
+            {
+                RunRuntimeState runtimeState = SimulationSessionStore.LoadRuntimeState(runId);
+                runtimeState.ApplyTo(session.environment);
+            }
             session.environment.runId = runId;
             SimulationSessionStore.TryLoadManifest(runId, out SimulationRunManifest manifest);
             return new TrainingRunConfigs

@@ -68,9 +68,11 @@ curriculum counters are stored separately in `RuntimeState.json`; updating
 progress therefore cannot rewrite the configuration that launched a checkpoint.
 
 Enabling **Resume Run** restores the saved session, including rewards, and
-rebuilds the panel from it. Selecting **Initialize From** keeps the new run's
-configuration but loads a compatible source checkpoint. The user can edit the
-draft before launching.
+rebuilds the panel from it. Selecting **Initialize From** previews the source
+checkpoint's complete saved session while preserving the target Run ID. The user
+can edit compatible values before launching. Turning Resume off or choosing
+Initialize From **None** restores the local draft that was visible before the
+saved run was applied, including the dummy vehicle preview.
 
 Starting or resuming creates a new immutable session revision. Earlier revisions
 remain available, so a reward or environment change never erases what an older

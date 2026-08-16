@@ -42,6 +42,17 @@ namespace RocketSim
         }
 
         /// <summary>
+        /// Replaces the editable value without treating it as a run import.
+        /// This is used for deliberate mode changes and local reset actions.
+        /// </summary>
+        public void Replace(SimulationSessionConfig replacement)
+        {
+            if (replacement == null) throw new ArgumentNullException(nameof(replacement));
+            _config = replacement.DeepCopy();
+            Changed?.Invoke(SessionChangeKind.All);
+        }
+
+        /// <summary>
         /// Applies a loaded run while retaining the local draft that existed
         /// before the first import. Loading another run does not erase it.
         /// </summary>

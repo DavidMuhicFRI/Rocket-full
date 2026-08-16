@@ -123,7 +123,7 @@ namespace RocketSim
                 initializeFromField.AddToClassList("rs-enum-field");
                 initializeFromField.AddToClassList("rs-initialize-from-field");
                 initializeFromField.tooltip =
-                    "Starts a new run from a prior checkpoint and restores that run's saved reward setup. Resume continues the same run instead.";
+                    "Starts a new run from a prior checkpoint and previews its complete saved session. Resume continues the same run instead.";
                 initializeFromField.SetEnabled(!_resumeRun);
                 initializeFromField.RegisterValueChangedCallback(evt =>
                 {
@@ -132,10 +132,15 @@ namespace RocketSim
                     {
                         try
                         {
-                            ApplyRunRewards(_initializeFromRunId);
-                            BuildRewardsTab(_tabContents[RewardsTab]);
+                            string targetRunId = envConfig.runId;
+                            ApplyRunConfigs(
+                                _initializeFromRunId,
+                                preserveBehaviorType: true,
+                                includeRuntimeState: false);
+                            envConfig.runId = targetRunId;
+                            RebuildUI();
                             ShowNotification(
-                                $"Applied reward setup from '{_initializeFromRunId}'.",
+                                $"Applied session from '{_initializeFromRunId}'.",
                                 false);
                         }
                         catch (Exception ex)
@@ -146,12 +151,17 @@ namespace RocketSim
                             ShowNotification("Could not load the selected run's rewards.", true);
                         }
                     }
+                    else if (RestoreSessionBeforeRunImport())
+                    {
+                        RebuildUI();
+                        ShowNotification("Restored the setup from before checkpoint initialization.", false);
+                    }
                     Dirty();
                     RefreshStartButton();
                 });
                 c.Add(initializeFromField);
                 c.Add(BuildGroupDetail(
-                    "Initialization restores the source reward setup and requires matching engine, fin, and RCS policy channels plus matching network settings."));
+                    "Initialization previews the source session. You may edit compatible values; engine, fin, RCS policy channels, and network shape must still match the checkpoint."));
             }
 
             var banner = new VisualElement();
@@ -199,12 +209,15 @@ namespace RocketSim
             // Clears state that became invalid after the Run ID changed.
             void ClearResumeState()
             {
+                bool restored = RestoreSessionBeforeRunImport();
                 _resumeRun = false;
                 _loadedConfigRunId = null;
                 _showLoadedRunBanner = false;
                 resumeToggle.SetValueWithoutNotify(false);
                 initializeFromField?.SetEnabled(true);
                 banner.style.display = DisplayStyle.None;
+                if (restored)
+                    RebuildUI();
             }
 
             // Sanitizes input, updates resume availability, and refreshes suggestions.
@@ -332,9 +345,15 @@ namespace RocketSim
                 }
                 else
                 {
+                    bool restored = RestoreSessionBeforeRunImport();
                     _loadedConfigRunId = null;
                     _showLoadedRunBanner = false;
                     banner.style.display = DisplayStyle.None;
+                    if (restored)
+                    {
+                        RebuildUI();
+                        ShowNotification("Restored the setup from before Resume was enabled.", false);
+                    }
                 }
             });
 
@@ -639,9 +658,12 @@ namespace RocketSim
         /// Loads saved environment, hardware, and trainer configs for a run and
         /// wires them back into the panel and manager.
         /// </summary>
-        void ApplyRunConfigs(string runId, bool preserveBehaviorType)
+        void ApplyRunConfigs(
+            string runId,
+            bool preserveBehaviorType,
+            bool includeRuntimeState = true)
         {
-            var loaded = TrainingRunRepository.LoadRunConfigs(runId);
+            var loaded = TrainingRunRepository.LoadRunConfigs(runId, includeRuntimeState);
 
             if (preserveBehaviorType)
             {
@@ -657,28 +679,22 @@ namespace RocketSim
             }
             loaded.envConfig.runId = runId;
 
-            envConfig   = loaded.envConfig;
-            partsConfig = loaded.partsConfig;
-            mlConfig    = loaded.mlConfig;
+            var imported = new SimulationSessionConfig
+            {
+                vehicle = loaded.partsConfig,
+                environment = loaded.envConfig,
+                objective = loaded.envConfig.EnsureTrainingObjective(),
+                learning = loaded.mlConfig,
+                telemetry = loaded.telemetryConfig
+            };
+            imported.EnsureSections();
+            RequireSession().ApplyImportedSession(imported);
             ApplyCurrentScenarioHardwareDefaults();
             ApplyObjectiveDerivedState(envConfig.scenario);
 
-            SyncManagerConfigs();
+            NotifySessionChanged(SessionChangeKind.All);
             Dirty();
         }
 
-        /// <summary>
-        /// Restores only a source run's complete reward objective. Initialize
-        /// From intentionally leaves the target task, environment, vehicle, and
-        /// trainer settings under the user's control while reusing its checkpoint.
-        /// </summary>
-        void ApplyRunRewards(string runId)
-        {
-            envConfig.trainingObjective =
-                TrainingRunRepository.LoadTrainingObjective(runId);
-            envConfig.EnsureTrainingObjective();
-            ApplyObjectiveDerivedState(envConfig.scenario);
-            SyncManagerConfigs();
-        }
     }
 }

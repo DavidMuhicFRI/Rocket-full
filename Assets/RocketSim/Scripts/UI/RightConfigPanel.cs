@@ -45,15 +45,10 @@ namespace RocketSim
         public Texture2D finImg3;
 
         // ── Set by ConfigBridge ───────────────────────────────────────────────
-        [HideInInspector] public RocketPartsConfig partsConfig;
-        [HideInInspector] public TelemetryConfig telemetryConfig;
-        [HideInInspector] public SimEnvironmentConfig envConfig;
-        [HideInInspector] public MLAgentsConfig mlConfig;
+        private SimulationSessionDraft _sessionDraft;
         [HideInInspector] public TrainingAreaManager trainingAreaManager;
 
-        private RocketPartsConfig _trainingPartsSnapshot;
-        private SimEnvironmentConfig _trainingEnvSnapshot;
-        private MLAgentsConfig _trainingMlSnapshot;
+        private SimulationSessionConfig _trainingSessionSnapshot;
 
         // ── Internal state ────────────────────────────────────────────────────
         private UIDocument _doc;

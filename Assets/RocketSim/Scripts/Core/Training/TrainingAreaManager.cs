@@ -39,6 +39,13 @@ namespace RocketSim
         public SimEnvironmentConfig envConfig = new();
         public MLAgentsConfig mlConfig = new();
 
+        /// <summary>
+        /// Canonical mutable setup used by the configuration UI. The four
+        /// serialized fields above bootstrap a new scene; after Awake all
+        /// consumers use the sections owned by this draft.
+        /// </summary>
+        public SimulationSessionDraft SessionDraft { get; private set; }
+
         readonly List<RocketAssembly> _assemblies = new();
         readonly List<FalconAgent> _agents = new();
 
@@ -62,6 +69,13 @@ namespace RocketSim
         {
             partsConfig.NormalizeSelectedPreset();
             ApplyCurrentScenarioHardwareDefaults();
+            SessionDraft = new SimulationSessionDraft(SimulationSessionConfig.Capture(
+                partsConfig,
+                envConfig,
+                mlConfig,
+                telemetryConfig));
+            SessionDraft.Changed += OnSessionDraftChanged;
+            BindSessionSections();
 
             if (trainingAreaPrefab == null)
             {
@@ -73,6 +87,35 @@ namespace RocketSim
                 Debug.LogError("[TrainingAreaManager] dummyAreaPrefab not assigned.");
             }
             else SpawnDummyAreas();
+        }
+
+        /// <summary>
+        /// Points the manager's temporary section aliases at the one session
+        /// draft. These aliases keep the runtime code readable while ownership
+        /// remains unambiguous.
+        /// </summary>
+        void BindSessionSections()
+        {
+            SimulationSessionConfig session = SessionDraft.Config;
+            partsConfig = session.vehicle;
+            envConfig = session.environment;
+            mlConfig = session.learning;
+            telemetryConfig = session.telemetry;
+        }
+
+        /// <summary>
+        /// Applies only the preview work affected by a panel edit. Active runs
+        /// are frozen snapshots, so draft edits never modify their agents.
+        /// </summary>
+        void OnSessionDraftChanged(SessionChangeKind change)
+        {
+            BindSessionSections();
+            if (_activeRunSpawned) return;
+
+            if (change == SessionChangeKind.All ||
+                change == SessionChangeKind.Vehicle ||
+                change == SessionChangeKind.Task)
+                ApplyPartsConfigToAll();
         }
 
         /// <summary>
@@ -441,7 +484,12 @@ namespace RocketSim
 
         void OnApplicationQuit() => PersistCurriculumState();
 
-        void OnDestroy() => PersistCurriculumState();
+        void OnDestroy()
+        {
+            if (SessionDraft != null)
+                SessionDraft.Changed -= OnSessionDraftChanged;
+            PersistCurriculumState();
+        }
 
         /// <summary>
         /// Handles a notification that hover track target reached happened.

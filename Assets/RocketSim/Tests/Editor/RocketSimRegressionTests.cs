@@ -611,6 +611,42 @@ namespace RocketSim.Tests
         }
 
         [Test]
+        public void SessionDraftRestoresTheConfigurationFromBeforeRunPreview()
+        {
+            var local = new SimulationSessionConfig();
+            local.environment.runId = "local-run";
+            local.vehicle.bodyRadius = 2.25f;
+            var imported = local.DeepCopy();
+            imported.environment.runId = "imported-run";
+            imported.vehicle.bodyRadius = 4.5f;
+
+            var draft = new SimulationSessionDraft(local);
+            draft.ApplyImportedSession(imported);
+            Assert.That(draft.Config.environment.runId, Is.EqualTo("imported-run"));
+            Assert.That(draft.RestoreBeforeImport(), Is.True);
+            Assert.That(draft.Config.environment.runId, Is.EqualTo("local-run"));
+            Assert.That(draft.Config.vehicle.bodyRadius, Is.EqualTo(2.25f).Within(Epsilon));
+            Assert.That(draft.RestoreBeforeImport(), Is.False);
+        }
+
+        [Test]
+        public void FrozenSessionSnapshotCannotBeChangedThroughTheDraft()
+        {
+            var draft = new SimulationSessionDraft(new SimulationSessionConfig());
+            draft.Config.vehicle.bodyRadius = 2f;
+            Assert.That(SimulationSessionSnapshotFactory.TryCreate(
+                draft.Config,
+                revision: 1,
+                out SimulationSessionSnapshot snapshot,
+                out SessionValidationResult validation), Is.True,
+                string.Join("; ", validation.Issues.Select(issue => issue.Message)));
+
+            draft.Config.vehicle.bodyRadius = 8f;
+            SimulationSessionConfig runtime = snapshot.CreateRuntimeConfig();
+            Assert.That(runtime.vehicle.bodyRadius, Is.EqualTo(2f).Within(Epsilon));
+        }
+
+        [Test]
         public void ResumeAllowsARewardRevisionUnderTheSameRunId()
         {
             using var fixture = new ResumeContractFixture();
