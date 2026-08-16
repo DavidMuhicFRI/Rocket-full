@@ -44,8 +44,9 @@ then derives the immutable episode constants and hardware-adjusted mass from the
 configured components. The agent consumes that snapshot and never constructs or
 configures vehicle hardware.
 
-The landing-gear component is serialized on the vehicle prefab and enabled only
-for leg landing. Its simple struts and feet are resized from the configured body
+The landing-gear component is serialized on the vehicle root. It enables only
+its child gear hierarchy for leg landing, leaving the rigidbody and agent active
+for every task. Its simple struts and feet are resized from the configured body
 dimensions when the vehicle is prepared. They provide contact and stability only:
 landing-leg drag, deployment dynamics, and structural deformation are outside
 the simulator model.

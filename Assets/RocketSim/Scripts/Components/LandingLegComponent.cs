@@ -29,6 +29,7 @@ namespace RocketSim
 
         readonly Transform[] _feet = new Transform[LegCount];
         readonly Transform[] _struts = new Transform[LegCount];
+        Transform _gearRoot;
         Transform _feetFrame;
         PhysicsMaterial _contactMaterial;
         Material _legVisualMaterial;
@@ -49,11 +50,15 @@ namespace RocketSim
             return go.AddComponent<LandingLegComponent>();
         }
 
-        /// <summary>Builds/resizes the four deployed legs and toggles collision.</summary>
+        /// <summary>
+        /// Builds/resizes the four deployed legs and toggles only their child
+        /// hierarchy. This component lives on the rocket root, so disabling its
+        /// own GameObject would also disable FalconAgent during initialization.
+        /// </summary>
         public void Configure(bool enabled, float bodyRadius, float bodyHeight)
         {
             EnsureBuilt();
-            gameObject.SetActive(enabled);
+            _gearRoot.gameObject.SetActive(enabled);
             if (!enabled) return;
 
             float radialScale = Mathf.Max(0.25f, bodyRadius / ReferenceBodyRadiusM);
@@ -114,15 +119,21 @@ namespace RocketSim
             _legVisualMaterial = CreateVisualMaterial(new Color(0.18f, 0.20f, 0.23f, 1f));
             _footVisualMaterial = CreateVisualMaterial(new Color(0.08f, 0.09f, 0.10f, 1f));
 
+            // The component is attached to the rigidbody/agent root. Keep all
+            // task-specific geometry below a separate switchable child.
+            var gearObject = new GameObject("LandingGear");
+            _gearRoot = gearObject.transform;
+            _gearRoot.SetParent(transform, false);
+
             var frameObject = new GameObject("FeetFrame");
             _feetFrame = frameObject.transform;
-            _feetFrame.SetParent(transform, false);
+            _feetFrame.SetParent(_gearRoot, false);
 
             for (int i = 0; i < LegCount; i++)
             {
                 GameObject strut = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 strut.name = $"LandingLeg_{i + 1}_Strut";
-                strut.transform.SetParent(transform, false);
+                strut.transform.SetParent(_gearRoot, false);
                 strut.GetComponent<MeshRenderer>().sharedMaterial = _legVisualMaterial;
                 strut.GetComponent<Collider>().sharedMaterial = _contactMaterial;
                 var strutMarker = strut.AddComponent<LandingGearCollider>();
@@ -132,7 +143,7 @@ namespace RocketSim
 
                 GameObject foot = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 foot.name = $"LandingFoot_{i + 1}";
-                foot.transform.SetParent(transform, false);
+                foot.transform.SetParent(_gearRoot, false);
                 foot.GetComponent<MeshRenderer>().sharedMaterial = _footVisualMaterial;
                 foot.GetComponent<Collider>().sharedMaterial = _contactMaterial;
                 var footMarker = foot.AddComponent<LandingGearCollider>();

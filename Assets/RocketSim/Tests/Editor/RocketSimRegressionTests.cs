@@ -1320,6 +1320,16 @@ namespace RocketSim.Tests
                 Assert.That(markers.Length, Is.EqualTo(LandingLegComponent.LegCount * 2));
                 foreach (LandingGearCollider marker in markers)
                     Assert.That(marker.Owner, Is.SameAs(owner));
+
+                legs.Configure(false, Falcon9Reference.BodyRadiusM, Falcon9Reference.BodyHeightM);
+
+                Assert.That(root.activeSelf, Is.True,
+                    "Disabling task-specific legs must never disable the rocket root.");
+                Assert.That(owner.isActiveAndEnabled, Is.True,
+                    "The ML-Agents lifecycle must remain active while leg geometry is hidden.");
+                foreach (LandingGearCollider marker in markers)
+                    Assert.That(marker.gameObject.activeInHierarchy, Is.False,
+                        "Disabled leg geometry must not produce contacts in another task.");
             }
             finally
             {

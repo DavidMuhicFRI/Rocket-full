@@ -16,7 +16,7 @@ namespace RocketSim
     //  Physics constants come from RocketAssembly.GetPhysicsConfig()
     //
     //  envConfig is a frozen runtime reference set by SimulationAreaHost at spawn time.
-    //  The right-side panel writes to the same object — all agents see changes.
+    //  The right-side panel edits a separate session draft while a run is active.
     //
     // ============================================================================
     public partial class FalconAgent : Agent
