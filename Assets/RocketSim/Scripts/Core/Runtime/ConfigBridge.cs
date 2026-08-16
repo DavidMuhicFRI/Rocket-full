@@ -14,7 +14,7 @@ namespace RocketSim
     // same sections instead of synchronizing four replaceable object references.
     //
     // Runs before RightConfigPanel.Start() so the panel builds from the
-    // manager-owned config objects instead of temporary local defaults.
+    // host-owned draft instead of temporary local defaults.
     [DefaultExecutionOrder(-5)]
     public class ConfigBridge : MonoBehaviour
     {
@@ -23,7 +23,7 @@ namespace RocketSim
         public SimulationAreaHost manager;
 
         /// <summary>
-        /// Wires shared config objects before the panel builds its tabs.
+        /// Wires the one editable session draft before the panel builds its tabs.
         /// </summary>
         void Awake()
         {

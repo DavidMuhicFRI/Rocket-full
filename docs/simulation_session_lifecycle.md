@@ -10,18 +10,19 @@ sections:
 - `learning`: ML-Agents trainer and network settings;
 - `telemetry`: recorded groups, sampling, and output settings.
 
-Run identity and live learning progress are deliberately not part of this value.
-The run ID selects storage. `RuntimeState.json` stores mutable curriculum
-counters separately.
+The run ID stored in the session pins that configuration to its result folder.
+Live learning progress is deliberately not part of the immutable value;
+`RuntimeState.json` stores mutable curriculum counters separately.
 
 ## Draft, snapshot, and runtime copy
 
-1. The panel edits one `SimulationSessionDraft`.
+1. The panel edits one `SimulationSessionDraft`, including its Run ID.
 2. Loading a run replaces the draft but retains the pre-load draft until the
    user accepts the import or restores it.
-3. Starting a run validates the whole draft and creates a deep-copied
+3. Starting a run checks that the launch request and draft use the same Run ID,
+   validates the whole draft, and creates a deep-copied
    `SimulationSessionSnapshot`.
-4. The snapshot is saved before launch and the runtime receives another deep
+4. A training snapshot is saved before Python starts, and the runtime receives another deep
    copy. Later panel edits cannot mutate a running experiment.
 
 ## On-disk layout

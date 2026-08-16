@@ -655,8 +655,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Loads saved environment, hardware, and trainer configs for a run and
-        /// wires them back into the panel and manager.
+        /// Loads a run's complete saved session into the restorable panel draft.
         /// </summary>
         void ApplyRunConfigs(
             string runId,

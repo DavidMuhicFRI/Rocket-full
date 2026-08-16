@@ -27,7 +27,7 @@ namespace RocketSim
         }
 
         /// <summary>Starts Python and waits until agents may connect safely.</summary>
-        public void Start(TrainingLaunchRequest request, SimulationAreaHost areaHost)
+        internal void Start(TrainingLaunchRequest request, SimulationAreaHost areaHost)
         {
             Stop();
             _areaHost = areaHost ?? throw new ArgumentNullException(nameof(areaHost));

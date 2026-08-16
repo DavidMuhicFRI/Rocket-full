@@ -4,8 +4,9 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// Complete user-defined configuration for one simulator launch.
-    /// Run identity and live curriculum progress are kept outside this object.
+    /// Complete user-defined configuration for one simulator launch. Its Run ID
+    /// selects the result folder; mutable curriculum counters are stored outside
+    /// immutable session revisions.
     /// </summary>
     [Serializable]
     public sealed class SimulationSessionConfig
@@ -32,9 +33,9 @@ namespace RocketSim
             telemetry ??= new TelemetryConfig();
 
             objective.EnsureDefaults();
-            // Environment methods still consume the objective while the task
-            // and reward runtimes are extracted. This is a runtime reference;
-            // the objective is serialized only once at the session root.
+            // Task and curriculum helpers need objective thresholds. Bind the
+            // session's one objective here as a non-serialized runtime reference;
+            // the session root remains its only persisted owner.
             environment.trainingObjective = objective;
         }
 

@@ -30,6 +30,11 @@ RightConfigPanel
 - `VehiclePreviewController` creates and freezes only the dummy vehicle shown
   while configuration is editable.
 
+`RocketSim.Runtime.asmdef` keeps all product code in one explicit runtime
+assembly. `RocketSim.EditorTests.asmdef` is editor-only and can inspect internal
+helpers through the narrow `InternalsVisibleTo` declaration; production code
+does not reference editor or test APIs.
+
 ## Vehicle hardware
 
 `RocketAssembly` is the small scene adapter between the saved vehicle
@@ -78,6 +83,10 @@ chopstick runtime owns its generated platform and hold timer, while the physical
 leg runtime owns buffered contacts, touchdown measurements, stability, and
 rebound detection. `FalconAgent` supplies current motion and forwards Unity
 collision callbacks; it no longer stores either landing task's internal state.
+
+`FalconAgent.Rewards` performs the explicit measure, evaluate, integrate, and
+terminate sequence. `FalconAgent.EpisodeReporting` freezes final outcome fields
+and produces landing diagnostics, keeping reporting out of the lifecycle file.
 
 ## Training
 

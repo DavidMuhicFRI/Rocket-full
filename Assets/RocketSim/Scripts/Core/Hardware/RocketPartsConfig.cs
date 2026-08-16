@@ -11,9 +11,8 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// User-tunable rocket hardware parameters. One shared instance lives on
-    /// SimulationAreaHost; the UI edits it and RocketAssembly applies it to
-    /// every active training/inference area.
+    /// User-tunable rocket hardware parameters. The panel edits the draft copy;
+    /// RocketAssembly applies a frozen runtime copy to each active area.
     /// </summary>
     [Serializable]
     public class RocketPartsConfig

@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/SimEnvironmentConfig.cs
-// Purpose: Stores user-editable scenario, environment randomization, reward,
-// curriculum, and behavior settings.
+// Purpose: Stores user-editable task, curriculum, environment, fault, and run settings.
 // Documentation: Comments in this file use plain language to describe intent,
 // so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
@@ -27,8 +26,8 @@ namespace RocketSim
     }
 
     /// <summary>
-    /// Shared environment/run state. The same instance is assigned to every
-    /// FalconAgent in a training batch so UI changes are applied consistently.
+    /// Environment and task state for one session copy. Active agents in an area
+    /// share the frozen runtime copy; the UI continues editing a separate draft.
     /// </summary>
     [Serializable]
     public partial class SimEnvironmentConfig

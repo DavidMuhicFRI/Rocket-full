@@ -179,7 +179,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Rebuilds each tab from the current shared config objects. Individual
+        /// Rebuilds each tab from the current session draft. Individual
         /// builders own their tab only, keeping cross-tab refreshes predictable.
         /// </summary>
         void BuildAllTabs()
@@ -208,7 +208,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Applies scenario defaults and pushes config changes into spawned training, inference, dummy, or hardware-test areas.
+        /// Applies scenario defaults and refreshes the editable vehicle preview.
+        /// Active runs are locked and continue using their frozen session copy.
         /// </summary>
         void Dirty()
         {

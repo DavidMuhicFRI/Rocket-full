@@ -24,160 +24,88 @@ skinparam note {
   FontColor #E6EDF3
 }
 
-title RocketSim readable architecture overview
+title Reusable Booster Simulator - ownership and data flow
 
-[Unity Scene / Prefabs] as Scene
+actor User
 
-package "User interface" {
-  [RightConfigPanel\nall UI partials] as Panel
-  [Scenario-aware objective editor\nreward/shaping sliders\ntermination cards] as ObjectiveEditor
-  [RocketCameraController] as Camera
-  [RocketHUD + RocketHudFactory] as HUD
-  [HardwarePresetUiCatalog] as HardwareCatalog
+package "Configuration" {
+  [RightConfigPanel\nmodule per tab] as Panel
+  [SimulationSessionDraft\neditable + restorable] as Draft
+  [SimulationSessionConfig\nvehicle | environment | objective\nlearning | telemetry] as Session
+  [SimulationSessionLoader\nread + validate saved run] as Loader
+  [VehiclePreviewController\ndraft-only preview] as Preview
 }
 
-package "Shared configuration" {
-  [SimEnvironmentConfig\nscenario/weather/curriculum] as EnvConfig
-  [TrainingObjectiveConfig\nfour independent\nScenarioObjectiveConfig objects] as ObjectiveConfig
-  [Objective descriptor catalogs\nRewardParameterCatalog\nShapingParameterCatalog\nTerminationRuleCatalog] as ObjectiveCatalogs
-  [RewardPresetCatalog\ncomplete reward vectors] as RewardPresets
-  [ObjectiveValidator\npure warnings/errors] as ObjectiveValidator
-  [RocketPartsConfig\nvehicle hardware + dimensions] as PartsConfig
-  [VehiclePresetRepository\nnamed user vehicle snapshots] as VehiclePresets
-  [MLAgentsConfig\ntrainer YAML settings] as MLConfig
-  [TelemetryConfig\nmetric families + optional\nreward breakdown] as TelemetryConfig
-  [Other config helpers\nFalcon9Reference\nScenarioProfile\nPresetFactory\nFuelCatalog\npreflight validation] as ConfigHelpers
+package "Launch boundary" {
+  [SimulationRunCoordinator\nvalidate + choose run path] as Coordinator
+  [SimulationSessionSnapshotFactory\nimmutable launch snapshot] as SnapshotFactory
+  [SimulationSessionStore\nmanifest + immutable revisions\n+ mutable runtime state] as Store
+  [TrainingRunController\nPython process + port handshake] as Training
+  [EvaluationRunController\nfixed evaluation suite] as Evaluation
 }
 
-package "Runtime orchestration" {
-  [ConfigBridge] as Bridge
-  [TrainingAreaManager\nshared configs + area spawn] as Manager
-  [TrainingLauncher\ntraining/inference/evaluator entry] as Launcher
-  [Repositories\nTrainingRunRepository\nreward snapshot + revision history\nModelRepository] as Repos
-  [RocketAgentSchema\nhardware-sized observation/action schema] as Schema
+package "Runtime area" {
+  [SimulationAreaHost\nprivate runtime copy + areas] as Host
+  [CurriculumController\ntask router] as Curriculum
+  [RocketAssembly\ncomponent coordinator] as Assembly
+  [Vehicle components\nbody | engines | fins | RCS | legs] as Components
+  [RocketPhysicsConfigFactory\nimmutable physics snapshot] as PhysicsConfig
+  [FalconAgent\nlifecycle + policy bridge] as Agent
 }
 
-package "Rocket construction" {
-  [RocketAssembly\nconfig -> hardware + physics] as Assembly
-  [Hardware components\nBodyComponent\nThrusterComponent\nFinComponent\nRcsComponent\nLandingLegComponent] as Hardware
-  [RCS support\nRcsHardwareLayout\nGeometry + plume presenters] as RcsHelpers
-  [RocketPhysicsConfig\nruntime physics constants] as PhysicsConfig
+package "Task execution" {
+  [Spawning + guidance] as Guidance
+  [WindEnvironmentRuntime] as Wind
+  [EpisodeFaultRuntime] as Faults
+  [Engine + RCS\nactuator state machines] as ActuatorState
+  [Landing runtimes\nchopstick | legs] as Landing
+  [Reward models\nmeasure -> evaluate -> integrate -> terminate] as Rewards
 }
 
-package "Simulation agent" {
-  [FalconAgent.Core\nlifecycle + FixedUpdate] as AgentCore
-  [FalconAgent.Actuators\nthrottle/gimbal/fins/RCS] as Actuators
-  [FalconAgent.Physics\nforces + mass properties] as Physics
-  [FalconAgent.Scenarios\nspawn/targets] as Scenarios
-  [FalconAgent.ChopstickLanding\nlogical capture state] as ChopstickLanding
-  [FalconAgent.LegLanding\nphysical foot-contact state] as LegLanding
-  [FalconAgent.Telemetry\nmeasured terms/log rows] as AgentTelemetry
-  [Runtime services\nEngine/RCS state machines\nWindEnvironmentRuntime\nEpisodeFaultRuntime\nAtmosphere / aerodynamics / mass] as AgentHelpers
+package "Outputs" {
+  [TelemetryLogger\nstep + episode data] as Telemetry
+  [CSV / JSON results\nmodel resource] as Results
 }
 
-package "Learning feedback" {
-  [RocketRewardModel\ndispatcher] as RewardDispatcher
-  [Scenario reward models\nChopstick / Leg / Hover / Hover Track] as RewardModels
-  [Reward data\nRewardRuntimeContext\nRewardTerms\nRewardDecision] as RewardData
-  [RewardContributionBuffer\nraw feature / signed coefficient\n/ signed contribution] as RewardBreakdown
-}
+User --> Panel : edits
+Panel --> Draft : changes one section
+Draft --> Session : owns
+Draft --> Preview : vehicle/task changes
+Store --> Loader : current supported schema
+Loader --> Draft : preview import\nrestore on cancel
 
-package "Telemetry output" {
-  [TelemetryLogger\nsingleton facade] as Logger
-  [Telemetry pipeline\nMetricCatalog\nRowFormatter\nCsvWriter\nAccumulator\nRunningStats] as TelemetryPipeline
-  [CSV + JSON files\nstep telemetry + reward terms\nepisode summaries\nevaluation aggregate] as CsvFiles
-}
+Panel --> Coordinator : launch request
+Draft --> Coordinator : deep copy
+Coordinator --> SnapshotFactory : validate + freeze
+SnapshotFactory --> Store : save before training
+SnapshotFactory --> Host : independent runtime copy
+Coordinator --> Training : training only
+Coordinator --> Evaluation : standard evaluation only
+Training --> Host : spawn when trainer is ready
+Evaluation --> Host : spawn inference area
 
-package "Hardware diagnostics" {
-  [HardwareTestController\norchestrator] as TestController
-  [IRocketHardwareTest\ncommon test contract] as TestContract
-  [Test cases\nfin/aero/landing/RCS/thruster] as TestCases
-}
+Host --> Curriculum : apply/advance selected task
+Host --> Assembly : apply vehicle
+Assembly --> Components : each owns layout/presentation
+Assembly --> PhysicsConfig : derive mass and authority
+Host --> Agent : inject runtime config + model
 
-Scene --> Bridge : serialized UI/manager references
-Scene --> Manager : owns spawned area root
-Scene --> Panel : UI document/component
-Scene --> Camera : main camera component
-Scene --> Launcher : optional training launcher
-
-Bridge --> Panel : injects manager/config references
-Panel --> Manager : applies shared config changes
-Panel --> PartsConfig : edits hardware values
-Panel --> EnvConfig : edits scenario/weather/curriculum
-Panel --> ObjectiveEditor : Rewards tab composition
-ObjectiveEditor --> ObjectiveConfig : edits selected task objective
-ObjectiveEditor --> ObjectiveCatalogs : renders applicable controls
-ObjectiveEditor --> RewardPresets : applies complete reward vector
-ObjectiveEditor --> ObjectiveValidator : live validation
-Panel --> MLConfig : edits trainer settings
-Panel --> TelemetryConfig : edits logged metrics
-Panel --> HardwareCatalog : renders hardware presets
-Panel --> VehiclePresets : save/load/delete user vehicles
-Panel --> Launcher : start training/inference
-Panel --> Repos : restore run/reward configs
-Panel --> TestController : start/stop diagnostics through manager
-
-PartsConfig --> ConfigHelpers : presets, fuel defaults, validation
-EnvConfig --> ConfigHelpers : scenario goals/curriculum defaults
-EnvConfig --> ObjectiveConfig : owns complete task objectives
-
-Launcher --> Repos : save/load run configs
-Repos --> ObjectiveConfig : latest snapshot + launch history
-Launcher --> Manager : spawn after trainer ready
-Manager --> Repos : load inference model
-Manager --> Schema : configure ML-Agents behavior
-Manager --> Assembly : instantiate/apply hardware
-Manager --> AgentCore : inject env/model/area index
-Manager --> ObjectiveValidator : blocks objective errors
-
-Assembly --> PartsConfig : reads hardware config
-Assembly --> Hardware : creates/sizes/positions parts
-Assembly --> RcsHelpers : builds RCS layout/visuals
-Assembly --> PhysicsConfig : derives mass/area/thrust constants
-
-AgentCore --> Scenarios : reset spawn + targets
-AgentCore --> Actuators : step commands
-AgentCore --> Physics : apply forces
-AgentCore --> ChopstickLanding : update logical capture state
-AgentCore --> LegLanding : update physical contact state
-AgentCore --> RewardDispatcher : compute reward/termination
-AgentCore --> AgentTelemetry : measure/log step
-
-Actuators --> AgentHelpers : engine/RCS state machines
-Actuators --> Hardware : fin deflection + engine/RCS visuals
-Physics --> AgentHelpers : atmosphere/aero/mass calculations
-Physics --> Hardware : force application points
-Physics --> PhysicsConfig : runtime constants
-Scenarios --> EnvConfig : scenario/inference spawn settings
-ChopstickLanding --> EnvConfig : chopstick curriculum/envelope
-LegLanding --> EnvConfig : independent leg curriculum/envelope
-LegLanding --> Hardware : generated four-leg collider assembly
-
-RewardDispatcher --> RewardModels : scenario-specific reward
-RewardModels --> RewardData : terms/context/decision
-RewardDispatcher --> ObjectiveConfig : selected task configuration
-RewardModels --> RewardBreakdown : record each contribution
-
-AgentTelemetry --> TelemetryConfig : metric families
-AgentTelemetry --> RewardBreakdown : attach latest breakdown
-AgentTelemetry --> Logger : sends TelemetryRow
-Logger --> TelemetryPipeline : format/aggregate/write
-TelemetryPipeline --> ObjectiveCatalogs : scenario reward-column schema
-TelemetryPipeline --> CsvFiles : append rows
-
-Camera --> Manager : active agent list
-Camera --> HUD : watched agent target
-HUD --> AgentCore : read-only flight getters
-
-TestController --> TestContract : active test lifecycle
-TestContract --> TestCases : implementations
-TestCases --> Actuators : manual commands
-TestCases --> Physics : diagnostics/observed response
+Agent --> Guidance
+Agent --> Wind
+Agent --> Faults
+Agent --> ActuatorState
+Agent --> Landing
+Agent --> Rewards
+Agent --> Telemetry
+PhysicsConfig --> Agent : read-only episode constants
+Components --> Agent : force points + visuals\ncontact callbacks
+Telemetry --> Results
+Store --> Results
 
 note bottom
-  Read this graph left-to-right:
-  UI edits shared configs and one of four task objectives -> Manager validates and configures the rocket ->
-  FalconAgent evaluates the selected objective -> telemetry can emit a term-by-term reward audit.
+  The panel owns a mutable draft. Launch is the only boundary that creates a
+  frozen snapshot. Active agents receive a private copy and never mutate UI or
+  persisted session configuration.
 end note
 
 @enduml
