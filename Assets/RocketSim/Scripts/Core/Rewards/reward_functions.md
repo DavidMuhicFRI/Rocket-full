@@ -35,6 +35,11 @@ step shaping reward = shaping rate * Time.fixedDeltaTime
 Event and terminal values are applied once and are not multiplied by time. This
 keeps the objective consistent when the physics timestep changes.
 
+The implementation follows one direction in `FalconAgent.Rewards`: measure the
+state, build a measurement-only `RewardRuntimeContext`, evaluate the selected
+task model, apply the three reward cadences, and finally end the episode if the
+decision is terminal. Task models never mutate the agent or configuration.
+
 ## Diagnostics
 
 Pass a reusable `RewardContributionBuffer` to `RocketRewardModel.Evaluate` to

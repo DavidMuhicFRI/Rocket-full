@@ -7,6 +7,10 @@ The detailed Unity-visible reward narrative is currently stored at:
 The executable source of truth is:
 
 - `../Assets/RocketSim/Scripts/Core/Rewards/TrainingObjectiveConfig.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/ScenarioObjectiveConfig.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/RewardParameters.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/RewardShapingParameters.cs`
+- `../Assets/RocketSim/Scripts/Core/Rewards/TerminationParameters.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/RewardPresetCatalog.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/RewardParameterCatalog.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/ShapingParameterCatalog.cs`
@@ -17,6 +21,7 @@ The executable source of truth is:
 - `../Assets/RocketSim/Scripts/Core/Rewards/ChopstickLandingRewardModel.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/LegLandingRewardModel.cs`
 - `../Assets/RocketSim/Scripts/Core/Rewards/HoverRewardModel.cs`
+- `../Assets/RocketSim/Scripts/Core/Agent/FalconAgent.Rewards.cs`
 
 The guide distinguishes the logical chopstick catch from physical leg landing and
 documents the four supported scenarios: chopstick landing, leg landing, fixed hover,
@@ -24,6 +29,13 @@ and moving-target hover. It also explains absolute reward magnitudes, shaping
 geometry, scenario-aware termination criteria, validation, and contribution
 telemetry. Treat executable code and regression tests as authoritative if an
 objective is changed during experiment development.
+
+`TrainingObjectiveConfig` is only the four-task container. Each task objective,
+reward vector, shaping vector, difficulty range, and termination vector has a
+separate file. Runtime flow is similarly explicit: `FalconAgent.Rewards`
+measures the current state, calls the pure task evaluator, integrates shaping
+rates over `Time.fixedDeltaTime`, applies one-off values, and then handles any
+terminal decision.
 
 ## Objective editor contract
 

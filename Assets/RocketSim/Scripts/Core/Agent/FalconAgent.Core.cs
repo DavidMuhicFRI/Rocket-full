@@ -364,58 +364,6 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Measures reward terms, evaluates the active scenario reward model,
-        /// applies shaping/terminal rewards, and ends the episode when required.
-        /// </summary>
-        void CalculateRewards()
-        {
-            RewardTerms terms = MeasureRewardTerms(
-                ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
-            RewardRuntimeContext context = BuildRewardRuntimeContext();
-
-            RewardDecision decision = RocketRewardModel.Evaluate(
-                envConfig.scenario,
-                terms,
-                context,
-                envConfig.GetTrainingObjective(envConfig.scenario),
-                _rewardContributions);
-            // Dense shaping terms describe a reward rate. Integrating that rate
-            // over simulated time keeps return magnitude independent of the
-            // FixedUpdate frequency while terminal/event rewards remain one-offs.
-            AddReward(decision.shapingRate * Time.fixedDeltaTime);
-
-            if (decision.eventReward != 0f)
-                AddReward(decision.eventReward);
-
-            if (decision.hasTerminalReward)
-                AddReward(decision.terminalReward);
-
-            if (decision.successTerminal)
-            {
-                _objectiveSuccessTerminalReached = true;
-                if (envConfig.scenario.IsLanding())
-                    _landingEpisodeSucceeded = true;
-            }
-
-            if (decision.endEpisode)
-            {
-                _episodeTerminationReason = decision.terminationReason;
-                LogLandingEpisodeEnd(decision.terminationReason, terms, context, decision.terminalReward);
-                EndEpisode();
-            }
-        }
-
-        /// <summary>
-        /// Adds a reward through ML-Agents while also accumulating the same
-        /// amount for the per-step telemetry row.
-        /// </summary>
-        public new void AddReward(float reward)
-        {
-            _stepReward += reward;
-            base.AddReward(reward);
-        }
-
-        /// <summary>
         /// Ends the current ML-Agents episode once, logs the final telemetry
         /// row, flushes the episode summary, and notifies curriculum owners.
         /// </summary>
@@ -597,46 +545,6 @@ namespace RocketSim
                 ScenarioType.HoverTracking => envConfig.hoverTrackCurriculumProgress,
                 _ => 0f
             };
-        }
-
-        /// <summary>
-        /// Packages live measurements and one-step events for the pure reward
-        /// evaluator. All tunable values remain in the scenario objective.
-        /// </summary>
-        RewardRuntimeContext BuildRewardRuntimeContext()
-        {
-            float terminalAltitude = envConfig.scenario.IsLanding()
-                ? ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig).y
-                : ScenarioProfile.TerminalAltitude(envConfig.scenario, envConfig);
-            return new RewardRuntimeContext(
-                altitude: ScenarioReferenceLocalPosition().y,
-                terminalAltitude: terminalAltitude,
-                episodeStartAltitude: _landingEpisodeStartAltitude,
-                gravityMagnitude: Mathf.Abs(Physics.gravity.y),
-                episodeElapsedSeconds: _episodeElapsedSeconds,
-                curriculumDifficulty01: _objectiveDifficulty01,
-                fuelKg: fuel,
-                landingPlatformInsideCapture: _landingPlatformInsideCapture,
-                landingPlatformStable: _landingPlatformStable,
-                landingPlatformBecameStable: _landingPlatformBecameStable,
-                landingPlatformStableTime: _landingPlatformStableTime,
-                engineRestartsThisStep: _engineRestartsThisStep,
-                hoverTrackTargetCapturedThisStep: _hoverTrackTargetReachedThisStep,
-                hoverTrackEpisodeCaptures: _hoverTrackEpisodeCaptures,
-                legTouchdownStarted: _legLanding.TouchdownStarted,
-                legFirstContactThisStep: _legLanding.FirstContactThisStep,
-                legFeetOnPad: LegLandingContactEvaluator.CountFeet(_legLanding.FootMask),
-                legFootOutsidePad: _legLanding.FootOutsidePad,
-                legStructuralStrike: _legLanding.StructuralStrike,
-                legStable: _legLanding.Stable,
-                legBecameStable: _legLanding.BecameStable,
-                legStableTime: _legLanding.StableTime,
-                legFirstContactSpeed: _legLanding.FirstContactSpeed,
-                legFirstContactVerticalSpeed: _legLanding.FirstContactVerticalSpeed,
-                legFirstContactHorizontalSpeed: _legLanding.FirstContactHorizontalSpeed,
-                legFirstContactTiltDeg: _legLanding.FirstContactTiltDeg,
-                legFirstContactAngularRateDegS: _legLanding.FirstContactAngularRateDegS,
-                legExcessiveRebound: _legLanding.ExcessiveRebound);
         }
 
         /// <summary>
