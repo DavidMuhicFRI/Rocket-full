@@ -526,7 +526,7 @@ namespace RocketSim
         /// </summary>
         void RefreshConfig()
         {
-            cfg = assembly ? assembly.GetPhysicsConfig() : RocketAssembly.Falcon9StaticFallback;
+            cfg = assembly ? assembly.GetPhysicsConfig() : RocketPhysicsConfigFactory.Falcon9Fallback;
             ConfigureCatchFrame();
             ConfigureLegLandingHardware();
         }

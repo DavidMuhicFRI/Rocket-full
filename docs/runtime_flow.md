@@ -32,10 +32,12 @@ RightConfigPanel
 
 ## Vehicle hardware
 
-`RocketAssembly` is the one adapter between the saved vehicle configuration and
-the scene vehicle. It forwards body, engine, fin, RCS, and landing-gear settings
-to their matching component. Components own their geometry and presentation;
-the agent reads their resulting physical state but does not construct hardware.
+`RocketAssembly` is the small scene adapter between the saved vehicle
+configuration and the vehicle components. Each body, engine, fin, and RCS
+component applies its own settings and presentation. `RocketPhysicsConfigFactory`
+then derives the immutable episode constants and hardware-adjusted mass from the
+configured components. The agent consumes that snapshot and never constructs or
+configures vehicle hardware.
 
 The landing-gear component is serialized on the vehicle prefab and enabled only
 for leg landing. Its simple struts and feet are resized from the configured body

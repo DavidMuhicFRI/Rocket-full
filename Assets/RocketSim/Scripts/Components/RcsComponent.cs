@@ -26,12 +26,28 @@ namespace RocketSim
             TangentialNegative = 3
         }
 
-        [Header("RCS Specs - written by RocketAssembly.ApplyPartsConfig")]
+        [Header("RCS Specs")]
         [Range(100f, 2000f)] public float thrustPerThruster = RocketPartsConfig.DefaultRcsThrustN;
         [Range(30f, 100f)] public float specificImpulse = RocketPartsConfig.DefaultRcsSpecificImpulseS;
         [Range(0.02f, 0.5f)] public float minimumPulseDuration = RocketPartsConfig.DefaultRcsMinimumPulseS;
         [Range(0f, 1000f)] public float propellantMass = RocketPartsConfig.DefaultRcsPropellantMassKg;
         [Range(0f, 1000f)] public float dryMass = RocketPartsConfig.DefaultRcsDryMassKg;
+
+        /// <summary>Copies RCS settings from a session and updates pod geometry.</summary>
+        public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius, float bodyHeight)
+        {
+            if (config == null) return;
+
+            gameObject.SetActive(config.rcsEnabled);
+            thrustPerThruster = config.rcsThrust;
+            specificImpulse = config.rcsSpecificImpulse;
+            minimumPulseDuration = config.rcsMinimumPulseDuration;
+            propellantMass = config.rcsPropellantMass;
+            dryMass = config.rcsDryMass;
+            transform.localPosition = new Vector3(0f, bodyHeight - 0.2f, 0f);
+            if (config.rcsEnabled)
+                Reposition(bodyRadius);
+        }
 
         /// <summary>
         /// Converts a pod/nozzle pair into the flat RCS command-buffer index

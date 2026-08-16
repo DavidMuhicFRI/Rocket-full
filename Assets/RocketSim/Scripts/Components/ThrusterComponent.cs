@@ -52,6 +52,29 @@ namespace RocketSim
         /// <summary>Maximum propellant flow of one engine at full throttle.</summary>
         public float BurnRate => maxThrustPerEngine / (specificImpulse * 9.80665f);
 
+        /// <summary>Copies engine settings from a session and updates engine placement.</summary>
+        public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius)
+        {
+            if (config == null) return;
+
+            layout = config.engineLayout;
+            independentEngines = config.independentEngines;
+            octawebBurnGroup = config.octawebBurnGroup;
+            engineSpacing = config.engineSpacing;
+            maxThrustPerEngine = config.maxThrustPerEngine;
+            minThrottle = config.minThrottle;
+            specificImpulse = config.specificImpulse;
+            throttleSpoolRate = config.throttleSpoolRate;
+            gimbalSlewRate = config.gimbalSlewRate;
+            maxGimbalAngle = config.maxGimbalAngle;
+            engineStartupDelay = config.engineStartupDelay;
+            engineShutdownTransient = config.engineShutdownTransient;
+            engineMinimumRunTime = config.engineMinimumRunTime;
+            engineRestartCooldown = config.engineRestartCooldown;
+            transform.localPosition = Vector3.zero;
+            ApplyLayout(bodyRadius);
+        }
+
         /// <summary>
         /// Applies the current throttle/gimbal state to each active engine
         /// transform and updates the child flame visuals.

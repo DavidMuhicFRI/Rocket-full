@@ -12,7 +12,7 @@ namespace RocketSim
 {
     public class BodyComponent : MonoBehaviour
     {
-        [Header("Dimensions — written by RocketAssembly.ApplyPartsConfig")]
+        [Header("Dimensions")]
         public float radius       = 1.83f;
         public float height       = 41.2f;
         public float baseDryMass  = 22200f;
@@ -53,6 +53,19 @@ namespace RocketSim
         public float MaxFuelCapacity =>
             baseFuelMass * (Mathf.PI * radius * radius * height)
                          / (Mathf.PI * BaseR   * BaseR   * BaseH);
+
+        /// <summary>Copies body settings from a session and updates the scene mesh.</summary>
+        public void ApplyConfiguration(RocketPartsConfig config)
+        {
+            if (config == null) return;
+
+            radius = config.bodyRadius;
+            height = config.bodyHeight;
+            baseDryMass = config.baseDryMass;
+            baseFuelMass = config.baseFuelMass;
+            startFuelMass = config.startFuelMass;
+            ApplyDimensions();
+        }
 
         // ── Apply to transform ────────────────────────────────────────────────
         // Unity's default cylinder is 1 m radius, 2 m tall at scale (1,1,1).

@@ -57,7 +57,7 @@ namespace RocketSim
 
             RocketPhysicsConfig cfg = Agent.assembly
                 ? Agent.assembly.GetPhysicsConfig()
-                : RocketAssembly.Falcon9StaticFallback;
+                : RocketPhysicsConfigFactory.Falcon9Fallback;
 
             Vector3 position;
             Quaternion rotation;

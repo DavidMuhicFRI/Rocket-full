@@ -10,7 +10,7 @@ namespace RocketSim
 {
     public class FinComponent : MonoBehaviour
     {
-        [Header("Geometry — written by RocketAssembly.ApplyPartsConfig")]
+        [Header("Geometry")]
         public FinLayout layout = FinLayout.FourFins_Plus;
         
         [Range(0.2f, 4f)]  public float finWidthX = RocketPartsConfig.DefaultFinRadialLengthM;
@@ -32,6 +32,24 @@ namespace RocketSim
         };
 
         Quaternion[] _neutralRotations = new Quaternion[0];
+
+        /// <summary>Copies fin settings from a session and updates fin geometry.</summary>
+        public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius, float bodyHeight)
+        {
+            if (config == null) return;
+
+            gameObject.SetActive(config.finsEnabled);
+            layout = config.finLayout;
+            finWidthX = config.finWidthX;
+            finWidthZ = config.finWidthZ;
+            finThickness = config.finThickness;
+            maxFinAngle = config.maxFinAngle;
+            finSlewRate = config.finSlewRate;
+            liftScale = config.liftScale;
+            transform.localPosition = new Vector3(0f, bodyHeight - 1.2f, 0f);
+            if (config.finsEnabled)
+                ApplyLayout(bodyRadius);
+        }
         
         /// <summary>
         /// Enables the fin children required by the selected layout, scales and

@@ -1208,8 +1208,8 @@ namespace RocketSim.Tests
         public void DryMassEstimateMatchesBuiltInVehicleHardware()
         {
             const float massToleranceKg = 0.01f;
-            float falcon = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.Falcon9));
-            float simple = RocketAssembly.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.SimpleSingle));
+            float falcon = RocketPhysicsConfigFactory.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.Falcon9));
+            float simple = RocketPhysicsConfigFactory.EstimateAdjustedDryMass(Preset(RocketHardwarePreset.SimpleSingle));
 
             Assert.That(falcon, Is.EqualTo(22200f).Within(massToleranceKg));
             Assert.That(simple, Is.EqualTo(17390f).Within(massToleranceKg));
