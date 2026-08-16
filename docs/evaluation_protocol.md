@@ -15,7 +15,7 @@ Use `Standard Evaluation` inference for thesis measurements. It runs a fixed num
 
 Keep the episode count and seed fixed for the primary comparison. Additional seeded suites may be reported as robustness checks only when every condition receives the same suites.
 
-The saved `TrainingObjectiveConfig` is part of the evaluated treatment. For the selected scenario it contains the complete objective: absolute reward/cost magnitudes, shaping scales and target geometry, plus enabled termination rules and their thresholds. Standard Evaluation fixes the environment and curriculum state described below; it does not silently replace that objective with a preset. Record and compare its `trainingObjectiveSha256` fingerprint and `rewardConfigRevision` from the manifest alongside the model checkpoint. If a run has more than one reward revision, use `RewardConfigHistory.jsonl` to state which checkpoints were trained under each objective; do not describe the latest `RewardConfig.json` as if it governed the entire run.
+The saved `TrainingObjectiveConfig` is part of the evaluated treatment. For the selected scenario it contains the complete objective: absolute reward/cost magnitudes, shaping scales and target geometry, plus enabled termination rules and their thresholds. Standard Evaluation fixes the environment and curriculum state described below; it does not silently replace that objective with a preset. Record the run revision and `currentSessionSha256` from `RunManifest.json` alongside the model checkpoint. When a run has several revisions, inspect that revision's `Session.json` and do not describe the latest configuration as if it governed every checkpoint.
 
 ## Landing evaluation
 

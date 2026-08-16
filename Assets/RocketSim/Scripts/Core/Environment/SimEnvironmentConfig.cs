@@ -113,7 +113,9 @@ namespace RocketSim
         [HideInInspector] public InferenceScenarioConfig inferenceScenarios = new();
         [HideInInspector] public InferencePurpose inferencePurpose = InferencePurpose.StandardEvaluation;
         [HideInInspector] public EvaluationConfig evaluation = new();
-        [Header("Training Objective")] public TrainingObjectiveConfig trainingObjective = new();
+        // The objective is serialized once at SimulationSessionConfig.objective.
+        // This runtime reference is rebound whenever a session is loaded.
+        [NonSerialized] public TrainingObjectiveConfig trainingObjective = new();
         [Header("Faults")] public RocketFaultConfig faults = new();
 
         [Header("Run Config")] public string runId = "ReusableBoosterDefaultRun";

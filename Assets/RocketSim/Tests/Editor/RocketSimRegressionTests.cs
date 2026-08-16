@@ -632,9 +632,10 @@ namespace RocketSim.Tests
         }
 
         [Test]
-        public void TrainingLaunchOverwritesLatestRewardSnapshotAndKeepsRevisionHistory()
+        public void TrainingLaunchCreatesImmutableSessionRevisions()
         {
             using var fixture = new ResumeContractFixture();
+            SimulationSessionConfig firstRevision = fixture.LoadSessionRevision(1);
             SimEnvironmentConfig revisedEnvironment = fixture.CloneEnvironment();
             revisedEnvironment
                 .GetTrainingObjective(ScenarioType.Hover)
@@ -647,24 +648,24 @@ namespace RocketSim.Tests
             Assert.That(
                 JsonUtility.ToJson(loaded),
                 Is.EqualTo(JsonUtility.ToJson(revisedEnvironment.EnsureTrainingObjective())),
-                "RewardConfig.json must be the latest setup applied to the run.");
+                "Loading the run must return the objective from its latest session revision.");
 
-            TrainingRunManifest manifest = JsonUtility.FromJson<TrainingRunManifest>(
-                File.ReadAllText(Path.Combine(fixture.RunRoot, "RunManifest.json")));
-            Assert.That(manifest.rewardConfigRevision, Is.EqualTo(2));
-            Assert.That(manifest.rewardConfigChangedOnLastLaunch, Is.True);
+            Assert.That(SimulationSessionStore.TryLoadManifest(
+                fixture.RunId, out SimulationRunManifest manifest), Is.True);
+            Assert.That(manifest.currentRevision, Is.EqualTo(2));
 
-            string[] history = File.ReadAllLines(
-                Path.Combine(fixture.RunRoot, "RewardConfigHistory.jsonl"));
-            Assert.That(history, Has.Length.EqualTo(1));
-            TrainingRewardRevision revision =
-                JsonUtility.FromJson<TrainingRewardRevision>(history[0]);
-            Assert.That(revision.revision, Is.EqualTo(2));
-            Assert.That(revision.resumed, Is.True);
-            Assert.That(revision.changedFromPreviousLaunch, Is.True);
+            SimulationSessionConfig secondRevision = fixture.LoadSessionRevision(2);
             Assert.That(
-                JsonUtility.ToJson(revision.trainingObjective),
+                JsonUtility.ToJson(firstRevision.objective),
+                Is.EqualTo(JsonUtility.ToJson(fixture.SavedEnvironment.EnsureTrainingObjective())),
+                "Starting a later launch must not mutate its earlier session snapshot.");
+            Assert.That(
+                JsonUtility.ToJson(secondRevision.objective),
                 Is.EqualTo(JsonUtility.ToJson(revisedEnvironment.EnsureTrainingObjective())));
+            Assert.That(File.Exists(Path.Combine(
+                fixture.RunRoot, "revisions", "0001", "Session.json")), Is.True);
+            Assert.That(File.Exists(Path.Combine(
+                fixture.RunRoot, "revisions", "0002", "Session.json")), Is.True);
         }
 
         [Test]
@@ -692,7 +693,7 @@ namespace RocketSim.Tests
         }
 
         [Test]
-        public void ResumeRejectsChangingOnlyTheActiveScenarioUnderTheSameRunId()
+        public void ResumeAllowsChangingTheActiveScenarioWhenThePolicyInterfaceMatches()
         {
             using var fixture = new ResumeContractFixture();
             SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
@@ -702,58 +703,90 @@ namespace RocketSim.Tests
                 Is.EqualTo(JsonUtility.ToJson(fixture.SavedEnvironment.EnsureTrainingObjective())),
                 "This regression must vary only the active scenario, not the objective payload.");
 
-            AssertResumeRejected(
-                fixture,
+            bool accepted = fixture.TryValidate(
                 requestedEnvironment,
                 fixture.CloneParts(),
                 fixture.CloneMl(),
-                "differs from the saved run scenario");
+                out string error);
+
+            Assert.That(accepted, Is.True);
+            Assert.That(error, Is.Null);
         }
 
         [Test]
-        public void ResumeRejectsTrainingEnvironmentChanges()
+        public void ResumeAllowsTrainingEnvironmentChanges()
         {
             using var fixture = new ResumeContractFixture();
             SimEnvironmentConfig requestedEnvironment = fixture.CloneEnvironment();
             requestedEnvironment.windEnabled = true;
             requestedEnvironment.windSpeed = 12f;
 
-            AssertResumeRejected(
-                fixture,
+            Assert.That(fixture.TryValidate(
                 requestedEnvironment,
                 fixture.CloneParts(),
                 fixture.CloneMl(),
-                "environment configuration differs");
+                out string error), Is.True);
+            Assert.That(error, Is.Null);
         }
 
         [Test]
-        public void ResumeRejectsHardwareChanges()
+        public void ResumeAllowsPhysicalVehicleChangesThatKeepTheSameChannels()
         {
             using var fixture = new ResumeContractFixture();
             RocketPartsConfig requestedParts = fixture.CloneParts();
             requestedParts.maxThrustPerEngine += 1000f;
+
+            Assert.That(fixture.TryValidate(
+                fixture.CloneEnvironment(),
+                requestedParts,
+                fixture.CloneMl(),
+                out string error), Is.True);
+            Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void ResumeAllowsOptimizerChangesThatKeepTheNetworkCompatible()
+        {
+            using var fixture = new ResumeContractFixture();
+            MLAgentsConfig requestedMl = fixture.CloneMl();
+            requestedMl.learningRate *= 0.5f;
+
+            Assert.That(fixture.TryValidate(
+                fixture.CloneEnvironment(),
+                fixture.CloneParts(),
+                requestedMl,
+                out string error), Is.True);
+            Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void ResumeRejectsVehicleChangesThatAlterThePolicyInterface()
+        {
+            using var fixture = new ResumeContractFixture();
+            RocketPartsConfig requestedParts = fixture.CloneParts();
+            requestedParts.octawebBurnGroup = OctawebBurnGroup.AllNine;
 
             AssertResumeRejected(
                 fixture,
                 fixture.CloneEnvironment(),
                 requestedParts,
                 fixture.CloneMl(),
-                "hardware configuration differs");
+                "different policy interface");
         }
 
         [Test]
-        public void ResumeRejectsMlTrainerChanges()
+        public void ResumeRejectsNetworkArchitectureChanges()
         {
             using var fixture = new ResumeContractFixture();
             MLAgentsConfig requestedMl = fixture.CloneMl();
-            requestedMl.learningRate *= 0.5f;
+            requestedMl.hiddenUnits += 128;
 
             AssertResumeRejected(
                 fixture,
                 fixture.CloneEnvironment(),
                 fixture.CloneParts(),
                 requestedMl,
-                "ML-Agents trainer configuration differs");
+                "must match when resuming");
         }
 
         [Test]
@@ -1461,34 +1494,9 @@ namespace RocketSim.Tests
                 SavedParts = new RocketPartsConfig();
                 SavedMl = new MLAgentsConfig();
 
-                string environmentJson = JsonUtility.ToJson(SavedEnvironment);
-                string partsJson = JsonUtility.ToJson(SavedParts);
-                string mlYaml = SavedMl.ToYAML();
-                var manifest = new TrainingRunManifest
-                {
-                    schemaVersion = TrainingRunManifest.CurrentSchemaVersion,
-                    runId = RunId,
-                    scenario = SavedEnvironment.scenario.ToString(),
-                    rewardConfigRevision = 1,
-                    rewardConfigChangedOnLastLaunch = true,
-                    trainingObjectiveSha256 = Sha256Hex(
-                        JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective())),
-                    partsConfigSha256 = Sha256Hex(partsJson),
-                    mlAgentsConfigSha256 = Sha256Hex(mlYaml)
-                };
-
                 try
                 {
-                    Directory.CreateDirectory(RunRoot);
-                    File.WriteAllText(Path.Combine(RunRoot, "EnvConfig.json"), environmentJson);
-                    File.WriteAllText(Path.Combine(RunRoot, "PartsConfig.json"), partsJson);
-                    File.WriteAllText(Path.Combine(RunRoot, "TrainingConfig.yaml"), mlYaml);
-                    File.WriteAllText(
-                        Path.Combine(RunRoot, "RewardConfig.json"),
-                        JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective(), true));
-                    File.WriteAllText(
-                        Path.Combine(RunRoot, "RunManifest.json"),
-                        JsonUtility.ToJson(manifest));
+                    SaveTrainingConfigs(SavedEnvironment, resumed: false);
                 }
                 catch
                 {
@@ -1497,8 +1505,14 @@ namespace RocketSim.Tests
                 }
             }
 
-            public SimEnvironmentConfig CloneEnvironment() =>
-                JsonUtility.FromJson<SimEnvironmentConfig>(JsonUtility.ToJson(SavedEnvironment));
+            public SimEnvironmentConfig CloneEnvironment()
+            {
+                SimEnvironmentConfig clone =
+                    JsonUtility.FromJson<SimEnvironmentConfig>(JsonUtility.ToJson(SavedEnvironment));
+                clone.trainingObjective = JsonUtility.FromJson<TrainingObjectiveConfig>(
+                    JsonUtility.ToJson(SavedEnvironment.EnsureTrainingObjective()));
+                return clone;
+            }
 
             public RocketPartsConfig CloneParts() =>
                 JsonUtility.FromJson<RocketPartsConfig>(JsonUtility.ToJson(SavedParts));
@@ -1547,22 +1561,14 @@ namespace RocketSim.Tests
                     new object[] { RunId });
             }
 
+            public SimulationSessionConfig LoadSessionRevision(int revision) =>
+                SimulationSessionStore.LoadRevision(RunId, revision);
+
             public void Dispose()
             {
                 if (_safeToDelete && Directory.Exists(RunRoot))
                     Directory.Delete(RunRoot, true);
             }
-        }
-
-        static string Sha256Hex(string value)
-        {
-            using System.Security.Cryptography.SHA256 sha256 =
-                System.Security.Cryptography.SHA256.Create();
-            byte[] digest = sha256.ComputeHash(
-                System.Text.Encoding.UTF8.GetBytes(value ?? string.Empty));
-            return System.BitConverter.ToString(digest)
-                .Replace("-", string.Empty)
-                .ToLowerInvariant();
         }
 
         static RocketPartsConfig Preset(RocketHardwarePreset preset)

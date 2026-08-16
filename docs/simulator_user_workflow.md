@@ -55,25 +55,29 @@ The landing sampler clips randomized starts using the selected vehicle's mass,
 active thrust, gimbal authority, and startup delay. Preflight reports the same
 vehicle-specific reachability and thrust-authority diagnostics.
 
-### Run-owned reward setup
+### Run-owned simulation session
 
-Starting training writes the complete `TrainingObjectiveConfig` for all tasks to
-the selected run directory. `RewardConfig.json` is the latest reward, shaping,
-and termination setup and `trainingObjectiveSha256` identifies it in
-`RunManifest.json`. The same objective is also embedded in the environment
-snapshot so a run remains self-contained.
+Starting training freezes the complete configuration visible in the panel: the
+vehicle, task and curriculum, environment and faults, reward objective, ML
+settings, and telemetry settings. The snapshot is stored under the run ID as an
+immutable numbered revision such as `revisions/0001/Session.json`.
 
-Enabling **Resume Run** restores the saved run configuration, including rewards,
-and rebuilds the Reward tab from it. Selecting **Initialize From** keeps the new
-run's task, vehicle, environment, and trainer configuration but loads the source
-run's complete reward setup before training. The user can then edit it normally.
+`RunManifest.json` points to the latest revision and records its SHA-256 hash,
+resolved observation/action sizes, hardware channels, and network shape. Live
+curriculum counters are stored separately in `RuntimeState.json`; updating
+progress therefore cannot rewrite the configuration that launched a checkpoint.
 
-Starting or resuming training always overwrites `RewardConfig.json` with the
-values visible in the Reward tab. Every launch is also appended to
-`RewardConfigHistory.jsonl`; reward changes advance `rewardConfigRevision` in the
-manifest. This makes deliberate mid-run reward changes possible without erasing
-the objective used by earlier checkpoints. For controlled experiments, prefer a
-new Run ID when changing rewards unless the change itself is part of the method.
+Enabling **Resume Run** restores the saved session, including rewards, and
+rebuilds the panel from it. Selecting **Initialize From** keeps the new run's
+configuration but loads a compatible source checkpoint. The user can edit the
+draft before launching.
+
+Starting or resuming creates a new immutable session revision. Earlier revisions
+remain available, so a reward or environment change never erases what an older
+checkpoint used. Resume is allowed only while the policy interface and network
+architecture remain checkpoint-compatible. For controlled experiments, prefer a
+new Run ID when changing the treatment unless continuation is itself part of the
+method.
 
 ## Suggested diploma demonstrations
 

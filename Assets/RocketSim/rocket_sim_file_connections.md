@@ -3,6 +3,7 @@
 The maintained project documentation lives under the repository-level `docs/` directory:
 
 - `../../docs/simulator_user_workflow.md` - vehicle presets, tasks, training, evaluation, and example workflows
+- `../../docs/simulation_session_lifecycle.md` - draft, immutable launch revisions, runtime state, and resume rules
 - `../../docs/evaluation_protocol.md` - deterministic standard-evaluation contract and output artifacts
 - `../../TrainingConfig.yaml` - synchronized manual-CLI PPO reference; UI launches use the generated run-local copy
 - `../../docs/landing_curriculum.md` - independent continuous curricula for chopstick and physical leg landing
@@ -11,9 +12,9 @@ The maintained project documentation lives under the repository-level `docs/` di
 - `../../docs/rocket_sim_architecture_visual.puml` - detailed file-level architecture diagram source
 
 The executable reward narrative is `Scripts/Core/Rewards/reward_functions.md`.
-Each training result directory stores the latest complete objective in
-`RewardConfig.json`, an append-only launch record in
-`RewardConfigHistory.jsonl`, and its current hash/revision in `RunManifest.json`.
+Each result directory stores full immutable session revisions below `revisions/`,
+the latest revision and hash in `RunManifest.json`, and mutable curriculum
+progress in `RuntimeState.json`.
 Generated PNG/SVG architecture diagrams sit beside their PlantUML sources. Update
 both diagram sources and renderings whenever runtime ownership or major data flow
 changes.
