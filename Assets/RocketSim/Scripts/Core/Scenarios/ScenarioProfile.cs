@@ -77,8 +77,7 @@ namespace RocketSim
         /// </summary>
         public static Vector3 GoalPosition(ScenarioType scenario, Transform targetPad, SimEnvironmentConfig envConfig)
         {
-            if (scenario == ScenarioType.LegLanding &&
-                LandingPadSurface.TryGetLocalTopCenter(targetPad, out Vector3 padTopCenter))
+            if (scenario == ScenarioType.LegLanding && LandingPadSurface.TryGetLocalTopCenter(targetPad, out Vector3 padTopCenter))
                 return padTopCenter;
 
             Vector3 target = targetPad ? targetPad.localPosition : Vector3.zero;

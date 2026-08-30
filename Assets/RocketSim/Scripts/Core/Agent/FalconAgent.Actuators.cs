@@ -1,10 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.Actuators.cs
 // Purpose: Converts policy or manual commands into engine, gimbal, grid-fin, and RCS actuator states.
-// Main flow: ML/manual command -> safe target values -> actuator timing and
-// slew limits -> physical force application -> fuel use and visual feedback.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
+// Main flow: ML/manual command -> safe target values -> actuator timing and slew limits -> physical force application -> fuel use and visual feedback.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -23,20 +20,27 @@ namespace RocketSim
             if (_manualControlActive) return;
 
             var act = actions.ContinuousActions;
-            int gimbalOffset = RocketAgentSchema.GimbalActionOffset(cfg.independentEngineCount);
-            int finOffset = RocketAgentSchema.FinActionOffset(cfg.independentEngineCount);
-            int rcsOffset = RocketAgentSchema.RcsActionOffset(cfg.independentEngineCount, cfg.finCount);
+            int enableOffset = RocketAgentSchema.EngineEnableActionOffset(cfg.independentEngineCount);
+            int gimbalOffset = RocketAgentSchema.GimbalActionOffset(cfg.independentEngineCount, cfg.separateEngineEnableActions);
+            int finOffset = RocketAgentSchema.FinActionOffset(cfg.independentEngineCount, cfg.separateEngineEnableActions);
+            int rcsOffset = RocketAgentSchema.RcsActionOffset(cfg.independentEngineCount, cfg.finCount, cfg.separateEngineEnableActions);
 
-            // Throttle: action <= 0 is off; action > 0 selects [minThrottle, 1].
             for (int i = 0; i < cfg.independentEngineCount; i++)
             {
-                // Non-positive policy output is engine-off. Positive output
-                // selects the available throttle range without an engine-on
-                // command at the policy's zero-centred initial action.
                 float raw = Mathf.Clamp01(act[RocketAgentSchema.ThrottleActionOffset + i]);
-                bool engineLit = EngineIsIgnited(i);
-                float threshold = engineLit ? EngineShutdownThreshold : EngineIgnitionThreshold;
-                commandedThrottle[i] = raw > threshold ? Mathf.Lerp(cfg.minThrottle, 1f, raw) : 0f;
+                if (cfg.separateEngineEnableActions)
+                {
+                    float enable = act[enableOffset + i];
+                    if (enable > EngineEnableOnThreshold) engineEnableCommands[i] = 1f;
+                    else if (enable < EngineEnableOffThreshold) engineEnableCommands[i] = 0f;
+                    commandedThrottle[i] = engineEnableCommands[i] > 0.5f ? Mathf.Lerp(cfg.minThrottle, 1f, raw) : 0f;
+                }
+                else
+                {
+                    bool engineLit = EngineIsIgnited(i);
+                    float threshold = engineLit ? EngineShutdownThreshold : EngineIgnitionThreshold;
+                    commandedThrottle[i] = raw > threshold ? Mathf.Lerp(cfg.minThrottle, 1f, raw) : 0f;
+                }
             }
 
             for (int i = 0; i < cfg.independentEngineCount; i++)
@@ -62,16 +66,15 @@ namespace RocketSim
                 for (int i = 0; i < cfg.rcsJetCount; i++)
                 {
                     int rcsActionIndex = rcsOffset + i;
-                    rcsValveRequests[i] = rcsActionIndex < act.Length &&
-                                          act[rcsActionIndex] > RcsValveActionThreshold
-                        ? 1f
-                        : 0f;
+                    rcsValveRequests[i] = rcsActionIndex < act.Length && act[rcsActionIndex] > RcsValveActionThreshold ? 1f : 0f;
                 }
             }
             else
             {
                 ClearRcsCommands();
             }
+
+            EnforceLegLandingPropulsionLockout();
 
             UpdateThrusterVisuals();
         }
@@ -93,14 +96,13 @@ namespace RocketSim
             {
                 float command = throttle01 != null && i < throttle01.Length ? Mathf.Clamp01(throttle01[i]) : 0f;
                 _manualThrottle[i] = command > 0.01f ? Mathf.Max(cfg.minThrottle, command) : 0f;
+                engineEnableCommands[i] = _manualThrottle[i] > 0f ? 1f : 0f;
             }
 
             for (int i = 0; i < _manualGimbal.Length; i++)
             {
                 Vector2 command = gimbalDeg != null && i < gimbalDeg.Length ? gimbalDeg[i] : Vector2.zero;
-                _manualGimbal[i] = ClampGimbalCone(new Vector2(
-                    Mathf.Clamp(command.x, -cfg.maxGimbal, cfg.maxGimbal),
-                    Mathf.Clamp(command.y, -cfg.maxGimbal, cfg.maxGimbal)));
+                _manualGimbal[i] = ClampGimbalCone(new Vector2(Mathf.Clamp(command.x, -cfg.maxGimbal, cfg.maxGimbal), Mathf.Clamp(command.y, -cfg.maxGimbal, cfg.maxGimbal)));
             }
 
             for (int i = 0; i < _manualFinAngles.Length; i++)
@@ -111,12 +113,10 @@ namespace RocketSim
 
             for (int i = 0; i < _manualRcsValveRequests.Length; i++)
             {
-                _manualRcsValveRequests[i] = rcsValveCommands != null &&
-                                    i < rcsValveCommands.Length &&
-                                    rcsValveCommands[i] > 0.001f
-                    ? 1f
-                    : 0f;
+                _manualRcsValveRequests[i] = (rcsValveCommands != null && i < rcsValveCommands.Length && rcsValveCommands[i] > 0.001f) ? 1f : 0f;
             }
+
+            EnforceLegLandingPropulsionLockout();
         }
 
         /// <summary>
@@ -129,6 +129,7 @@ namespace RocketSim
             if (_manualGimbal != null) for (int i = 0; i < _manualGimbal.Length; i++) _manualGimbal[i] = Vector2.zero;
             if (_manualFinAngles != null) for (int i = 0; i < _manualFinAngles.Length; i++) _manualFinAngles[i] = 0f;
             if (_manualRcsValveRequests != null) for (int i = 0; i < _manualRcsValveRequests.Length; i++) _manualRcsValveRequests[i] = 0f;
+            if (engineEnableCommands != null) for (int i = 0; i < engineEnableCommands.Length; i++) engineEnableCommands[i] = 0f;
             if (commandedThrottle != null) for (int i = 0; i < commandedThrottle.Length; i++) commandedThrottle[i] = 0f;
             if (targetThrottle != null) for (int i = 0; i < targetThrottle.Length; i++) targetThrottle[i] = 0f;
             if (targetGimbal != null) for (int i = 0; i < targetGimbal.Length; i++) targetGimbal[i] = Vector2.zero;
@@ -137,11 +138,11 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Advances engine state machines and slews throttle, gimbal, and fin
-        /// state toward their targets at configured actuator rates.
+        /// Advances engine state machines and slews throttle, gimbal, and fin state toward their targets.
         /// </summary>
         void StepActuators()
         {
+            EnforceLegLandingPropulsionLockout();
             float dt = Time.fixedDeltaTime;
             StepEngineStateMachines(dt);
 
@@ -158,8 +159,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Updates per-engine startup, shutdown, minimum-run, and restart-cooldown
-        /// state before throttle is allowed to spool.
+        /// Updates per-engine startup, shutdown, minimum-run, and restart-cooldown state before throttle is allowed to spool.
         /// </summary>
         void StepEngineStateMachines(float dt)
         {
@@ -202,16 +202,29 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Starts the center hover engine in its stabilized Running state at the
-        /// throttle that balances the current episode mass. PPO receives no
-        /// target-throttle reward and may change or shut down the engine at once.
+        /// Counts command channels that have been ignited at least once this
+        /// episode. This is intentionally descriptive telemetry/reward state,
+        /// not a restriction on which engine the policy may use.
+        /// </summary>
+        int EpisodeEngineFirstIgnitionCount()
+        {
+            if (engineIgnitionCounts == null)
+                return 0;
+
+            int count = 0;
+            int channels = Mathf.Min(cfg.independentEngineCount, engineIgnitionCounts.Length);
+            for (int i = 0; i < channels; i++)
+                if (engineIgnitionCounts[i] > 0)
+                    count++;
+            return count;
+        }
+
+        /// <summary>
+        /// Starts the center hover engine in its stabilized Running state at the throttle that balances the current episode mass and thrust.
         /// </summary>
         void InitializeHoverEngineAtEquilibrium()
         {
-            if (envConfig == null ||
-                (envConfig.scenario != ScenarioType.Hover && envConfig.scenario != ScenarioType.HoverTracking) ||
-                cfg.independentEngineCount <= 0 ||
-                throttle == null || throttle.Length == 0)
+            if (envConfig == null || (envConfig.scenario != ScenarioType.Hover && envConfig.scenario != ScenarioType.HoverTracking) || cfg.independentEngineCount <= 0 || throttle == null || throttle.Length == 0)
                 return;
 
             // Independent control starts only the center channel. With shared
@@ -219,17 +232,13 @@ namespace RocketSim
             int runningEngineCount = cfg.independentEngines ? 1 : Mathf.Max(1, cfg.activeEngineCount);
             float faultScale = 1f - _episodeFaults.Severity(RocketFaultType.EngineThrustLoss, 0, _episodeElapsedSeconds);
             float effectiveMaxThrust = cfg.maxThrust * CurrentEngineThrustScale() * faultScale;
-            float initialThrottle = HoverThrustInitialization.EquilibriumThrottle(
-                rb.mass,
-                Mathf.Abs(Physics.gravity.y),
-                effectiveMaxThrust,
-                runningEngineCount,
-                cfg.minThrottle);
+            float initialThrottle = HoverThrustInitialization.EquilibriumThrottle(rb.mass, Mathf.Abs(Physics.gravity.y), effectiveMaxThrust, runningEngineCount, cfg.minThrottle);
             if (initialThrottle <= 0f)
                 return;
 
             EngineTimingConfig timing = EngineTimingConfig.FromPhysicsConfig(cfg);
             throttle[0] = commandedThrottle[0] = targetThrottle[0] = initialThrottle;
+            engineEnableCommands[0] = 1f;
             engineStates[0] = EngineRunState.Running;
             engineStateTimers[0] = 0f;
             engineRunTimes[0] = timing.minimumRunTime;
@@ -239,10 +248,9 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the normalized time remaining on the current engine-state
-        /// constraint. Together with the one-hot state observation this tells a
-        /// feed-forward policy when startup, minimum-run, shutdown, or cooldown
-        /// will finish instead of leaving actuator timing hidden.
+        /// Returns the normalized time remaining on the current engine-state constraint.
+        /// This tells the agent how long it must wait before the engine can respond to a new throttle command.
+        /// It's mostly useful to help the policy learn how to respond to throttle commands.
         /// </summary>
         float EngineConstraintTimeRemaining01(int index)
         {
@@ -252,18 +260,10 @@ namespace RocketSim
             EngineTimingConfig timing = EngineTimingConfig.FromPhysicsConfig(cfg);
             return engineStates[index] switch
             {
-                EngineRunState.Off => timing.restartCooldown > 0f
-                    ? Mathf.Clamp01((timing.restartCooldown - engineOffTimes[index]) / timing.restartCooldown)
-                    : 0f,
-                EngineRunState.Starting => timing.startupDelay > 0f
-                    ? Mathf.Clamp01(engineStateTimers[index] / timing.startupDelay)
-                    : 0f,
-                EngineRunState.Running => timing.minimumRunTime > 0f
-                    ? Mathf.Clamp01((timing.minimumRunTime - engineRunTimes[index]) / timing.minimumRunTime)
-                    : 0f,
-                EngineRunState.Shutdown => timing.shutdownTransient > 0f
-                    ? Mathf.Clamp01(engineStateTimers[index] / timing.shutdownTransient)
-                    : 0f,
+                EngineRunState.Off => timing.restartCooldown > 0f ? Mathf.Clamp01((timing.restartCooldown - engineOffTimes[index]) / timing.restartCooldown) : 0f,
+                EngineRunState.Starting => timing.startupDelay > 0f ? Mathf.Clamp01(engineStateTimers[index] / timing.startupDelay) : 0f,
+                EngineRunState.Running => timing.minimumRunTime > 0f ? Mathf.Clamp01((timing.minimumRunTime - engineRunTimes[index]) / timing.minimumRunTime) : 0f,
+                EngineRunState.Shutdown => timing.shutdownTransient > 0f ? Mathf.Clamp01(engineStateTimers[index] / timing.shutdownTransient) : 0f,
                 _ => 0f
             };
         }
@@ -273,26 +273,20 @@ namespace RocketSim
         /// </summary>
         bool EngineIsIgnited(int index)
         {
-            return engineStates != null &&
-                   index >= 0 &&
-                   index < engineStates.Length &&
-                   engineStates[index] != EngineRunState.Off;
+            return engineStates != null && index >= 0 && index < engineStates.Length && engineStates[index] != EngineRunState.Off;
         }
 
         /// <summary>
-        /// Clamps the gimbal cone value to safe limits.
+        /// Clamps the gimbal cone value to a cone.
         /// </summary>
         Vector2 ClampGimbalCone(Vector2 commandDeg)
         {
             float limit = Mathf.Max(0f, cfg.maxGimbal);
-            return commandDeg.sqrMagnitude > limit * limit
-                ? commandDeg.normalized * limit
-                : commandDeg;
+            return commandDeg.sqrMagnitude > limit * limit ? commandDeg.normalized * limit : commandDeg;
         }
 
         /// <summary>
-        /// Copies stored manual commands into the normal actuator targets so
-        /// the rest of the actuator/physics pipeline stays unchanged.
+        /// Copies stored manual commands into the normal actuator targets -> the rest of the actuator/physics pipeline stays unchanged.
         /// </summary>
         void ApplyManualControlOverride()
         {
@@ -321,6 +315,9 @@ namespace RocketSim
         /// </summary>
         void ApplyRcs()
         {
+            if (_legLandingPropulsionLocked)
+                return;
+
             if (!cfg.hasRCS || !assembly || !assembly.rcs)
                 return;
 
@@ -338,8 +335,7 @@ namespace RocketSim
             for (int i = 0; i < jetCount; i++)
             {
                 float requestedCommand = EffectiveRcsValveCommand(i);
-                requestedPropellant += requestedCommand * cfg.rcsThrust /
-                                       (Mathf.Max(cfg.rcsSpecificImpulse, 1f) * G0) * dt;
+                requestedPropellant += requestedCommand * cfg.rcsThrust / (Mathf.Max(cfg.rcsSpecificImpulse, 1f) * G0) * dt;
             }
 
             float propellantScale = requestedPropellant > 0f ? Mathf.Clamp01(rcsPropellant / requestedPropellant) : 0f;
@@ -362,9 +358,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the final command for one RCS jet after applying stuck-open
-        /// and stuck-closed faults. A closed fault reduces the requested command;
-        /// an open fault provides a minimum command even when the policy requests zero.
+        /// Returns the final command for one RCS jet after applying faults.
+        /// A closed fault reduces the requested command, an open fault provides a minimum command even when the policy requests zero.
         /// </summary>
         float EffectiveRcsValveCommand(int index)
         {
@@ -375,8 +370,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Advances RCS valve latch state for the active jets using the configured
-        /// minimum pulse duration.
+        /// Advances RCS valve latch state for the active jets.
         /// </summary>
         void StepRcsValves(int jetCount, float dt)
         {
@@ -390,8 +384,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Allocates or resizes all actuator, manual-control, and engine-state
-        /// arrays to match the current hardware schema.
+        /// Allocates or resizes all actuator, manual-control, and engine-state arrays to match the current hardware schema.
         /// </summary>
         void EnsureActuatorBuffers(bool resetValues)
         {
@@ -402,6 +395,7 @@ namespace RocketSim
             if (throttle == null || throttle.Length != engineCount) throttle = new float[engineCount];
             if (commandedThrottle == null || commandedThrottle.Length != engineCount) commandedThrottle = new float[engineCount];
             if (targetThrottle == null || targetThrottle.Length != engineCount) targetThrottle = new float[engineCount];
+            if (engineEnableCommands == null || engineEnableCommands.Length != engineCount) engineEnableCommands = new float[engineCount];
             if (gimbal == null || gimbal.Length != engineCount) gimbal = new Vector2[engineCount];
             if (targetGimbal == null || targetGimbal.Length != engineCount) targetGimbal = new Vector2[engineCount];
             if (_manualThrottle == null || _manualThrottle.Length != engineCount) _manualThrottle = new float[engineCount];
@@ -426,6 +420,7 @@ namespace RocketSim
             for (int i = 0; i < engineCount; i++)
             {
                 throttle[i] = commandedThrottle[i] = targetThrottle[i] = _manualThrottle[i] = 0f;
+                engineEnableCommands[i] = 0f;
                 gimbal[i] = targetGimbal[i] = _manualGimbal[i] = Vector2.zero;
                 engineStates[i] = EngineRunState.Off;
                 engineStateTimers[i] = 0f;
@@ -451,9 +446,7 @@ namespace RocketSim
         /// </summary>
         float RcsJetCommand(int index)
         {
-            return rcsValveStates != null && index >= 0 && index < rcsValveStates.Length
-                ? rcsValveStates[index]
-                : 0f;
+            return rcsValveStates != null && index >= 0 && index < rcsValveStates.Length ? rcsValveStates[index] : 0f;
         }
 
         /// <summary>
@@ -472,6 +465,48 @@ namespace RocketSim
         }
 
         /// <summary>
+        /// Latches a one-way impact safety interlock. It resets only with
+        /// the next episode, so neither a policy action nor manual inference
+        /// can relight propulsion after the first external physical impact.
+        /// </summary>
+        void LatchLegLandingPropulsionLockout()
+        {
+            if (_legLandingPropulsionLocked)
+                return;
+
+            _legLandingPropulsionLocked = true;
+            EnforceLegLandingPropulsionLockout();
+        }
+
+        /// <summary>Forces main engines and RCS into a non-thrusting state.</summary>
+        void EnforceLegLandingPropulsionLockout()
+        {
+            if (!_legLandingPropulsionLocked)
+                return;
+
+            EngineActuatorStateMachine.ForceOff(
+                cfg.independentEngineCount,
+                commandedThrottle,
+                targetThrottle,
+                throttle,
+                engineEnableCommands,
+                engineStates,
+                engineStateTimers,
+                engineRunTimes,
+                engineOffTimes);
+
+            if (_manualThrottle != null)
+                for (int i = 0; i < _manualThrottle.Length; i++)
+                    _manualThrottle[i] = 0f;
+            if (_manualRcsValveRequests != null)
+                for (int i = 0; i < _manualRcsValveRequests.Length; i++)
+                    _manualRcsValveRequests[i] = 0f;
+
+            ClearRcsCommands();
+            UpdateThrusterVisuals();
+        }
+
+        /// <summary>
         /// Updates engine gimbal transforms and flame visuals from current throttle and gimbal state.
         /// </summary>
         void UpdateThrusterVisuals()
@@ -487,6 +522,5 @@ namespace RocketSim
                 maxFlameLength,
                 Time.time);
         }
-
     }
 }

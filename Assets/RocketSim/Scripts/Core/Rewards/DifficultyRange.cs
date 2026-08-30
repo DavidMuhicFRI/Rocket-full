@@ -21,7 +21,6 @@ namespace RocketSim
         }
 
         /// <summary>Linearly samples this range at a clamped 0..1 difficulty.</summary>
-        public readonly float At(float difficulty01) =>
-            Mathf.Lerp(initial, full, Mathf.Clamp01(difficulty01));
+        public readonly float At(float difficulty01) => Mathf.Lerp(initial, full, Mathf.Clamp01(difficulty01));
     }
 }

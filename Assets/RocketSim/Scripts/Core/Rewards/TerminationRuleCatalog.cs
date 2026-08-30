@@ -212,8 +212,11 @@ namespace RocketSim
             "chopstick.require_stable_platform", "Require stable capture", "Requires the configured stable hold before capture succeeds.",
             p => p.chopstickRequireStablePlatform, (p,v) => p.chopstickRequireStablePlatform = v);
 
+        static readonly TerminationThresholdDescriptor InitialMinimumStableFeet = Integer(
+            "leg.initial_minimum_stable_feet", "Initial minimum feet", "Number of feet required at the easiest curriculum stage.", "feet", 1, 4,
+            p => p.legInitialMinimumStableFeet, (p,v) => p.legInitialMinimumStableFeet = v);
         static readonly TerminationThresholdDescriptor MinimumStableFeet = Integer(
-            "leg.minimum_stable_feet", "Minimum feet on pad", "Number of feet required for stable touchdown.", "feet", 1, 4,
+            "leg.minimum_stable_feet", "Full minimum feet", "Number of feet required at full curriculum difficulty.", "feet", 1, 4,
             p => p.legMinimumStableFeet, (p,v) => p.legMinimumStableFeet = v);
         static readonly TerminationThresholdDescriptor ReboundRise = Scalar(
             "leg.maximum_rebound_rise_m", "Maximum rebound rise", "Maximum upward foot-frame travel after first contact.", "m", 0f, 10f,
@@ -283,25 +286,29 @@ namespace RocketSim
                 RewardParameterId.ChopstickTimeLimitCost, TimeLimit),
 
             RuleWithEventCriteria(TerminationRuleId.LegStableTouchdown, "leg.stable_touchdown", "Stable touchdown",
-                "Ends successfully after safe, stable multi-foot support.", TerminationRuleKind.Success,
+                "Ends successfully after sustained safe four-foot support with propulsion off.", TerminationRuleKind.Success,
                 ObjectiveScenarioMask.LegLanding, p => p.legStableTouchdownEnabled, (p,v) => p.legStableTouchdownEnabled = v,
                 new[]{RewardParameterId.LegSuccessfulTouchdownReward},
                 RewardParameterId.StableTouchdownReward, criteriaAlwaysActive: false,
                 LandingRadius, LandingTotalSpeed, LandingVerticalSpeed, LandingHorizontalSpeed, LandingTilt,
-                LandingAngularRate, LandingStableHold, MinimumStableFeet),
+                LandingAngularRate, LandingStableHold, InitialMinimumStableFeet, MinimumStableFeet),
             Rule(TerminationRuleId.LegHardFirstContact, "leg.hard_first_contact", "Hard first contact",
                 "Ends when first-foot contact exceeds any configured motion limit.", TerminationRuleKind.Failure,
                 ObjectiveScenarioMask.LegLanding, p => p.legHardFirstContactEnabled, (p,v) => p.legHardFirstContactEnabled = v,
-                new[]{RewardParameterId.LegHardTouchdownCost}, LandingTotalSpeed, LandingVerticalSpeed,
+                new[]{RewardParameterId.LegHardTouchdownCost, RewardParameterId.LegImpactSeverityCost}, LandingTotalSpeed, LandingVerticalSpeed,
                 LandingHorizontalSpeed, LandingTilt, LandingAngularRate),
-            SimpleFailure(TerminationRuleId.LegStructuralStrike, "leg.structural_strike", "Structural strike",
-                p => p.legStructuralStrikeEnabled, (p,v) => p.legStructuralStrikeEnabled = v, RewardParameterId.LegStructuralStrikeCost),
-            SimpleFailure(TerminationRuleId.LegFootOutsidePad, "leg.foot_outside_pad", "Foot outside pad",
-                p => p.legFootOutsidePadEnabled, (p,v) => p.legFootOutsidePadEnabled = v, RewardParameterId.LegFootOutsidePadCost),
+            Rule(TerminationRuleId.LegStructuralStrike, "leg.structural_strike", "Structural strike",
+                "Ends when the body or a non-foot landing-gear part strikes the pad.", TerminationRuleKind.Failure,
+                ObjectiveScenarioMask.LegLanding, p => p.legStructuralStrikeEnabled, (p,v) => p.legStructuralStrikeEnabled = v,
+                new[]{RewardParameterId.LegStructuralStrikeCost, RewardParameterId.LegImpactSeverityCost}),
+            Rule(TerminationRuleId.LegFootOutsidePad, "leg.foot_outside_pad", "Foot outside pad",
+                "Ends when a landing foot contacts outside the usable pad footprint.", TerminationRuleKind.Failure,
+                ObjectiveScenarioMask.LegLanding, p => p.legFootOutsidePadEnabled, (p,v) => p.legFootOutsidePadEnabled = v,
+                new[]{RewardParameterId.LegFootOutsidePadCost, RewardParameterId.LegImpactSeverityCost}),
             Rule(TerminationRuleId.LegExcessiveRebound, "leg.excessive_rebound", "Excessive rebound",
                 "Ends after excessive rebound or sustained loss of every foot contact.", TerminationRuleKind.Failure,
                 ObjectiveScenarioMask.LegLanding, p => p.legExcessiveReboundEnabled, (p,v) => p.legExcessiveReboundEnabled = v,
-                new[]{RewardParameterId.LegExcessiveReboundCost}, ReboundRise, ContactLoss),
+                new[]{RewardParameterId.LegExcessiveReboundCost, RewardParameterId.LegImpactSeverityCost}, ReboundRise, ContactLoss),
             Rule(TerminationRuleId.LegMissedPad, "leg.missed_pad", "Missed pad",
                 "Ends below the contact plane when no foot has touched the pad.", TerminationRuleKind.Failure,
                 ObjectiveScenarioMask.LegLanding, p => p.legMissedPadEnabled, (p,v) => p.legMissedPadEnabled = v,
@@ -466,18 +473,33 @@ namespace RocketSim
                 }
                 else
                 {
+                    // Airborne attitude is shaped continuously. It is not an
+                    // easy policy-controlled reset; true escape and physical
+                    // contact rules still bound every episode.
+                    t.unsafeAttitudeEnabled = false;
+                    t.maximumEpisodeSeconds = 60f;
+                    t.landingSuccessRadiusM = new DifficultyRange(6f, 1.5f);
+                    t.landingSuccessMaxTotalSpeedMps = new DifficultyRange(7f, 2f);
+                    t.landingSuccessMaxVerticalSpeedMps = new DifficultyRange(6f, 1.5f);
+                    t.landingSuccessMaxHorizontalSpeedMps = new DifficultyRange(2f, 0.75f);
+                    t.landingSuccessMaxTiltDeg = new DifficultyRange(12f, 3f);
+                    t.landingSuccessMaxAngularRateDegS = new DifficultyRange(30f, 10f);
                     t.legStructuralStrikeEnabled = true;
-                    t.legFootOutsidePadEnabled = true;
+                    // Pad-edge placement is retained as telemetry and an
+                    // optional experiment rule. Default success depends on
+                    // centre error and stable physical foot support instead.
+                    t.legFootOutsidePadEnabled = false;
                     t.legHardFirstContactEnabled = true;
                     t.legExcessiveReboundEnabled = true;
                     t.legStableTouchdownEnabled = true;
                     t.legMissedPadEnabled = true;
                     t.legMissedPadDepthM = 2f;
-                    t.legMinimumStableFeet = 3;
+                    t.legInitialMinimumStableFeet = 4;
+                    t.legMinimumStableFeet = 4;
                     t.legMaximumReboundRiseM = 0.5f;
                     t.legMaximumAllFeetContactLossSeconds = 0.25f;
                     t.legAllowFuelDepletionAfterContact = true;
-                    t.landingStableHoldSeconds = new DifficultyRange(0.25f, 1f);
+                    t.landingStableHoldSeconds = new DifficultyRange(0.40f, 1f);
                 }
                 return;
             }
@@ -503,10 +525,10 @@ namespace RocketSim
             if (scenario != ScenarioType.HoverTracking) return;
             t.trackingCaptureGoalEnabled = false;
             t.trackingRequiredCaptures = 1;
-            t.trackingCaptureRadiusM = new DifficultyRange(10f, 2.5f);
+            t.trackingCaptureRadiusM = new DifficultyRange(10f, 3f);
             t.trackingCaptureMaxVerticalErrorM = new DifficultyRange(3f, 3f);
-            t.trackingCaptureMaxHorizontalSpeedMps = new DifficultyRange(3f, 0.8f);
-            t.trackingCaptureMaxVerticalSpeedMps = new DifficultyRange(3f, 0.8f);
+            t.trackingCaptureMaxHorizontalSpeedMps = new DifficultyRange(3f, 0.9f);
+            t.trackingCaptureMaxVerticalSpeedMps = new DifficultyRange(3f, 0.9f);
             t.trackingCaptureMaxTiltDeg = new DifficultyRange(15f, 5f);
             t.trackingCaptureMaxAngularRateDegS = new DifficultyRange(25f, 25f);
             t.trackingCaptureHoldSeconds = new DifficultyRange(0.5f, 2f);

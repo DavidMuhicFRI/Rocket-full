@@ -21,8 +21,7 @@ namespace RocketSim
         public void SetAreaIndex(int idx) => _areaIndex = idx;
 
         /// <summary>
-        /// Re-reads hardware physics from the assembly, resizes actuator buffers,
-        /// and refreshes visuals/platform geometry after a parts change.
+        /// Re-reads hardware physics from the assembly, resizes actuator buffers, and refreshes visuals/platform geometry after a parts change.
         /// </summary>
         public void RefreshHardwareConfig(bool resetActuators = true)
         {
@@ -48,6 +47,9 @@ namespace RocketSim
             _defaultSolverIterations = rb.solverIterations;
             _defaultSolverVelocityIterations = rb.solverVelocityIterations;
             _defaultCollisionDetectionMode = rb.collisionDetectionMode;
+            _defaultIsKinematic = rb.isKinematic;
+            _defaultDetectCollisions = rb.detectCollisions;
+            SetEpisodePhysicsActive(false);
             rb.maxAngularVelocity = 30f;
             rb.linearDamping = 0f;
             rb.angularDamping = 0f;
@@ -64,16 +66,17 @@ namespace RocketSim
         /// </summary>
         public override void OnEpisodeBegin()
         {
+            // ML-Agents does not call OnEpisodeBegin during the first initialization pass.
+            // Keep the prefab "disabled" until a real episode owns its position, mass, contacts, rewards, and telemetry.
+            SetEpisodePhysicsActive(false);
+
             if (_hasEpisodeStarted)
             {
                 if (!_currentEpisodeCompleted && _step > 0)
                 {
                     _episodeTerminationReason = DefaultExternalTerminationReason(maxStepOrReset: true);
                     LogLandingEpisodeEnd(_episodeTerminationReason);
-                    TelemetryLogger.Instance?.CompleteEpisode(
-                        _areaIndex,
-                        _episode,
-                        BuildTelemetryEpisodeOutcome());
+                    TelemetryLogger.Instance?.CompleteEpisode(_areaIndex, _episode, BuildTelemetryEpisodeOutcome());
                     NotifyEpisodeCompleted();
                 }
 
@@ -113,16 +116,12 @@ namespace RocketSim
             {
                 _currentEpisodeCompleted = true;
                 _telemetryLoggedThisStep = true;
+                SetEpisodePhysicsActive(true);
                 return;
             }
 
             _episodeElapsedSeconds = 0f;
-            _episodeFaults.BeginEpisode(
-                envConfig?.faults,
-                envConfig != null ? envConfig.behaviorType : BehaviorType.Training,
-                cfg,
-                _areaIndex,
-                _episode);
+            _episodeFaults.BeginEpisode(envConfig?.faults, envConfig?.behaviorType ?? BehaviorType.Training, cfg, _areaIndex, _episode);
             
             fuel = cfg.startFuelMass > 0f ? cfg.startFuelMass : cfg.maxFuelMass;
             rcsPropellant = cfg.hasRCS ? cfg.rcsPropellantMass : 0f;
@@ -135,15 +134,16 @@ namespace RocketSim
 
             ClearRcsCommands();
 
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
+            StageEpisodeMotion(Vector3.zero, Vector3.zero);
 
             _windEnvironment.BeginEpisode(envConfig, ref _episodeRandom);
             SpawnForScenario();
             InitializeHoverEngineAtEquilibrium();
             CaptureLandingEpisodeStartAltitude();
-            RandomizeTarget();
+            InitializeTargetForEpisode();
             UpdateChopstickPlatformGeometry();
+            Physics.SyncTransforms();
+            SetEpisodePhysicsActive(true);
             UpdateChopstickPlatformState(0f);
             UpdateLegLandingState(0f);
             CaptureEpisodeInitialTelemetry();
@@ -173,11 +173,12 @@ namespace RocketSim
             // 4. Orientation — full up vector (3)
             sensor.AddObservation(transform.up);
 
-            // 5. Actuator state (throttle/gimbal, engine mode and timing,
-            // fins, and RCS jets). Engine timing makes the actuator dynamics
-            // Markov for a feed-forward policy during low-mass pulse control.
+            // 5. Actuator state (throttle/gimbal, engine mode and timing, fins, and RCS jets).
             for (int i = 0; i < cfg.independentEngineCount; i++)
                 sensor.AddObservation(throttle[i]);
+            if (cfg.separateEngineEnableActions)
+                for (int i = 0; i < cfg.independentEngineCount; i++)
+                    sensor.AddObservation(engineEnableCommands[i]);
             for (int i = 0; i < cfg.independentEngineCount; i++)
                 sensor.AddObservation(gimbal[i] / Mathf.Max(cfg.maxGimbal, 1f));
             for (int i = 0; i < cfg.independentEngineCount; i++)
@@ -206,9 +207,7 @@ namespace RocketSim
             sensor.AddObservation(Mathf.Clamp01(q / 5000f));
 
             // 10. Wind in rocket-local frame (3)
-            sensor.AddObservation(
-                transform.InverseTransformDirection(wind) /
-                Mathf.Max(envConfig.windSpeed, 1f));
+            sensor.AddObservation(transform.InverseTransformDirection(wind) / Mathf.Max(envConfig.windSpeed, 1f));
 
             float headingErrorRad = SignedHeadingErrorDeg() * Mathf.Deg2Rad;
             sensor.AddObservation(Mathf.Sin(headingErrorRad));
@@ -220,19 +219,14 @@ namespace RocketSim
                 for (int i = 0; i < RocketAgentSchema.LandingFootObservationCount; i++)
                     sensor.AddObservation(IsLandingFootOnPad(i) ? 1f : 0f);
         }
-
-        /// <summary>
-        /// Fills the action buffers with manual or fallback control commands.
-        /// </summary>
+        
         public override void Heuristic(in ActionBuffers actionsOut)
         {
-            actionsOut.ContinuousActions.Clear();
-            actionsOut.DiscreteActions.Clear();
+            //placeholder for ML-agents to be happy
         }
 
         /// <summary>
-        /// Enables or disables hardware-test mode, which lets test controllers
-        /// drive actuators manually without normal episode reward/reset behavior.
+        /// Enables or disables hardware-test mode, which lets test controllers drive actuators manually.
         /// </summary>
         public void SetHardwareTestMode(bool enabled)
         {
@@ -241,8 +235,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Places the rocket at a deterministic test pose, resets propellant and
-        /// actuator state, and keeps ML-Agents episode bookkeeping out of the test.
+        /// Places the rocket at a deterministic test pose, resets propellant and actuator state.
         /// </summary>
         public void ResetForHardwareTest(
             Vector3 localPosition,
@@ -251,6 +244,7 @@ namespace RocketSim
             Vector3 angularVelocity)
         {
             SetHardwareTestMode(true);
+            SetEpisodePhysicsActive(false);
             RefreshConfig();
             EnsureActuatorBuffers(true);
 
@@ -275,8 +269,7 @@ namespace RocketSim
             transform.SetLocalPositionAndRotation(localPosition, localRotation);
             rb.position = transform.position;
             rb.rotation = transform.rotation;
-            rb.linearVelocity = linearVelocity;
-            rb.angularVelocity = angularVelocity;
+            StageEpisodeMotion(linearVelocity, angularVelocity);
             Physics.SyncTransforms();
 
             ResetEpisodeRandom();
@@ -290,7 +283,32 @@ namespace RocketSim
             UpdateMassProperties();
             UpdateThrusterVisuals();
             UpdateChopstickPlatformGeometry();
+            SetEpisodePhysicsActive(true);
             _sensors.Tick(rb, transform, 0f, 0f, 0f, 0f, 0f, cfg.radius, episodeStart: true);
+        }
+
+        /// <summary>
+        /// Prevents contacts and gravity from running outside an initialized episode.
+        /// </summary>
+        void SetEpisodePhysicsActive(bool active)
+        {
+            if (!rb) return;
+
+            if (!active)
+            {
+                _hasStagedEpisodeMotion = false;
+                rb.detectCollisions = false;
+                rb.isKinematic = true;
+                return;
+            }
+
+            rb.isKinematic = _defaultIsKinematic;
+            rb.detectCollisions = _defaultDetectCollisions;
+            if (!_hasStagedEpisodeMotion) return;
+
+            rb.linearVelocity = _stagedEpisodeLinearVelocity;
+            rb.angularVelocity = _stagedEpisodeAngularVelocity;
+            _hasStagedEpisodeMotion = false;
         }
 
         /// <summary>
@@ -298,6 +316,9 @@ namespace RocketSim
         /// </summary>
         void FixedUpdate()
         {
+            if (!_hardwareTestMode && (!_hasEpisodeStarted || _currentEpisodeCompleted))
+                return;
+
             _step++;
             CommitLegLandingContactFrame();
             _stepReward = 0f;
@@ -316,20 +337,18 @@ namespace RocketSim
             _windEnvironment.Step(envConfig, ref _episodeRandom, Time.fixedDeltaTime);
             float thrustForceMag = ApplyEngines();
             
-            // ── Compute aero forces and capture magnitudes for sensor package ──
+            // Compute aero forces and capture magnitudes for sensors
             float lateralForceMag, axialForceMag;
             
             ApplyAerodynamics(out lateralForceMag, out axialForceMag);
             
-            // ── Tick sensors AFTER aero so heat/stress values are current ─────
+            // Tick sensors AFTER aero so heat/stress values are current
             float sensorAltitude = Mathf.Max(0f, transform.localPosition.y);
             float rho = AtmosphereModel.AirDensity(sensorAltitude, Rho0, HScale, envConfig.AirDensityMultiplier);
             float speed = (rb.linearVelocity - wind).magnitude;
             float lever = Mathf.Abs(cfg.cpLocalY - rb.centerOfMass.y);
 
-            _sensors.Tick(rb, transform, rho, speed,
-                lateralForceMag, axialForceMag + thrustForceMag,
-                lever, cfg.radius);
+            _sensors.Tick(rb, transform, rho, speed, lateralForceMag, axialForceMag + thrustForceMag, lever, cfg.radius);
             
             ApplyRcs();
             UpdateMassProperties();
@@ -340,32 +359,54 @@ namespace RocketSim
             if (!_hardwareTestMode)
             {
                 _hoverTrackTargetReachedThisStep = UpdateHoverTrackSuccess();
+                bool captureQualifiesForCurriculum = false;
                 if (_hoverTrackTargetReachedThisStep)
+                {
                     _hoverTrackEpisodeCaptures++;
-
-                // Capture state is part of the objective input, so it must be
-                // finalized before reward and termination evaluation.
+                    // The first target is the episode's acquisition/settling gate. Curriculum evidence starts with the second target.
+                    captureQualifiesForCurriculum = SimEnvironmentConfig.HasCapturedRelocatedHoverTrackTarget(_hoverTrackEpisodeCaptures);
+                }
+                
                 CalculateRewards();
+
+                if (envConfig.scenario == ScenarioType.Hover && envConfig.IsStandardEvaluation && !_episodeEndedThisStep && _episodeElapsedSeconds >= EvaluationConfig.FixedHoverDurationSeconds)
+                {
+                    _episodeTerminationReason = EpisodeTerminationReason.HoverEvaluationHorizon;
+                    EndEpisode();
+                }
+
+                // Evaluation uses a hard per-target deadline. Detect it before
+                // ordinary step logging so EndEpisode writes the terminal sample
+                // exactly once. A capture on the deadline wins over timeout.
+                if (envConfig.scenario == ScenarioType.HoverTracking && envConfig.IsStandardEvaluation && !_hoverTrackTargetReachedThisStep && !_episodeEndedThisStep && _hoverTrackSegmentElapsedTime >= envConfig.HoverTrackAttemptWindowSeconds)
+                {
+                    _episodeTerminationReason = EpisodeTerminationReason.HoverTrackingTargetTimeout;
+                    EndEpisode();
+                }
 
                 if (!_telemetryLoggedThisStep)
                     LogTelemetry();
 
-                if (envConfig.scenario == ScenarioType.HoverTracking &&
-                    _hoverTrackTargetReachedThisStep)
+                if (envConfig.scenario == ScenarioType.HoverTracking && _hoverTrackTargetReachedThisStep)
                 {
-                    assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyHoverTrackTargetReached();
+                    assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyHoverTrackTargetReached(captureQualifiesForCurriculum);
 
                     if (envConfig.moveTargetEnabled && !_episodeEndedThisStep)
                     {
-                        RandomizeTarget();
+                        CaptureObjectiveDifficulty();
+                        MoveTargetAfterCapture();
                     }
+                }
+                else if (envConfig.scenario == ScenarioType.HoverTracking && !envConfig.IsStandardEvaluation && !_episodeEndedThisStep && _hoverTrackEpisodeCaptures > 0 && _hoverTrackSegmentElapsedTime >= envConfig.HoverTrackAttemptWindowSeconds)
+                {
+                    assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyHoverTrackTargetAttemptFailed();
+                    _hoverTrackSegmentElapsedTime = 0f;
                 }
             }
         }
 
         /// <summary>
-        /// Ends the current ML-Agents episode once, logs the final telemetry
-        /// row, flushes the episode summary, and notifies curriculum owners.
+        /// Ends the current ML-Agents episode, logs the final telemetry row, flushes the episode summary, and notifies curriculum owners.
         /// </summary>
         public new void EndEpisode()
         {
@@ -376,31 +417,26 @@ namespace RocketSim
 
             LogLandingEpisodeEnd(_episodeTerminationReason);
             LogTelemetry(forceStepWrite: true);
-            TelemetryLogger.Instance?.CompleteEpisode(
-                _areaIndex,
-                _episode,
-                BuildTelemetryEpisodeOutcome());
+            TelemetryLogger.Instance?.CompleteEpisode(_areaIndex, _episode, BuildTelemetryEpisodeOutcome()); 
+            
             _currentEpisodeCompleted = true;
             NotifyEpisodeCompleted();
             _telemetryLoggedThisStep = true;
             _episodeEndedThisStep    = true;
+            SetEpisodePhysicsActive(false);
 
             base.EndEpisode();
-
-            // Some ML-Agents versions reset immediately; keep this physics step
-            // marked as logged even if OnEpisodeBegin has already run.
+            
             _telemetryLoggedThisStep = true;
             _episodeEndedThisStep    = true;
         }
 
         /// <summary>
-        /// Notifies the owning SimulationAreaHost that a real episode ended so
-        /// shared curriculum counters can advance.
+        /// Notifies the owning SimulationAreaHost that an episode ended so shared curriculum counters can advance.
         /// </summary>
         void NotifyEpisodeCompleted()
         {
-            // Curriculum progresses after a real completed/reset episode, not at
-            // the first OnEpisodeBegin bootstrap.
+            // Curriculum progresses after a real completed/reset episode// the first OnEpisodeBegin bootstrap.
             bool successfulEpisode = envConfig.scenario switch
             {
                 ScenarioType.HoverTracking => WasHoverTrackingEpisodeSuccessful(),
@@ -408,32 +444,25 @@ namespace RocketSim
                 ScenarioType.LegLanding => _landingEpisodeSucceeded,
                 _ => false
             };
-            bool includeInCurriculumEstimate =
-                !envConfig.scenario.IsLanding() || !_landingEpisodeUsesEasierReplay;
-            assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyEpisodeEnd(
-                successfulEpisode,
-                includeInCurriculumEstimate);
+            bool includeInCurriculumEstimate = !envConfig.scenario.IsLanding() || !_landingEpisodeUsesEasierReplay;
+            assembly.GetComponentInParent<SimulationAreaHost>()?.NotifyEpisodeEnd(successfulEpisode, includeInCurriculumEstimate);
         }
 
         /// <summary>
         /// A configured capture-count goal requires reaching that terminal goal.
-        /// Without the goal rule, one capture remains the curriculum success unit.
+        /// Tracking requires two captures, so the agent must acquire at least one relocated target
         /// </summary>
         bool WasHoverTrackingEpisodeSuccessful()
         {
-            if (envConfig == null || envConfig.scenario != ScenarioType.HoverTracking)
+            if (envConfig is not { scenario: ScenarioType.HoverTracking })
                 return false;
 
-            TerminationParameters termination =
-                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
-            return termination.trackingCaptureGoalEnabled
-                ? _objectiveSuccessTerminalReached
-                : _hoverTrackEpisodeCaptures > 0;
+            TerminationParameters termination = envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            return SimEnvironmentConfig.IsHoverTrackCurriculumEpisodeSuccessful(termination.trackingCaptureGoalEnabled, _objectiveSuccessTerminalReached, _hoverTrackEpisodeCaptures);
         }
 
         /// <summary>
-        /// Caches the immutable physics snapshot built from the current rocket
-        /// assembly, falling back to static Falcon 9 values when no assembly exists.
+        /// Caches the immutable physics snapshot built from the current rocket assembly.
         /// </summary>
         void RefreshConfig()
         {
@@ -443,9 +472,8 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Freezes the curriculum difficulty used by this episode's objective.
-        /// Shared curriculum state may advance while other parallel agents are
-        /// still running, so reward and termination thresholds must not drift.
+        /// Freezes objective difficulty for a landing episode or one Hover Tracking target attempt.
+        /// Shared state may advance while other agents are still running, so thresholds never drift during an attempt.
         /// </summary>
         void CaptureObjectiveDifficulty()
         {
@@ -453,7 +481,7 @@ namespace RocketSim
             {
                 ScenarioType.ChopstickLanding => ActiveLandingProfile.difficulty01,
                 ScenarioType.LegLanding => ActiveLandingProfile.difficulty01,
-                ScenarioType.HoverTracking => envConfig.hoverTrackCurriculumProgress,
+                ScenarioType.HoverTracking => envConfig.IsStandardEvaluation ? envConfig.StandardEvaluationDifficultyForEpisode(_episode) : envConfig.hoverTrackCurriculumProgress,
                 _ => 0f
             };
         }

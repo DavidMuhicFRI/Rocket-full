@@ -20,7 +20,17 @@ namespace RocketSim
         public float landingPlanarDistanceFalloffM;
         public float landingNearTargetAltitudeFalloffM;
         public float landingPlanarSpeedScaleMps;
+        public float landingVerticalSpeedExcessScaleMps;
         public float landingAngularRateScaleDegS;
+        public float landingUpwardVelocityToleranceMps;
+        public float landingUpwardVelocityScaleMps;
+        public float legFuelEfficiencyStartDifficulty;
+        public float legFuelEfficiencyFullDifficulty;
+        public float legFuelEfficiencyBudgetFraction;
+        public float legMissionEfficiencyBudgetFullFraction;
+        public float legRestartEquivalentFuelFraction;
+        public float legAdditionalEngineIgnitionEquivalentFuelFraction;
+        public float legTouchdownQualityRewardFraction;
         public float landingYawErrorScaleDeg;
         public float landingYawSpinScaleDegS;
 

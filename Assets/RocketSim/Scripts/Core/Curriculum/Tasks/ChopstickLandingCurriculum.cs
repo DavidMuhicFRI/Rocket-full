@@ -30,6 +30,7 @@ namespace RocketSim
     public readonly struct LandingCurriculumProfile
     {
         public readonly float difficulty01;
+        public readonly float criteriaDifficulty01;
         public readonly float spawnAltitudeMin;
         public readonly float spawnAltitudeMax;
         public readonly float spawnRadius;
@@ -48,6 +49,7 @@ namespace RocketSim
         public readonly float successMaxYawErrorDeg;
         public readonly float platformHalfSize;
         public readonly float platformStableHoldTime;
+        public readonly int minimumStableFeet;
 
         public LandingCurriculumProfile(
             float difficulty01,
@@ -68,9 +70,12 @@ namespace RocketSim
             float successMaxAngularRateDegS,
             float successMaxYawErrorDeg,
             float platformHalfSize,
-            float platformStableHoldTime)
+            float platformStableHoldTime,
+            float criteriaDifficulty01 = -1f,
+            int minimumStableFeet = 0)
         {
             this.difficulty01 = difficulty01;
+            this.criteriaDifficulty01 = criteriaDifficulty01 < 0f ? difficulty01 : criteriaDifficulty01;
             this.spawnAltitudeMin = spawnAltitudeMin;
             this.spawnAltitudeMax = spawnAltitudeMax;
             this.spawnRadius = spawnRadius;
@@ -89,6 +94,7 @@ namespace RocketSim
             this.successMaxYawErrorDeg = successMaxYawErrorDeg;
             this.platformHalfSize = platformHalfSize;
             this.platformStableHoldTime = platformStableHoldTime;
+            this.minimumStableFeet = minimumStableFeet;
         }
     }
 
@@ -128,7 +134,6 @@ namespace RocketSim
         public const float LandingDefaultMaximumStepPerBatch = 0.02f;
         public const float LandingDefaultEasierReplayProbability = 0.15f;
         public const float LandingDefaultEasierReplayOffset = 0.20f;
-        // Landing altitudes describe the catch-frame height, not the engine plane.
         public const float LandingInitialSpawnAltitudeMin = 120f;
         public const float LandingInitialSpawnAltitudeMax = 220f;
         public const float LandingFullSpawnAltitudeMin = 300f;
@@ -150,8 +155,7 @@ namespace RocketSim
         public const float LandingDefaultPlatformHalfSizeInitial = 8f;
         public const float LandingDefaultPlatformHalfSizeFull = 3f;
 
-        public float LandingCurriculumSuccessRate =>
-            landingCurriculumEpisodeCount > 0 ? Mathf.Clamp01(landingCurriculumRecentSuccessRate) : 0f;
+        public float LandingCurriculumSuccessRate => landingCurriculumEpisodeCount > 0 ? Mathf.Clamp01(landingCurriculumRecentSuccessRate) : 0f;
 
         /// <summary>Resets all landing curriculum progress and batch state.</summary>
         public void ResetLandingCurriculum()
@@ -202,16 +206,9 @@ namespace RocketSim
                 if (landingCurriculumMode == LandingCurriculumMode.Monotonic)
                     delta = Mathf.Max(0f, delta);
 
-                float retreatFloor = landingCurriculumMode == LandingCurriculumMode.Adaptive
-                    ? Mathf.Max(0f, landingCurriculumPeakLinearProgress - landingCurriculumMaximumRetreat)
-                    : landingCurriculumLinearProgress;
-                landingCurriculumLinearProgress = Mathf.Clamp(
-                    landingCurriculumLinearProgress + delta,
-                    retreatFloor,
-                    1f);
-                landingCurriculumPeakLinearProgress = Mathf.Max(
-                    landingCurriculumPeakLinearProgress,
-                    landingCurriculumLinearProgress);
+                float retreatFloor = landingCurriculumMode == LandingCurriculumMode.Adaptive ? Mathf.Max(0f, landingCurriculumPeakLinearProgress - landingCurriculumMaximumRetreat) : landingCurriculumLinearProgress;
+                landingCurriculumLinearProgress = Mathf.Clamp(landingCurriculumLinearProgress + delta, retreatFloor, 1f);
+                landingCurriculumPeakLinearProgress = Mathf.Max(landingCurriculumPeakLinearProgress, landingCurriculumLinearProgress);
                 landingCurriculumBatchEpisodeCount = 0;
             }
 
@@ -228,9 +225,7 @@ namespace RocketSim
 
             EnsureLandingCurriculumDefaults();
             landingCurriculumEnabled = landingCurriculumMode != LandingCurriculumMode.FixedFullDifficulty;
-            landingCurriculumProgress = landingCurriculumEnabled
-                ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(landingCurriculumLinearProgress))
-                : 1f;
+            landingCurriculumProgress = landingCurriculumEnabled ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(landingCurriculumLinearProgress)) : 1f;
         }
 
         /// <summary>
@@ -241,8 +236,7 @@ namespace RocketSim
         {
             float d = Mathf.Clamp01(difficulty01);
             float Value(float initialValue, float fullValue) => Mathf.Lerp(initialValue, fullValue, d);
-            TerminationParameters termination =
-                GetTrainingObjective(ScenarioType.ChopstickLanding).terminations;
+            TerminationParameters termination = GetTrainingObjective(ScenarioType.ChopstickLanding).terminations;
 
             return new LandingCurriculumProfile(
                 d,
@@ -301,11 +295,7 @@ namespace RocketSim
         {
             float baseStep = Mathf.Min(
                 landingCurriculumMaximumStepPerBatch,
-                Mathf.Clamp(
-                    curriculumDifficultyIncreaseSpeed,
-                    MinCurriculumDifficultyIncreaseSpeed,
-                    MaxCurriculumDifficultyIncreaseSpeed) /
-                Mathf.Max(1f, landingCurriculumBatchesToFullDifficulty));
+                Mathf.Clamp(curriculumDifficultyIncreaseSpeed, MinCurriculumDifficultyIncreaseSpeed, MaxCurriculumDifficultyIncreaseSpeed) / Mathf.Max(1f, landingCurriculumBatchesToFullDifficulty));
 
             float rate = Mathf.Clamp01(successRate);
             if (rate > landingCurriculumPromotionSuccessRate)
@@ -316,8 +306,7 @@ namespace RocketSim
 
             if (rate < landingCurriculumRetreatSuccessRate)
             {
-                float pressure = (landingCurriculumRetreatSuccessRate - rate) /
-                                 Mathf.Max(0.01f, landingCurriculumRetreatSuccessRate);
+                float pressure = (landingCurriculumRetreatSuccessRate - rate) / Mathf.Max(0.01f, landingCurriculumRetreatSuccessRate);
                 return -baseStep * landingCurriculumRetreatSpeedMultiplier * Mathf.Clamp01(pressure);
             }
 

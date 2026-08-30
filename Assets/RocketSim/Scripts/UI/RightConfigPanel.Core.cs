@@ -424,7 +424,7 @@ namespace RocketSim
             }
             if (envConfig.IsStandardEvaluation && !envConfig.scenario.SupportsStandardEvaluation())
             {
-                error = "Standard evaluation supports fixed hover and the two landing tasks.";
+                error = "Standard evaluation supports all four flight tasks.";
                 return false;
             }
 

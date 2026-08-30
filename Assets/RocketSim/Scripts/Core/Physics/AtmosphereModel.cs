@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Core/Physics/AtmosphereModel.cs
 // Purpose: Provides the deliberately simple exponential atmosphere and converts
 // pressure into altitude-dependent engine thrust and efficiency.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -13,8 +11,7 @@ namespace RocketSim
     internal static class AtmosphereModel
     {
         /// <summary>
-        /// Returns normalized ambient pressure at altitude using an exponential
-        /// scale-height atmosphere.
+        /// Returns normalized ambient pressure at altitude using the exponential atmosphere model.
         /// </summary>
         public static float PressureRatio(float altitude, float scaleHeight)
         {
@@ -23,8 +20,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns air density at altitude after applying the weather density
-        /// multiplier used by the environment config.
+        /// Returns air density at altitude after applying the weather density multiplier
         /// </summary>
         public static float AirDensity(float altitude, float seaLevelDensity, float scaleHeight, float multiplier)
         {
@@ -33,15 +29,12 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Interpolates engine thrust between vacuum and sea-level behavior
-        /// using the current pressure ratio.
+        /// Interpolates engine thrust between vacuum and sea-level behavior using the current pressure ratio.
         /// </summary>
-        public static float ThrustScale(float pressureRatio, float vacuumThrustMultiplier) =>
-            Mathf.Lerp(vacuumThrustMultiplier, 1f, pressureRatio);
+        public static float ThrustScale(float pressureRatio, float vacuumThrustMultiplier) => Mathf.Lerp(vacuumThrustMultiplier, 1f, pressureRatio);
 
         /// <summary>
-        /// Interpolates specific impulse between vacuum and sea-level behavior
-        /// using the current pressure ratio.
+        /// Interpolates specific impulse between vacuum and sea-level behavior using the current pressure ratio.
         /// </summary>
         public static float SpecificImpulse(float seaLevelIsp, float pressureRatio, float vacuumIspMultiplier)
         {

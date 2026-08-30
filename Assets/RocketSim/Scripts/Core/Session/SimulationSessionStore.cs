@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEngine;
 
 namespace RocketSim
@@ -150,13 +151,25 @@ namespace RocketSim
             if (!File.Exists(path)) return false;
             try
             {
-                SimulationSessionConfig session = JsonUtility.FromJson<SimulationSessionConfig>(File.ReadAllText(path));
+                string persistedJson = File.ReadAllText(path);
+                string actualHash = ComputePersistedSessionSha256(persistedJson);
+                if (!string.Equals(
+                        actualHash,
+                        manifest.currentSessionSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                SimulationSessionConfig session =
+                    JsonUtility.FromJson<SimulationSessionConfig>(persistedJson);
                 if (session == null || session.schemaVersion != SimulationSessionConfig.CurrentSchemaVersion)
                     return false;
+
+                // Integrity belongs to the immutable bytes that were saved.
+                // Only migrate nested configuration objects after that check;
+                // otherwise newly introduced defaults change the serialized
+                // form and make every older, valid run look corrupted.
                 session.EnsureSections();
-                string actualHash = SimulationSessionSnapshotFactory.Sha256Hex(JsonUtility.ToJson(session));
-                return string.Equals(actualHash, manifest.currentSessionSha256, StringComparison.OrdinalIgnoreCase) &&
-                       SimulationSessionValidator.Validate(session).IsValid;
+                return SimulationSessionValidator.Validate(session).IsValid;
             }
             catch
             {
@@ -225,6 +238,46 @@ namespace RocketSim
             }
             runs.Sort(StringComparer.OrdinalIgnoreCase);
             return runs.ToArray();
+        }
+
+        /// <summary>
+        /// Reconstructs Unity's compact JSON representation from the pretty
+        /// persisted snapshot without deserializing it into today's config types.
+        /// This keeps manifest verification stable when nested schemas migrate.
+        /// </summary>
+        internal static string ComputePersistedSessionSha256(string persistedJson)
+        {
+            if (persistedJson == null) throw new ArgumentNullException(nameof(persistedJson));
+
+            var compact = new StringBuilder(persistedJson.Length);
+            bool insideString = false;
+            bool escaped = false;
+            foreach (char character in persistedJson)
+            {
+                if (insideString)
+                {
+                    compact.Append(character);
+                    if (escaped)
+                        escaped = false;
+                    else if (character == '\\')
+                        escaped = true;
+                    else if (character == '"')
+                        insideString = false;
+                    continue;
+                }
+
+                if (character == '"')
+                {
+                    insideString = true;
+                    compact.Append(character);
+                }
+                else if (!char.IsWhiteSpace(character))
+                {
+                    compact.Append(character);
+                }
+            }
+
+            return SimulationSessionSnapshotFactory.Sha256Hex(compact.ToString());
         }
 
         public static void SaveRuntimeState(string runId, RunRuntimeState state)

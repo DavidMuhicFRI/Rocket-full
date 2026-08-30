@@ -61,6 +61,7 @@ namespace RocketSim
                 },
                 _ => 1
             };
+            //change this if we add more engine configurations
         }
 
         /// <summary>
@@ -87,13 +88,9 @@ namespace RocketSim
                 EngineLayout.Octaweb => burnGroup switch
                 {
                     OctawebBurnGroup.CenterOnly => installedEngineIndex == 0,
-                    OctawebBurnGroup.CenterPlusTwo => installedEngineIndex == 0 || installedEngineIndex == 1 || installedEngineIndex == 5,
-                    OctawebBurnGroup.CenterPlusFour => installedEngineIndex == 0 ||
-                                                       installedEngineIndex == 1 ||
-                                                       installedEngineIndex == 3 ||
-                                                       installedEngineIndex == 5 ||
-                                                       installedEngineIndex == 7,
-                    OctawebBurnGroup.OuterRing => installedEngineIndex >= 1 && installedEngineIndex <= 8,
+                    OctawebBurnGroup.CenterPlusTwo => installedEngineIndex is 0 or 1 or 5,
+                    OctawebBurnGroup.CenterPlusFour => installedEngineIndex is 0 or 1 or 3 or 5 or 7,
+                    OctawebBurnGroup.OuterRing => installedEngineIndex is >= 1 and <= 8,
                     OctawebBurnGroup.AllNine => installedEngineIndex <= 8,
                     _ => installedEngineIndex == 0
                 },

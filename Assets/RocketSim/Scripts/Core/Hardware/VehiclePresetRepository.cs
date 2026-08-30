@@ -36,9 +36,7 @@ namespace RocketSim
         public const string SimpleBuiltInName = "Simple";
         public const int MaximumNameLength = 64;
 
-        static string CatalogPath => Path.Combine(
-            Application.persistentDataPath,
-            "VehiclePresets.json");
+        static string CatalogPath => Path.Combine(Application.persistentDataPath, "VehiclePresets.json");
 
         /// <summary>Returns all valid user presets sorted by name.</summary>
         public static IReadOnlyList<UserVehiclePreset> LoadAll(out string error)
@@ -46,8 +44,7 @@ namespace RocketSim
             if (!TryReadCatalog(out UserVehiclePresetCollection catalog, out error))
                 return Array.Empty<UserVehiclePreset>();
 
-            catalog.presets.Sort((left, right) =>
-                StringComparer.OrdinalIgnoreCase.Compare(left.name, right.name));
+            catalog.presets.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.name, right.name));
             return catalog.presets;
         }
 
@@ -55,12 +52,7 @@ namespace RocketSim
         /// Saves a new named vehicle or replaces an existing user vehicle with
         /// the same name. Returns whether an existing entry was overwritten.
         /// </summary>
-        public static bool TrySave(
-            string requestedName,
-            RocketPartsConfig vehicle,
-            out string normalizedName,
-            out bool overwritten,
-            out string error)
+        public static bool TrySave(string requestedName, RocketPartsConfig vehicle, out string normalizedName, out bool overwritten, out string error)
         {
             normalizedName = string.Empty;
             overwritten = false;
@@ -85,8 +77,7 @@ namespace RocketSim
             snapshot.hardwarePreset = RocketHardwarePreset.Custom;
             string savedName = normalizedName;
 
-            int existingIndex = catalog.presets.FindIndex(entry =>
-                string.Equals(entry.name, savedName, StringComparison.OrdinalIgnoreCase));
+            int existingIndex = catalog.presets.FindIndex(entry => string.Equals(entry.name, savedName, StringComparison.OrdinalIgnoreCase));
             var saved = new UserVehiclePreset
             {
                 name = savedName,
@@ -115,8 +106,7 @@ namespace RocketSim
             if (!TryReadCatalog(out UserVehiclePresetCollection catalog, out error))
                 return false;
 
-            UserVehiclePreset saved = catalog.presets.Find(entry =>
-                string.Equals(entry.name, normalizedName, StringComparison.OrdinalIgnoreCase));
+            UserVehiclePreset saved = catalog.presets.Find(entry => string.Equals(entry.name, normalizedName, StringComparison.OrdinalIgnoreCase));
             if (saved?.vehicle == null)
             {
                 error = $"Vehicle preset '{normalizedName}' was not found.";
@@ -142,8 +132,7 @@ namespace RocketSim
             if (!TryReadCatalog(out UserVehiclePresetCollection catalog, out error))
                 return false;
 
-            int removed = catalog.presets.RemoveAll(entry =>
-                string.Equals(entry.name, normalizedName, StringComparison.OrdinalIgnoreCase));
+            int removed = catalog.presets.RemoveAll(entry => string.Equals(entry.name, normalizedName, StringComparison.OrdinalIgnoreCase));
             if (removed == 0)
             {
                 error = $"Vehicle preset '{normalizedName}' was not found.";
@@ -181,9 +170,8 @@ namespace RocketSim
             return true;
         }
 
-        public static bool IsBuiltInName(string name) =>
-            string.Equals(name?.Trim(), Falcon9BuiltInName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name?.Trim(), SimpleBuiltInName, StringComparison.OrdinalIgnoreCase);
+        public static bool IsBuiltInName(string name) => string.Equals(name?.Trim(), Falcon9BuiltInName, StringComparison.OrdinalIgnoreCase) ||
+                                                         string.Equals(name?.Trim(), SimpleBuiltInName, StringComparison.OrdinalIgnoreCase);
 
         static bool TryReadCatalog(out UserVehiclePresetCollection catalog, out string error)
         {
@@ -198,9 +186,7 @@ namespace RocketSim
                 if (catalog?.presets == null)
                     throw new InvalidDataException("The preset catalog has no preset list.");
 
-                catalog.presets.RemoveAll(entry =>
-                    entry == null || entry.vehicle == null ||
-                    !TryNormalizeName(entry.name, out _, out _));
+                catalog.presets.RemoveAll(entry => entry?.vehicle == null || !TryNormalizeName(entry.name, out _, out _));
                 return true;
             }
             catch (Exception ex)
@@ -222,8 +208,7 @@ namespace RocketSim
                 if (!string.IsNullOrEmpty(directory))
                     Directory.CreateDirectory(directory);
 
-                catalog.presets.Sort((left, right) =>
-                    StringComparer.OrdinalIgnoreCase.Compare(left.name, right.name));
+                catalog.presets.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.name, right.name));
                 File.WriteAllText(temporaryPath, JsonUtility.ToJson(catalog, true));
 
                 if (File.Exists(CatalogPath))
@@ -233,7 +218,7 @@ namespace RocketSim
                         File.Replace(temporaryPath, CatalogPath, null);
                     }
                     catch (Exception ex) when (
-                        ex is PlatformNotSupportedException || ex is IOException)
+                        ex is PlatformNotSupportedException or IOException)
                     {
                         File.Copy(temporaryPath, CatalogPath, true);
                         File.Delete(temporaryPath);
@@ -255,14 +240,12 @@ namespace RocketSim
                 }
                 catch
                 {
-                    // Preserve the original write error; a stale temporary file
-                    // can safely be replaced by the next successful save.
+                    // Ignore any errors while cleaning up the temporary file
                 }
                 return false;
             }
         }
 
-        static RocketPartsConfig CloneVehicle(RocketPartsConfig source) =>
-            JsonUtility.FromJson<RocketPartsConfig>(JsonUtility.ToJson(source));
+        static RocketPartsConfig CloneVehicle(RocketPartsConfig source) => JsonUtility.FromJson<RocketPartsConfig>(JsonUtility.ToJson(source));
     }
 }

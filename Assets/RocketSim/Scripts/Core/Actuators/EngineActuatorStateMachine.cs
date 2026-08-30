@@ -1,8 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Actuators/EngineActuatorStateMachine.cs
 // Purpose: Contains the engine actuator run states, timing config, and state-machine stepping used by FalconAgent.Actuators.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -10,9 +8,7 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// Calculates the throttle that balances vehicle weight with the engines
-    /// selected for an already-running hover start. This establishes a physical
-    /// initial condition; it is not exposed to, or used by, the reward model.
+    /// Calculates the throttle that balances vehicle weight with the engines selected for an already-running hover start.
     /// </summary>
     public static class HoverThrustInitialization
     {
@@ -58,8 +54,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Copies engine timing values from the immutable physics config and
-        /// clamps them before the per-engine state machines consume them.
+        /// Copies engine timing values from the immutable physics config and clamps them.
         /// </summary>
         public static EngineTimingConfig FromPhysicsConfig(RocketPhysicsConfig cfg)
         {
@@ -74,6 +69,44 @@ namespace RocketSim
 
     internal static class EngineActuatorStateMachine
     {
+        /// <summary>
+        /// Immediately puts every engine channel into a non-thrusting state.
+        /// Used by terminal safety interlocks where normal minimum-run and
+        /// shutdown-transient timing must not keep applying force.
+        /// </summary>
+        public static void ForceOff(
+            int engineCount,
+            float[] commandedThrottle,
+            float[] targetThrottle,
+            float[] actualThrottle,
+            float[] enableCommands,
+            EngineRunState[] states,
+            float[] stateTimers,
+            float[] runTimes,
+            float[] offTimes)
+        {
+            int count = Mathf.Max(0, engineCount);
+            for (int i = 0; i < count; i++)
+            {
+                if (commandedThrottle != null && i < commandedThrottle.Length)
+                    commandedThrottle[i] = 0f;
+                if (targetThrottle != null && i < targetThrottle.Length)
+                    targetThrottle[i] = 0f;
+                if (actualThrottle != null && i < actualThrottle.Length)
+                    actualThrottle[i] = 0f;
+                if (enableCommands != null && i < enableCommands.Length)
+                    enableCommands[i] = 0f;
+                if (states != null && i < states.Length)
+                    states[i] = EngineRunState.Off;
+                if (stateTimers != null && i < stateTimers.Length)
+                    stateTimers[i] = 0f;
+                if (runTimes != null && i < runTimes.Length)
+                    runTimes[i] = 0f;
+                if (offTimes != null && i < offTimes.Length)
+                    offTimes[i] = 0f;
+            }
+        }
+
         /// <summary>
         /// Advances all engine command channels by one simulation step.
         /// </summary>

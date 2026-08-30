@@ -21,25 +21,30 @@ namespace RocketSim
         [HideInInspector] public float legLandingCurriculumLinearProgress;
         [HideInInspector] public float legLandingCurriculumProgress;
         [HideInInspector] public float legLandingCurriculumPeakLinearProgress;
-        public const float LegLandingPadHalfSizeM = 10f;
-        // Leg landing starts from a terminal-descent state, not the much slower
-        // chopstick catch envelope. The feasibility sampler clips these broad
-        // ranges to the selected vehicle's recoverable control envelope.
-        public const float LegLandingInitialSpawnAltitudeMin = 250f;
-        public const float LegLandingInitialSpawnAltitudeMax = 350f;
+        // Pad geometry is deliberately not a success criterion. The large,
+        // fixed deck supplies ground contact while horizontal centre error
+        // decides whether the landing counts.
+        public const float LegLandingPadHalfSizeM = 25f;
+        // The first stage teaches a short, already-upright approach while
+        // retaining enough offset to require lateral navigation from the
+        // beginning. Difficulty then expands altitude,
+        // offset, velocity, tilt, and rotation together. The feasibility
+        // sampler continues clipping starts to the selected vehicle.
+        public const float LegLandingInitialSpawnAltitudeMin = 120f;
+        public const float LegLandingInitialSpawnAltitudeMax = 180f;
         public const float LegLandingFullSpawnAltitudeMin = 400f;
         public const float LegLandingFullSpawnAltitudeMax = 1000f;
-        public const float LegLandingInitialSpawnRadius = 3f;
+        public const float LegLandingInitialSpawnRadius = 8f;
         public const float LegLandingFullSpawnRadius = 60f;
-        public const float LegLandingInitialVerticalSpeedMin = 20f;
-        public const float LegLandingInitialVerticalSpeedMax = 30f;
+        public const float LegLandingInitialVerticalSpeedMin = 10f;
+        public const float LegLandingInitialVerticalSpeedMax = 18f;
         public const float LegLandingFullVerticalSpeedMin = 30f;
         public const float LegLandingFullVerticalSpeedMax = 70f;
-        public const float LegLandingInitialHorizontalSpeedMax = 0.5f;
+        public const float LegLandingInitialHorizontalSpeedMax = 1f;
         public const float LegLandingFullHorizontalSpeedMax = 12f;
-        public const float LegLandingInitialSpawnTiltRangeDeg = 0.5f;
+        public const float LegLandingInitialSpawnTiltRangeDeg = 1f;
         public const float LegLandingFullSpawnTiltRangeDeg = 8f;
-        public const float LegLandingInitialAngularSpeedMaxDegS = 0f;
+        public const float LegLandingInitialAngularSpeedMaxDegS = 2f;
         public const float LegLandingFullAngularSpeedMaxDegS = 12f;
 
         public bool IsLandingScenario => scenario.IsLanding();
@@ -79,14 +84,15 @@ namespace RocketSim
                 : GetLandingCurriculumProfile(difficulty01);
 
         /// <summary>
-        /// Uses a faster, calmer terminal-descent envelope than the catch task,
-        /// makes heading irrelevant, and increases the physical stability hold
-        /// to one second at full difficulty.
+        /// Teaches a centered short approach before expanding to the complete
+        /// descent envelope. Heading remains irrelevant; success tightens to a
+        /// one-second, four-foot, propulsion-off stable hold.
         /// </summary>
         public LandingCurriculumProfile GetLegLandingCurriculumProfile(float difficulty01)
         {
             float d = Mathf.Clamp01(difficulty01);
-            float Value(float initialValue, float fullValue) => Mathf.Lerp(initialValue, fullValue, d);
+            float Value(float initialValue, float fullValue) =>
+                Mathf.Lerp(initialValue, fullValue, d);
             TerminationParameters termination =
                 GetTrainingObjective(ScenarioType.LegLanding).terminations;
 
@@ -109,7 +115,15 @@ namespace RocketSim
                 termination.landingSuccessMaxAngularRateDegS.At(d),
                 180f,
                 LegLandingPadHalfSizeM,
-                termination.landingStableHoldSeconds.At(d));
+                termination.landingStableHoldSeconds.At(d),
+                d,
+                Mathf.Clamp(
+                    Mathf.RoundToInt(Mathf.Lerp(
+                        termination.legInitialMinimumStableFeet,
+                        termination.legMinimumStableFeet,
+                        d)),
+                    1,
+                    LandingLegComponent.LegCount));
         }
 
         public void ResetActiveLandingCurriculum()

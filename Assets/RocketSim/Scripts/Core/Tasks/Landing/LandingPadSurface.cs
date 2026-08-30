@@ -16,10 +16,12 @@ namespace RocketSim
     public sealed class LandingPadSurface : MonoBehaviour
     {
         Collider _surfaceCollider;
+        bool _originalFootprintCaptured;
+        Vector3 _originalLocalScale;
+        float _originalHalfExtentX;
+        float _originalHalfExtentZ;
 
-        public Collider SurfaceCollider => _surfaceCollider
-            ? _surfaceCollider
-            : (_surfaceCollider = GetComponent<Collider>());
+        public Collider SurfaceCollider => _surfaceCollider ? _surfaceCollider : (_surfaceCollider = GetComponent<Collider>());
 
         public static LandingPadSurface Ensure(Transform pad)
         {
@@ -62,6 +64,31 @@ namespace RocketSim
                    worldPoint.x <= bounds.max.x - margin &&
                    worldPoint.z >= bounds.min.z + margin &&
                    worldPoint.z <= bounds.max.z - margin;
+        }
+
+        /// <summary>
+        /// Resizes only the pad footprint from its original scene geometry.
+        /// Reapplying a curriculum profile is idempotent, so parallel episode
+        /// resets cannot accumulate transform-scale error.
+        /// </summary>
+        public void SetFootprintHalfSize(float halfSizeM)
+        {
+            Collider collider = SurfaceCollider;
+            if (!collider) return;
+
+            if (!_originalFootprintCaptured)
+            {
+                _originalLocalScale = transform.localScale;
+                _originalHalfExtentX = Mathf.Max(collider.bounds.extents.x, 0.001f);
+                _originalHalfExtentZ = Mathf.Max(collider.bounds.extents.z, 0.001f);
+                _originalFootprintCaptured = true;
+            }
+
+            float target = Mathf.Max(0.5f, halfSizeM);
+            transform.localScale = new Vector3(
+                _originalLocalScale.x * target / _originalHalfExtentX,
+                _originalLocalScale.y,
+                _originalLocalScale.z * target / _originalHalfExtentZ);
         }
 
         public float WorldTopY => SurfaceCollider ? SurfaceCollider.bounds.max.y : transform.position.y;

@@ -169,25 +169,33 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Builds the immutable benchmark controls. Only episode count and the
-        /// shared suite seed are editable. Landing uses the canonical d=1
-        /// profile; fixed hover uses its canonical near-target spawn profile.
+        /// Builds the immutable benchmark contract. Curriculum tasks use five
+        /// fixed 50-episode strata; only the paired suite seed is editable.
         /// </summary>
         void BuildStandardEvaluationControls(VisualElement root)
         {
             EvaluationConfig evaluation = envConfig.EnsureEvaluationConfig();
-            string evaluatorDescription = envConfig.scenario.IsLanding()
-                ? "Standard evaluation uses deterministic policy actions, clear weather, no faults, no curriculum replay, and the full d=1 landing distribution."
-                : "Standard hover evaluation uses deterministic policy actions, clear weather, no faults, and a fixed seeded near-target spawn distribution. Episodes end through fuel depletion or an existing failure terminal.";
+            string evaluatorDescription = envConfig.scenario switch
+            {
+                ScenarioType.Hover =>
+                    "Fixed Hover uses deterministic actions and its exact training spawn distribution for a bounded 60-second recovery-and-hold trial.",
+                ScenarioType.HoverTracking =>
+                    "Hover Track tests three captures per episode across five target-radius and capture-criteria difficulty bands.",
+                _ =>
+                    "Landing evaluation uses the exact training spawn/profile generator at five fixed curriculum difficulties, without easier-task replay."
+            };
             root.Add(BuildGroupDetail(evaluatorDescription));
 
             root.Add(UIHelper.SectionLabel("Evaluation Suite"));
             root.Add(UIHelper.ReadOnly("Scenario", envConfig.scenario.ToString()));
-            root.Add(UIHelper.IntSlider("Episodes", evaluation.episodeCount, 10, 1000, value =>
-            {
-                evaluation.episodeCount = value;
-                evaluation.Clamp();
-            }, "Runs exactly this many completed episodes before writing the aggregate summary and stopping automatically."));
+            root.Add(UIHelper.ReadOnly(
+                "Episodes",
+                envConfig.scenario.UsesCurriculumEvaluationBands()
+                    ? $"{evaluation.episodeCount} total (50 each at 0%, 25%, 50%, 75%, and 100%)"
+                    : $"{evaluation.episodeCount} fixed-horizon trials"));
+            root.Add(UIHelper.ReadOnly(
+                "Simulation Speed",
+                $"{evaluation.timeScale:F0}x wall-clock time; physics remains at {Time.fixedDeltaTime:F3} s"));
             root.Add(UIHelper.IntSlider("Evaluation Seed", evaluation.seed, 0, 100000, value =>
             {
                 evaluation.seed = value;
@@ -196,36 +204,39 @@ namespace RocketSim
 
             if (envConfig.scenario == ScenarioType.Hover)
             {
-                InferenceSpawnProfile hover = envConfig.GetInferenceSpawnProfile(ScenarioType.Hover);
                 root.Add(UIHelper.SectionLabel("Fixed Benchmark"));
-                root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{hover.altitudeMin:F0}..{hover.altitudeMax:F0} m"));
-                root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {hover.horizontalOffsetMax:F0} m"));
-                root.Add(UIHelper.ReadOnly("Vertical Speed", $"{hover.verticalSpeedMin:F1}..{hover.verticalSpeedMax:F1} m/s"));
-                root.Add(UIHelper.ReadOnly("Horizontal Speed", $"up to {hover.horizontalSpeedMax:F1} m/s"));
-                root.Add(UIHelper.ReadOnly("Endpoint", "Fuel depletion or an existing failure terminal"));
+                root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{ScenarioCatalog.HoverStartAltitude:F0} m"));
+                root.Add(UIHelper.ReadOnly("Spawn Offset", "-5..+5 m on each planar axis"));
+                root.Add(UIHelper.ReadOnly("Initial Velocity", "-2..+2 m/s on each planar axis; vertical speed 0"));
+                root.Add(UIHelper.ReadOnly("Endpoint", $"{EvaluationConfig.FixedHoverDurationSeconds:F0} simulated seconds or a safety failure"));
                 root.Add(BuildGroupDetail(
-                    "Hover has no artificial success terminal. Compare duration, time in the declared hover envelope, RMS position/motion error, fuel use, restart count, and terminal state."));
+                    "Hover has no artificial binary success label. Compare full-rate altitude/position/motion error, fuel use, restart count, and safety failures over the common horizon."));
                 return;
             }
 
-            if (!envConfig.scenario.IsLanding())
+            if (envConfig.scenario == ScenarioType.HoverTracking)
             {
+                root.Add(UIHelper.SectionLabel("Stratified Benchmark"));
+                root.Add(UIHelper.ReadOnly("Success", $"capture {EvaluationConfig.HoverTrackRequiredCaptures} targets, including {EvaluationConfig.HoverTrackRequiredCaptures - 1} relocations"));
+                root.Add(UIHelper.ReadOnly("Per-target Limit", $"{EvaluationConfig.HoverTrackTargetTimeoutSeconds:F0} simulated seconds"));
+                root.Add(UIHelper.ReadOnly("Target Radius", $"{envConfig.HoverTrackMoveRadiusAt(0f):F0}..{envConfig.HoverTrackMoveRadiusAt(1f):F0} m across bands"));
                 root.Add(BuildGroupDetail(
-                    "This scenario does not yet have a standardized evaluator contract. Use Manual Inference."));
+                    "The first target tests acquisition from the training spawn; the next two test relocation tracking. Any target timeout is a failed episode."));
                 return;
             }
 
+            LandingCurriculumProfile easy = envConfig.GetActiveLandingCurriculumProfile(0f);
             LandingCurriculumProfile full = envConfig.GetActiveLandingCurriculumProfile(1f);
-            root.Add(UIHelper.SectionLabel("Fixed Benchmark"));
-            root.Add(UIHelper.ReadOnly("Difficulty", "d = 1.000 (full)"));
-            root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{full.spawnAltitudeMin:F0}..{full.spawnAltitudeMax:F0} m"));
-            root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {full.spawnRadius:F0} m"));
-            root.Add(UIHelper.ReadOnly("Downward Speed", $"{full.verticalSpeedMin:F0}..{full.verticalSpeedMax:F0} m/s before feasibility clipping"));
+            root.Add(UIHelper.SectionLabel("Stratified Benchmark"));
+            root.Add(UIHelper.ReadOnly("Difficulty Bands", "d = 0.00, 0.25, 0.50, 0.75, 1.00"));
+            root.Add(UIHelper.ReadOnly("Spawn Altitude", $"{easy.spawnAltitudeMin:F0}..{easy.spawnAltitudeMax:F0} m at d=0; {full.spawnAltitudeMin:F0}..{full.spawnAltitudeMax:F0} m at d=1"));
+            root.Add(UIHelper.ReadOnly("Spawn Offset", $"up to {easy.spawnRadius:F0} m at d=0; {full.spawnRadius:F0} m at d=1"));
+            root.Add(UIHelper.ReadOnly("Downward Speed", $"{easy.verticalSpeedMin:F0}..{easy.verticalSpeedMax:F0} m/s at d=0; {full.verticalSpeedMin:F0}..{full.verticalSpeedMax:F0} m/s at d=1"));
             TerminationParameters termination =
                 envConfig.GetTrainingObjective(envConfig.scenario).terminations;
             string limits = envConfig.scenario == ScenarioType.ChopstickLanding
                 ? $"{full.successRadius:F1} m radius, {full.successMaxVerticalSpeed:F1} m/s vertical, {full.successMaxYawErrorDeg:F0} deg yaw"
-                : $"{termination.legMinimumStableFeet}/4 feet, {full.successMaxVerticalSpeed:F1} m/s vertical, " +
+                : $"{full.minimumStableFeet}/4 feet, {full.successMaxVerticalSpeed:F1} m/s vertical, " +
                   $"{full.successMaxTiltDeg:F0} deg tilt, {full.platformStableHoldTime:F2} s hold";
             root.Add(UIHelper.ReadOnly("Success Limits", limits));
             root.Add(UIHelper.ReadOnly(
@@ -355,13 +366,14 @@ namespace RocketSim
         {
             LandingCurriculumProfile profile = envConfig.GetActiveLandingCurriculumProfile(
                 envConfig.ActiveLandingCurriculumProgress);
-            TerminationParameters termination =
-                envConfig.GetTrainingObjective(ScenarioType.LegLanding).terminations;
             root.Add(UIHelper.SectionLabel("Physical Landing Target"));
-            root.Add(UIHelper.ReadOnly("Pad", "Existing 20 x 20 m Landing_Pad collider"));
+            root.Add(UIHelper.ReadOnly(
+                "Pad",
+                $"{profile.platformHalfSize * 2f:F0} x {profile.platformHalfSize * 2f:F0} m active collider " +
+                "(curriculum shrinks 24 m to 20 m)"));
             root.Add(UIHelper.ReadOnly(
                 "Stable Contact",
-                $"at least {termination.legMinimumStableFeet} of 4 feet for " +
+                $"at least {profile.minimumStableFeet} of 4 feet for " +
                 $"{profile.platformStableHoldTime:F2} s (edit in Reward tab)"));
             root.Add(UIHelper.ReadOnly("Touchdown Limits",
                 $"vertical < {profile.successMaxVerticalSpeed:F1} m/s, horizontal < " +
@@ -379,10 +391,22 @@ namespace RocketSim
                 envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
             float difficulty = envConfig.hoverTrackCurriculumProgress;
             root.Add(UIHelper.SectionLabel("Moving Target"));
-            root.Add(UIHelper.ReadOnly("Move Interval", $"{envConfig.targetMoveInterval:F1} s (curriculum)"));
+            root.Add(UIHelper.ReadOnly(
+                "Move Trigger",
+                "after the rocket satisfies the complete capture criteria and hold time"));
+            root.Add(UIHelper.Slider(
+                "Attempt Window (s)",
+                envConfig.HoverTrackAttemptWindowSeconds,
+                5f,
+                120f,
+                value => envConfig.targetMoveInterval = value,
+                "A target not captured within this window records one failed curriculum attempt; it does not end the episode."));
+            root.Add(UIHelper.ReadOnly(
+                "Curriculum Attempts",
+                $"relocated target capture = success; {envConfig.HoverTrackAttemptWindowSeconds:F0} s without capture = failure"));
             root.Add(UIHelper.Slider("Move Radius (m)", envConfig.targetMoveRadius, 2f, 80f,
                 value => envConfig.targetMoveRadius = value,
-                "Sets how far the hover target can move from its previous position."));
+                "Sets the target's maximum planar offset from the center of the training area."));
             root.Add(UIHelper.ReadOnly(
                 "Capture Criteria",
                 $"{termination.trackingCaptureRadiusM.At(difficulty):F1} m radius, " +

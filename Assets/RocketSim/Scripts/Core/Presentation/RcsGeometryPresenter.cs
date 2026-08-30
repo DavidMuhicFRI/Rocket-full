@@ -23,7 +23,11 @@ namespace RocketSim
         /// Builds or refreshes the visible pod body, nozzles, and cold-gas
         /// plume primitives for one RCS pod using dimensions scaled from body radius.
         /// </summary>
-        public static void BuildPodVisuals(Transform pod, float bodyRadius)
+        public static void BuildPodVisuals(
+            Transform pod,
+            float bodyRadius,
+            Material podMaterialOverride = null,
+            Material nozzleMaterialOverride = null)
         {
             float podDepth = Mathf.Clamp(bodyRadius * 0.16f, 0.22f, 0.48f);
             float podHeight = Mathf.Clamp(bodyRadius * 0.11f, 0.16f, 0.34f);
@@ -33,34 +37,37 @@ namespace RocketSim
             float plumeLength = Mathf.Clamp(bodyRadius * 1.55f, 2.4f, 4.8f);
             float plumeDiameter = Mathf.Clamp(nozzleDiameter * 4.6f, 0.38f, 0.9f);
 
-            Transform body = EnsurePrimitive(pod, "Pod_Body", PrimitiveType.Cube, PodMaterial()).transform;
+            Material podMaterial = podMaterialOverride ? podMaterialOverride : PodMaterial();
+            Material nozzleMaterial = nozzleMaterialOverride ? nozzleMaterialOverride : NozzleMaterial();
+
+            Transform body = EnsurePrimitive(pod, "Pod_Body", PrimitiveType.Cube, podMaterial).transform;
             body.localPosition = new Vector3(podDepth * 0.45f, 0f, 0f);
             body.localRotation = Quaternion.identity;
             body.localScale = new Vector3(podDepth, podHeight, podWidth);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Aft), PrimitiveType.Cylinder, nozzleMaterial).transform,
                 Vector3.down,
                 new Vector3(podDepth * 0.35f, -podHeight * 0.5f - nozzleLength * 0.4f, 0f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.Outboard), PrimitiveType.Cylinder, nozzleMaterial).transform,
                 Vector3.right,
                 new Vector3(podDepth + nozzleLength * 0.45f, 0f, 0f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialPositive), PrimitiveType.Cylinder, nozzleMaterial).transform,
                 Vector3.forward,
                 new Vector3(podDepth * 0.35f, 0f, podWidth * 0.5f + nozzleLength * 0.4f),
                 nozzleLength,
                 nozzleDiameter);
 
             PlaceNozzle(
-                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, NozzleMaterial()).transform,
+                EnsurePrimitive(pod, RcsHardwareLayout.NozzleName(RcsComponent.RcsNozzle.TangentialNegative), PrimitiveType.Cylinder, nozzleMaterial).transform,
                 Vector3.back,
                 new Vector3(podDepth * 0.35f, 0f, -podWidth * 0.5f - nozzleLength * 0.4f),
                 nozzleLength,

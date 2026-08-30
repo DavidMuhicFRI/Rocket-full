@@ -28,18 +28,49 @@ namespace RocketSim
     [Serializable]
     public class EvaluationConfig
     {
-        public const int DefaultEpisodeCount = 200;
+        public const int CurriculumBandCount = 5;
+        public const int EpisodesPerCurriculumBand = 50;
+        public const int DefaultEpisodeCount = CurriculumBandCount * EpisodesPerCurriculumBand;
         public const int DefaultEvaluationSeed = 20257;
+        public const float DefaultTimeScale = 20f;
+        public const float FixedHoverDurationSeconds = 60f;
+        public const int HoverTrackRequiredCaptures = 3;
+        public const float HoverTrackTargetTimeoutSeconds = 35f;
 
         [Min(1)] public int episodeCount = DefaultEpisodeCount;
         [Min(0)] public int seed = DefaultEvaluationSeed;
+        [Min(1f)] public float timeScale = DefaultTimeScale;
 
         /// <summary>Clamps evaluator inputs before a session starts.</summary>
         public void Clamp()
         {
             episodeCount = Mathf.Clamp(episodeCount, 1, 10_000);
             seed = Mathf.Max(0, seed);
+            timeScale = Mathf.Clamp(timeScale, 1f, 100f);
         }
+
+        /// <summary>Freezes the sample count and wall-clock acceleration of the benchmark.</summary>
+        public void ApplyStandardContract()
+        {
+            episodeCount = DefaultEpisodeCount;
+            timeScale = DefaultTimeScale;
+            Clamp();
+        }
+
+        /// <summary>Returns the exact curriculum band assigned to an episode.</summary>
+        public static float DifficultyForEpisode(int episodeIndex)
+        {
+            int band = Mathf.Clamp(Mathf.Max(0, episodeIndex) / EpisodesPerCurriculumBand, 0, CurriculumBandCount - 1);
+            return band / (float)(CurriculumBandCount - 1);
+        }
+
+        /// <summary>
+        /// Reuses replicate seeds across bands so difficulty comparisons receive
+        /// paired random draws rather than five unrelated sample sets.
+        /// </summary>
+        public static int ReplicateIndexForEpisode(int episodeIndex) => Mathf.Max(0, episodeIndex) % EpisodesPerCurriculumBand;
+
+        public static int BandIndex(float difficulty01) => Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(difficulty01) * (CurriculumBandCount - 1)), 0, CurriculumBandCount - 1);
     }
 
     [Serializable]

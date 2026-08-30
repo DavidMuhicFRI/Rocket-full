@@ -28,21 +28,20 @@ namespace RocketSim
     public static class ScenarioTypeExtensions
     {
         public static bool IsLanding(this ScenarioType scenario) =>
-            scenario == ScenarioType.ChopstickLanding || scenario == ScenarioType.LegLanding;
+            scenario is ScenarioType.ChopstickLanding or ScenarioType.LegLanding;
 
-        public static bool IsChopstickLanding(this ScenarioType scenario) =>
-            scenario == ScenarioType.ChopstickLanding;
+        public static bool IsChopstickLanding(this ScenarioType scenario) => scenario == ScenarioType.ChopstickLanding;
 
-        public static bool IsLegLanding(this ScenarioType scenario) =>
-            scenario == ScenarioType.LegLanding;
+        public static bool IsLegLanding(this ScenarioType scenario) => scenario == ScenarioType.LegLanding;
 
         /// <summary>
         /// Returns whether the scenario has a fixed, seeded evaluator contract.
-        /// Fixed hover is evaluated until fuel depletion or an existing failure
-        /// terminal; the two landing tasks use their full-difficulty benchmark.
+        /// All four tasks have a fixed, seeded evaluator contract.
         /// </summary>
-        public static bool SupportsStandardEvaluation(this ScenarioType scenario) =>
-            scenario.IsLanding() || scenario == ScenarioType.Hover;
+        public static bool SupportsStandardEvaluation(this ScenarioType scenario) => scenario is ScenarioType.ChopstickLanding or ScenarioType.LegLanding or ScenarioType.Hover or ScenarioType.HoverTracking;
+
+        /// <summary>Tasks whose evaluator is stratified across curriculum difficulty.</summary>
+        public static bool UsesCurriculumEvaluationBands(this ScenarioType scenario) => scenario.IsLanding() || scenario == ScenarioType.HoverTracking;
     }
 
     public readonly struct ScenarioDefinition
@@ -138,8 +137,8 @@ namespace RocketSim
         public const float LegLandingStartFuelFraction = 0.08f;
         public const float HoverStartFuelFraction = 0.1f;
         public const float HoverTrackingStartFuelFraction = 0.1f;
-        public const float HoverStartAltitude = 80f;
-        public const float HoverTrackingStartAltitude = 80f;
+        public const float HoverStartAltitude = 50f;
+        public const float HoverTrackingStartAltitude = 50f;
 
         public const float HoverGoalAltitude = 30f;
         public const float HoverTrackingGoalAltitude = 30f;

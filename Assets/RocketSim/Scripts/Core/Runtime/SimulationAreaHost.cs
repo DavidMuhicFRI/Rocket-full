@@ -3,8 +3,6 @@
 // Purpose: Hosts preview and active simulation areas and wires agents to one frozen runtime session.
 // Main flow: panel edits draft -> coordinator freezes a snapshot -> this host
 // creates isolated areas from a runtime copy -> Stop restores the draft preview.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -16,15 +14,12 @@ using UnityEngine;
 
 namespace RocketSim
 {
-    // Spawns copies of TrainingArea.prefab and wires each agent to one runtime
-    // configuration. The editable draft is never handed to active agents.
-    //
     // [DefaultExecutionOrder(-10)] ensures Awake runs before ConfigBridge.Start().
     [DefaultExecutionOrder(-10)]
     public class SimulationAreaHost : MonoBehaviour
     {
-        [Header("Prefab")] public GameObject trainingAreaPrefab;
-
+        [Header("Prefabs")] public GameObject trainingAreaPrefab;
+        public GameObject evaluationAreaPrefab;
         public GameObject dummyAreaPrefab;
 
         [Header("Grid")] [Range(1, 64)] public int instanceCount = 16;
@@ -37,8 +32,7 @@ namespace RocketSim
         /// Canonical mutable setup used by the configuration UI.
         /// </summary>
         public SimulationSessionDraft SessionDraft { get; private set; }
-        SimulationSessionConfig CurrentSession =>
-            _runtimeSession ?? SessionDraft?.Config ?? initialSession;
+        SimulationSessionConfig CurrentSession => _runtimeSession ?? SessionDraft?.Config ?? initialSession;
         public RocketPartsConfig partsConfig => CurrentSession.vehicle;
         public SimEnvironmentConfig envConfig => CurrentSession.environment;
         public MLAgentsConfig mlConfig => CurrentSession.learning;
@@ -73,12 +67,12 @@ namespace RocketSim
             SessionDraft.Changed += OnSessionDraftChanged;
             _preview = new VehiclePreviewController(transform, dummyAreaPrefab);
 
-            if (trainingAreaPrefab == null)
+            if (!trainingAreaPrefab)
             {
                 Debug.LogError("[SimulationAreaHost] trainingAreaPrefab not assigned.");
             }
 
-            if (dummyAreaPrefab == null)
+            if (!dummyAreaPrefab)
             {
                 Debug.LogError("[SimulationAreaHost] dummyAreaPrefab not assigned.");
             }
@@ -93,15 +87,12 @@ namespace RocketSim
         {
             if (_runtimeSession != null) return;
 
-            if (change == SessionChangeKind.All ||
-                change == SessionChangeKind.Vehicle ||
-                change == SessionChangeKind.Task)
+            if (change is SessionChangeKind.All or SessionChangeKind.Vehicle or SessionChangeKind.Task)
                 ApplyPartsConfigToAll();
         }
 
         /// <summary>
-        /// Installs a private runtime copy before an active area is created.
-        /// The coordinator is the only caller allowed to cross this boundary.
+        /// Installs a private runtime copy before an active area is created. The coordinator is the only caller allowed to cross this boundary.
         /// </summary>
         public void PrepareRuntime(SimulationSessionSnapshot snapshot)
         {
@@ -111,6 +102,18 @@ namespace RocketSim
                 throw new System.InvalidOperationException("Stop the active simulation before preparing another runtime.");
 
             _runtimeSession = snapshot.CreateRuntimeConfig();
+            _totalEpisodes = 0;
+            if (_runtimeSession.environment.behaviorType == BehaviorType.Training && !string.IsNullOrWhiteSpace(_runtimeSession.environment.runId))
+            {
+                try
+                {
+                    _totalEpisodes = Mathf.Max(0, SimulationSessionStore.LoadRuntimeState(_runtimeSession.environment.runId).completedEpisodes);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[SimulationAreaHost] Could not restore completed episode count: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
@@ -130,9 +133,11 @@ namespace RocketSim
         public bool SpawnAreas()
         {
             ClearSpawnedAreas();
-            if (!trainingAreaPrefab)
+            GameObject areaPrefab = SelectRuntimeAreaPrefab(envConfig, trainingAreaPrefab, evaluationAreaPrefab);
+            if (!areaPrefab)
             {
-                Debug.LogError("[SimulationAreaHost] Cannot start: training area prefab is missing.");
+                string prefabKind = envConfig.behaviorType == BehaviorType.Training ? "training area prefab" : "evaluation area prefab";
+                Debug.LogError($"[SimulationAreaHost] Cannot start: {prefabKind} is missing.");
                 return false;
             }
 
@@ -153,9 +158,9 @@ namespace RocketSim
                 for (int col = 0; col < side && idx < instanceCount; col++, idx++)
                 {
                     Vector3 offset = new Vector3(col * spacing, 0f, row * spacing);
-                    trainingAreaPrefab.SetActive(false);
-                    var go = Instantiate(trainingAreaPrefab, offset, Quaternion.identity, transform);
-                    trainingAreaPrefab.SetActive(true);
+                    areaPrefab.SetActive(false);
+                    var go = Instantiate(areaPrefab, offset, Quaternion.identity, transform);
+                    areaPrefab.SetActive(true);
                     go.name = $"TrainingArea_{idx}";
 
                     var asm = go.GetComponentInChildren<RocketAssembly>();
@@ -164,11 +169,8 @@ namespace RocketSim
                     if (asm)
                     {
                         _assemblies.Add(asm);
-                        asm.ApplyPartsConfig(partsConfig); // sync initial config
-
-                        // Only objective errors returned by the validator stop
-                        // startup. Conservative reachability findings remain
-                        // warnings and therefore do not block an experiment.
+                        asm.ApplyPartsConfig(partsConfig);
+                        
                         if (idx == 0 && !SimulatorPreflightValidator.ValidateAndLog(asm.GetPhysicsConfig(), envConfig))
                         {
                             Debug.LogError("[SimulationAreaHost] Objective preflight errors prevented agent startup.");
@@ -189,9 +191,9 @@ namespace RocketSim
             {
                 // Inference mode - spawn single area
                 Vector3 offset = Vector3.zero;
-                trainingAreaPrefab.SetActive(false);
-                var go = Instantiate(trainingAreaPrefab, offset, Quaternion.identity, transform);
-                trainingAreaPrefab.SetActive(true);
+                areaPrefab.SetActive(false);
+                var go = Instantiate(areaPrefab, offset, Quaternion.identity, transform);
+                areaPrefab.SetActive(true);
                 go.name = "InferenceArea";
 
                 var asm = go.GetComponentInChildren<RocketAssembly>();
@@ -211,27 +213,23 @@ namespace RocketSim
 
                 if (agent)
                 {
-                        if (!SimulationRunService.TryValidatePolicySchema(
-                            envConfig.runId,
-                            partsConfig,
-                            envConfig.scenario,
-                            out string compatibilityError))
-                    {
-                        Debug.LogError($"[SimulationAreaHost] {compatibilityError}");
-                        ClearSpawnedAreas();
-                        return false;
-                    }
+                        if (!SimulationRunService.TryValidatePolicySchema(envConfig.runId, partsConfig, envConfig.scenario, out string compatibilityError))
+                        {
+                            Debug.LogError($"[SimulationAreaHost] {compatibilityError}");
+                            ClearSpawnedAreas();
+                            return false;
+                        }
 
-                    ModelAsset modelAsset = ModelRepository.LoadModel(envConfig.runId);
-                    if (!modelAsset)
-                    {
-                        Debug.LogError(ModelRepository.MissingModelMessage(envConfig.runId));
-                        ClearSpawnedAreas();
-                        return false;
-                    }
-                    ConfigureAgent(agent, 0, modelAsset);
+                        ModelAsset modelAsset = ModelRepository.LoadModel(envConfig.runId);
+                        if (!modelAsset)
+                        {
+                            Debug.LogError(ModelRepository.MissingModelMessage(envConfig.runId));
+                            ClearSpawnedAreas();
+                            return false;
+                        }
+                        ConfigureAgent(agent, 0, modelAsset);
 
-                    Debug.Log($"[InferenceEngine] Loaded model: {ModelRepository.ResourcePath(envConfig.runId)}");
+                        Debug.Log($"[InferenceEngine] Loaded model: {ModelRepository.ResourcePath(envConfig.runId)}");
                 }
                 go.SetActive(true);
             }
@@ -244,9 +242,17 @@ namespace RocketSim
             }
 
             var cam = FindAnyObjectByType<RocketCameraController>();
-            if (cam) cam.OnAgentsReady(); // call RefreshLabel + snap to first rocket
+            if (cam) cam.OnAgentsReady();
             _activeRunSpawned = _agents.Count > 0;
             return _activeRunSpawned;
+        }
+
+        internal static GameObject SelectRuntimeAreaPrefab(
+            SimEnvironmentConfig environment,
+            GameObject trainingPrefab,
+            GameObject evaluationPrefab)
+        {
+            return environment != null && environment.behaviorType != BehaviorType.Training ? evaluationPrefab : trainingPrefab;
         }
 
         /// <summary>
@@ -273,7 +279,7 @@ namespace RocketSim
         /// </summary>
         void EnsureHardwareTestController()
         {
-            if (_hardwareTests == null)
+            if (!_hardwareTests)
                 _hardwareTests = GetComponent<HardwareTestController>() ?? gameObject.AddComponent<HardwareTestController>();
             _hardwareTests.manager = this;
         }
@@ -304,8 +310,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Creates one isolated agent for scripted hardware testing. It disables
-        /// the Python communicator and telemetry, forces HeuristicOnly behavior,
+        /// Creates one isolated agent for scripted hardware testing. It disables the Python communicator and telemetry, forces HeuristicOnly behavior,
         /// and enables manual hardware-test commands instead of policy actions.
         /// </summary>
         FalconAgent SpawnHardwareTestArea(bool clearExisting = true)
@@ -355,9 +360,7 @@ namespace RocketSim
 
             return agent;
         }
-
-        // Called by RightConfigPanel whenever a part of the slider or toggle changes.
-        // Pushes updated dimensions / enabled-state to every training area.
+        
         public void ApplyPartsConfigToAll()
         {
             PrepareTelemetrySchema();
@@ -380,8 +383,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Handles a notification that episode end happened and records the
-        /// result for any active standardized curriculum.
+        /// Handles a notification that episode end happened and records the result for any active standardized curriculum.
         /// </summary>
         public void NotifyEpisodeEnd(bool successfulEpisode, bool includeInCurriculumEstimate = true)
         {
@@ -389,7 +391,7 @@ namespace RocketSim
 
             if (envConfig.behaviorType != BehaviorType.Training) return;
 
-            if (envConfig.scenario == ScenarioType.HoverTracking || envConfig.scenario.IsLanding())
+            if (envConfig.scenario.IsLanding())
             {
                 _curriculum.RecordEpisode(
                     envConfig,
@@ -398,11 +400,14 @@ namespace RocketSim
                     instanceCount);
                 PersistCurriculumStateIfBatchComplete();
             }
+            else if (envConfig.scenario == ScenarioType.HoverTracking)
+            {
+                PersistCurriculumStateIfBatchComplete();
+            }
         }
 
         /// <summary>
-        /// Saves curriculum progress after roughly one parallel-area batch so
-        /// resume state stays current without writing once per physics episode.
+        /// Saves curriculum progress after roughly one parallel-area batch soresume state stays current without writing once per physics episode.
         /// </summary>
         void PersistCurriculumStateIfBatchComplete()
         {
@@ -413,12 +418,12 @@ namespace RocketSim
         /// <summary>Saves the shared training environment when a run is active.</summary>
         void PersistCurriculumState()
         {
-            if (!_activeRunSpawned || envConfig == null || envConfig.behaviorType != BehaviorType.Training)
+            if (!_activeRunSpawned || envConfig is not { behaviorType: BehaviorType.Training })
                 return;
 
             try
             {
-                SimulationRunService.SaveRuntimeState(envConfig.runId, envConfig);
+                SimulationRunService.SaveRuntimeState(envConfig.runId, envConfig, _totalEpisodes);
             }
             catch (System.Exception ex)
             {
@@ -438,12 +443,32 @@ namespace RocketSim
         /// <summary>
         /// Handles a notification that hover track target reached happened.
         /// </summary>
-        public void NotifyHoverTrackTargetReached()
+        public void NotifyHoverTrackTargetReached(bool countsAsCurriculumAttempt)
         {
             if (envConfig.scenario != ScenarioType.HoverTracking) return;
             if (envConfig.behaviorType != BehaviorType.Training) return;
 
             _curriculum.RecordTargetCapture(envConfig);
+            if (!countsAsCurriculumAttempt) return;
+
+            _curriculum.RecordHoverTrackAttempt(envConfig, successfulAttempt: true, activeAreaCount: instanceCount);
+            PersistHoverTrackCurriculumIfBatchComplete();
+        }
+
+        /// <summary>Records a target that was not captured within its attempt window.</summary>
+        public void NotifyHoverTrackTargetAttemptFailed()
+        {
+            if (envConfig.scenario != ScenarioType.HoverTracking) return;
+            if (envConfig.behaviorType != BehaviorType.Training) return;
+
+            _curriculum.RecordHoverTrackAttempt(envConfig, successfulAttempt: false, activeAreaCount: instanceCount);
+            PersistHoverTrackCurriculumIfBatchComplete();
+        }
+
+        void PersistHoverTrackCurriculumIfBatchComplete()
+        {
+            if (envConfig.hoverTrackCurriculumEpisodeCount % Mathf.Max(1, instanceCount) == 0)
+                PersistCurriculumState();
         }
 
         /// <summary>
@@ -474,12 +499,7 @@ namespace RocketSim
             agent.envConfig = envConfig;
             agent.SetAreaIndex(areaIndex);
 
-            RocketAgentSchema.ConfigureBehavior(
-                agent.GetComponent<BehaviorParameters>(),
-                partsConfig,
-                envConfig.scenario,
-                behaviorOverride ?? envConfig.behaviorType,
-                modelAsset);
+            RocketAgentSchema.ConfigureBehavior(agent.GetComponent<BehaviorParameters>(), partsConfig, envConfig.scenario, behaviorOverride ?? envConfig.behaviorType, modelAsset);
             RocketAgentSchema.ConfigureDecisionRequester(agent.GetComponent<DecisionRequester>());
         }
 

@@ -1,10 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.Physics.cs
 // Purpose: Applies rocket forces, aerodynamics, thrust, and mass-property updates during physics steps.
-// Main flow: read environment/actuator state -> apply thrust/RCS/aerodynamics ->
-// consume propellant -> refresh mass and inertia.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
+// Main flow: read environment/actuator state -> apply thrust/RCS/aerodynamics -> consume propellant -> refresh mass and inertia.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -16,26 +13,24 @@ namespace RocketSim
         /// <summary>
         /// Converts the rocket altitude into a sea-level pressure ratio used by engine and aerodynamic calculations.
         /// </summary>
-        float AtmosphericPressureRatio() =>
-            AtmosphereModel.PressureRatio(transform.localPosition.y, HScale);
+        float AtmosphericPressureRatio() => AtmosphereModel.PressureRatio(transform.localPosition.y, HScale);
 
         /// <summary>
         /// Calculates the altitude-based thrust multiplier so vacuum engines gain performance as pressure drops.
         /// </summary>
-        float CurrentEngineThrustScale() =>
-            AtmosphereModel.ThrustScale(AtmosphericPressureRatio(), VacuumThrustMultiplier);
+        float CurrentEngineThrustScale() => AtmosphereModel.ThrustScale(AtmosphericPressureRatio(), VacuumThrustMultiplier);
 
         /// <summary>
         /// Calculates effective specific impulse for this altitude so fuel burn matches the pressure-scaled engine model.
         /// </summary>
-        float CurrentEngineSpecificImpulse() =>
-            AtmosphereModel.SpecificImpulse(cfg.specificImpulse, AtmosphericPressureRatio(), VacuumIspMultiplier);
+        float CurrentEngineSpecificImpulse() => AtmosphereModel.SpecificImpulse(cfg.specificImpulse, AtmosphericPressureRatio(), VacuumIspMultiplier);
 
         /// <summary>
         /// Applies main-engine thrust and burns fuel for this physics step.
         /// </summary>
         float ApplyEngines()
         {
+            if (_legLandingPropulsionLocked) return 0f;
             if (fuel <= 0f || !assembly || !assembly.thrusters) return 0f;
 
             int installedEngineIndex = 0;
@@ -130,9 +125,7 @@ namespace RocketSim
             float vLat = vLatLocal.magnitude;
 
             q = 0.5f * rho * speed * speed;
-            float bodyAxisAngleDeg = speed > 0.5f
-                ? Vector3.Angle(transform.up, effVel.normalized)
-                : 0f;
+            float bodyAxisAngleDeg = speed > 0.5f ? Vector3.Angle(transform.up, effVel.normalized) : 0f;
             aoaDeg = Mathf.Min(bodyAxisAngleDeg, 180f - bodyAxisAngleDeg);
 
             // Axial drag, signed so it opposes motion during ascent and descent.
@@ -142,7 +135,7 @@ namespace RocketSim
 
             Vector3 cpWorld = transform.TransformPoint(new Vector3(0f, cfg.cpLocalY, 0f));
 
-            // Broadside drag at the centre of pressure.
+            // Broadside drag at the center of pressure.
             if (vLat > 0.01f)
             {
                 float lateralDrag = 0.5f * rho * 1.0f * cfg.A_projectedSide * vLat * vLat;
@@ -159,7 +152,7 @@ namespace RocketSim
                 rb.AddForce(transform.up * baseDragMag);
             }
 
-            if (cfg.hasFins && assembly.fins != null && assembly.fins.gameObject.activeSelf)
+            if (cfg.hasFins && assembly.fins && assembly.fins.gameObject.activeSelf)
             {
                 int activeFinIndex = 0;
                 for (int i = 0; i < assembly.fins.transform.childCount; i++)
@@ -175,8 +168,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Calculates and applies aerodynamic force for one active fin at that
-        /// fin's transform position.
+        /// Calculates and applies aerodynamic force for one active fin.
         /// </summary>
         void ApplySingleFin(int index, Transform finTransform, float rho, Vector3 effVelWorld)
         {

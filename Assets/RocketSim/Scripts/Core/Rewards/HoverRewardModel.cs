@@ -22,15 +22,8 @@ namespace RocketSim
             if (TryHoverSafetyTermination(t, ctx, objective, contributions, shapingRate, eventReward, out RewardDecision failure))
                 return failure;
 
-            if (objective.terminations.timeLimitEnabled &&
-                ctx.episodeElapsedSeconds >= objective.terminations.maximumEpisodeSeconds)
-                return RewardDecision.Terminate(
-                    shapingRate,
-                    TerminalCost(contributions, RewardParameterId.HoverTimeLimitCost,
-                        objective.rewards.hoverTimeLimitCost),
-                    eventReward: eventReward,
-                    terminationReason: EpisodeTerminationReason.HoverTimeLimit);
-
+            if (objective.terminations.timeLimitEnabled && ctx.episodeElapsedSeconds >= objective.terminations.maximumEpisodeSeconds)
+                return RewardDecision.Terminate(shapingRate, TerminalCost(contributions, RewardParameterId.HoverTimeLimitCost, objective.rewards.hoverTimeLimitCost), eventReward: eventReward, terminationReason: EpisodeTerminationReason.HoverTimeLimit);
             return RewardDecision.Continue(shapingRate, eventReward);
         }
 
@@ -43,23 +36,17 @@ namespace RocketSim
             RewardParameters r = objective.rewards;
             RewardShapingParameters s = objective.shaping;
             TerminationParameters end = objective.terminations;
-            float captureRadius = SafeScale(
-                end.trackingCaptureRadiusM.At(ctx.curriculumDifficulty01));
+            float captureRadius = SafeScale(end.trackingCaptureRadiusM.At(ctx.curriculumDifficulty01));
             bool settlePhase = t.planarDistance <= captureRadius;
 
             float shapingRate = HoverBaselineRate(t, objective, contributions);
             if (settlePhase)
             {
-                float tightCenterFalloff = Mathf.Max(
-                    SafeScale(s.trackingTightCenterMinimumFalloffM),
-                    captureRadius * s.trackingTightCenterRadiusFraction);
+                float tightCenterFalloff = Mathf.Max(SafeScale(s.trackingTightCenterMinimumFalloffM), captureRadius * s.trackingTightCenterRadiusFraction);
                 float tightCenter01 = Exp01(t.planarDistance, tightCenterFalloff);
-                float horizontalCalm01 = Exp01(
-                    t.planarSpeed, s.trackingHorizontalCalmFalloffMps);
-                float verticalCalm01 = Exp01(
-                    t.verticalSpeed, s.trackingVerticalCalmFalloffMps);
-                float rotationCalm01 = Exp01(
-                    t.angularRateDegS, s.trackingRotationCalmFalloffDegS);
+                float horizontalCalm01 = Exp01(t.planarSpeed, s.trackingHorizontalCalmFalloffMps);
+                float verticalCalm01 = Exp01(t.verticalSpeed, s.trackingVerticalCalmFalloffMps);
+                float rotationCalm01 = Exp01(t.angularRateDegS, s.trackingRotationCalmFalloffDegS);
 
                 shapingRate += RewardRate(contributions,
                     RewardParameterId.TrackingSettleCenterRewardRate,

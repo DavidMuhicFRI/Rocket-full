@@ -154,40 +154,59 @@ namespace UI
             {
                 TerminationParameters termination =
                     env.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
-                float difficulty = env.hoverTrackCurriculumProgress;
+                float difficulty = env.IsStandardEvaluation
+                    ? agent.ObjectiveDifficulty01
+                    : env.hoverTrackCurriculumProgress;
                 float captureRadius = termination.trackingCaptureRadiusM.At(difficulty);
                 float holdSeconds = termination.trackingCaptureHoldSeconds.At(difficulty);
                 float horizontalSpeed = termination.trackingCaptureMaxHorizontalSpeedMps.At(difficulty);
                 float verticalSpeed = termination.trackingCaptureMaxVerticalSpeedMps.At(difficulty);
                 float tilt = termination.trackingCaptureMaxTiltDeg.At(difficulty);
                 SetCurriculumHudVisible(true);
-                SetText(curriculumTitleText, "CURRICULUM: HOVER TRACKING");
-                SetText(curriculumProgressText, $"PROGRESS: {FormatPercent(env.hoverTrackCurriculumProgress)}");
-                SetText(curriculumRateText,
-                    $"SUCCESS RATE: {FormatPercent(env.HoverTrackCurriculumSuccessRate)}  ({env.hoverTrackCurriculumSuccessfulEpisodes}/{env.hoverTrackCurriculumEpisodeCount} episodes)");
+                SetText(curriculumTitleText, env.IsStandardEvaluation
+                    ? "EVALUATION: HOVER TRACKING"
+                    : "CURRICULUM: HOVER TRACKING");
+                SetText(curriculumProgressText, env.IsStandardEvaluation
+                    ? $"DIFFICULTY BAND: {FormatPercent(difficulty)}"
+                    : $"PROGRESS: {FormatPercent(env.hoverTrackCurriculumProgress)}");
+                SetText(curriculumRateText, env.IsStandardEvaluation
+                    ? $"CAPTURES: {agent.HoverTrackEpisodeCaptures}/{termination.trackingRequiredCaptures}"
+                    : $"CAPTURE RATE: {FormatPercent(env.HoverTrackCurriculumSuccessRate)}  ({env.hoverTrackCurriculumSuccessfulEpisodes}/{env.hoverTrackCurriculumEpisodeCount} attempts)");
                 SetText(curriculumPrimaryText,
-                    $"TARGET: {env.targetMoveRadius:F0} m move radius, {captureRadius:F1} m capture");
+                    $"TARGET: {env.HoverTrackMoveRadiusAt(difficulty):F0} m move radius, {captureRadius:F1} m capture");
                 SetText(curriculumSecondaryText,
                     $"CAPTURE: {holdSeconds:F1} s hold, <= {horizontalSpeed:F1} m/s planar, <= {verticalSpeed:F1} m/s vertical");
                 SetText(curriculumTertiaryText,
-                    $"ATTITUDE: <= {tilt:F0} deg tilt, {env.hoverTrackCurriculumSuccesses} target captures");
+                    env.IsStandardEvaluation
+                        ? $"ATTITUDE: <= {tilt:F0} deg tilt, {env.HoverTrackAttemptWindowSeconds:F0} s target limit"
+                        : $"ATTITUDE: <= {tilt:F0} deg tilt, {env.hoverTrackCurriculumSuccesses} target captures");
                 return;
             }
 
             if (env.scenario.IsLanding())
             {
+                float difficulty = env.IsStandardEvaluation
+                    ? agent.ObjectiveDifficulty01
+                    : env.ActiveLandingCurriculumProgress;
+                LandingCurriculumProfile profile =
+                    env.GetActiveLandingCurriculumProfile(difficulty);
                 SetCurriculumHudVisible(true);
                 string taskName = env.scenario == ScenarioType.LegLanding ? "LEG LANDING" : "CHOPSTICK LANDING";
-                SetText(curriculumTitleText, $"CURRICULUM: {taskName}");
-                SetText(curriculumProgressText, $"PROGRESS: {FormatPercent(env.ActiveLandingCurriculumProgress)}");
-                SetText(curriculumRateText,
-                    $"SUCCESS RATE: {FormatPercent(env.ActiveLandingCurriculumSuccessRate)}  ({env.ActiveLandingCurriculumSuccessfulEpisodes}/{env.ActiveLandingCurriculumEpisodeCount} episodes)");
+                SetText(curriculumTitleText, env.IsStandardEvaluation
+                    ? $"EVALUATION: {taskName}"
+                    : $"CURRICULUM: {taskName}");
+                SetText(curriculumProgressText, env.IsStandardEvaluation
+                    ? $"DIFFICULTY BAND: {FormatPercent(difficulty)}"
+                    : $"PROGRESS: {FormatPercent(env.ActiveLandingCurriculumProgress)}");
+                SetText(curriculumRateText, env.IsStandardEvaluation
+                    ? "PAIRED STRATIFIED BENCHMARK"
+                    : $"SUCCESS RATE: {FormatPercent(env.ActiveLandingCurriculumSuccessRate)}  ({env.ActiveLandingCurriculumSuccessfulEpisodes}/{env.ActiveLandingCurriculumEpisodeCount} episodes)");
                 SetText(curriculumPrimaryText,
-                    $"SPAWN: {env.CurrentLandingSpawnAltitudeMin:F0}-{env.CurrentLandingSpawnAltitudeMax:F0} m, <= {env.CurrentLandingSpawnRadius:F0} m offset");
+                    $"SPAWN: {profile.spawnAltitudeMin:F0}-{profile.spawnAltitudeMax:F0} m, <= {profile.spawnRadius:F0} m offset");
                 SetText(curriculumSecondaryText,
-                    $"SPEED: {env.CurrentLandingVerticalSpeedMin:F0}-{env.CurrentLandingVerticalSpeedMax:F0} m/s down, <= {env.CurrentLandingHorizontalSpeedMax:F1} m/s lateral");
+                    $"SPEED: {profile.verticalSpeedMin:F0}-{profile.verticalSpeedMax:F0} m/s down, <= {profile.horizontalSpeedMax:F1} m/s lateral");
                 SetText(curriculumTertiaryText,
-                    $"LIMITS: <= {env.CurrentLandingSuccessRadius:F1} m, <= {env.CurrentLandingSuccessMaxTiltDeg:F0} deg, <= {env.CurrentLandingAngularSpeedMaxDegS:F0} deg/s start spin");
+                    $"LIMITS: <= {profile.successRadius:F1} m, <= {profile.successMaxTiltDeg:F0} deg, <= {profile.angularSpeedMaxDegS:F0} deg/s start spin");
                 return;
             }
 

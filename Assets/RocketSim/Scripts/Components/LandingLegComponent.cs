@@ -84,8 +84,7 @@ namespace RocketSim
                 Vector3 footPosition = radial * footRadius + Vector3.up * (FootPlaneLocalY + footThickness * 0.5f);
                 Vector3 hingePosition = radial * hingeRadius + Vector3.up * hingeY;
                 float strutRadius = 0.18f * radialScale;
-                Vector3 strutFootPosition = footPosition +
-                                            Vector3.up * (footThickness * 0.5f + strutRadius);
+                Vector3 strutFootPosition = footPosition + Vector3.up * (footThickness * 0.5f + strutRadius);
 
                 Transform foot = _feet[i];
                 foot.localPosition = footPosition;
@@ -96,13 +95,11 @@ namespace RocketSim
                 Vector3 delta = strutFootPosition - hingePosition;
                 strut.localPosition = (strutFootPosition + hingePosition) * 0.5f;
                 strut.localRotation = Quaternion.FromToRotation(Vector3.up, delta.normalized);
-                // Unity's cylinder has a 0.5-unit radius and 2-unit height.
                 strut.localScale = new Vector3(strutRadius * 2f, delta.magnitude * 0.5f, strutRadius * 2f);
             }
         }
 
-        public Transform FootTransform(int index) =>
-            index >= 0 && index < _feet.Length ? _feet[index] : null;
+        public Transform FootTransform(int index) => index >= 0 && index < _feet.Length ? _feet[index] : null;
 
         void EnsureBuilt()
         {
@@ -118,9 +115,7 @@ namespace RocketSim
             };
             _legVisualMaterial = CreateVisualMaterial(new Color(0.18f, 0.20f, 0.23f, 1f));
             _footVisualMaterial = CreateVisualMaterial(new Color(0.08f, 0.09f, 0.10f, 1f));
-
-            // The component is attached to the rigidbody/agent root. Keep all
-            // task-specific geometry below a separate switchable child.
+            
             var gearObject = new GameObject("LandingGear");
             _gearRoot = gearObject.transform;
             _gearRoot.SetParent(transform, false);

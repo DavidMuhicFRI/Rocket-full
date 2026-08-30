@@ -71,7 +71,10 @@ namespace RocketSim
         public float curiosityStrength = 0.01f;
         public float curiosityLR = 1e-4f;
 
-        public int maxSteps = 10_000_000;
+        // The adaptive landing curriculum needs substantially longer than the
+        // old ten-million-step schedule; otherwise the linear PPO schedules
+        // are nearly exhausted before touchdown precision and efficiency begin.
+        public int maxSteps = 30_000_000;
         // 1024 decisions cover 30.72 simulated seconds at the canonical control
         // rate. Reaching this value bootstraps from the critic; it does not end
         // the Unity episode.
@@ -79,7 +82,7 @@ namespace RocketSim
         public int summaryFreq = 20_000;
         public bool threaded = true;
         public int checkpointInterval = 500_000;
-        public int keepCheckpoints = 20;
+        public int keepCheckpoints = 60;
         public int trainerSeed = 1;
 
         /// <summary>

@@ -1,8 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Environment/SimEnvironmentConfig.cs
 // Purpose: Stores user-editable task, curriculum, environment, fault, and run settings.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using System;
@@ -54,8 +52,7 @@ namespace RocketSim
         [HideInInspector] public InferenceScenarioConfig inferenceScenarios = new();
         [HideInInspector] public InferencePurpose inferencePurpose = InferencePurpose.StandardEvaluation;
         [HideInInspector] public EvaluationConfig evaluation = new();
-        // The objective is serialized once at SimulationSessionConfig.objective.
-        // This runtime reference is rebound whenever a session is loaded.
+        
         [NonSerialized] public TrainingObjectiveConfig trainingObjective = new();
         [Header("Faults")] public RocketFaultConfig faults = new();
 
@@ -66,9 +63,7 @@ namespace RocketSim
 
         public float AirDensityMultiplier => Mathf.Clamp(airDensityMultiplier, 0.5f, 1.5f);
         public float EffectiveGustAmp => Mathf.Max(0f, windGustAmplitude);
-        public bool IsStandardEvaluation =>
-            behaviorType == BehaviorType.Inference &&
-            inferencePurpose == InferencePurpose.StandardEvaluation;
+        public bool IsStandardEvaluation => behaviorType == BehaviorType.Inference && inferencePurpose == InferencePurpose.StandardEvaluation;
 
         /// <summary>
         /// Applies a named environment preset by writing the same explicit wind
@@ -152,8 +147,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Updates the wind speed and remembers it as the restore value while
-        /// wind is enabled.
+        /// Updates the wind speed and remembers it as the restore value while wind is enabled.
         /// </summary>
         public void SetWindSpeed(float value)
         {
@@ -162,8 +156,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Updates gust amplitude and remembers it as the restore value while
-        /// wind is enabled.
+        /// Updates gust amplitude and remembers it as the restore value while wind is enabled.
         /// </summary>
         public void SetWindGustAmplitude(float value)
         {
@@ -172,8 +165,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Updates wind variation rate and remembers it as the restore value
-        /// while wind is enabled.
+        /// Updates wind variation rate and remembers it as the restore value while wind is enabled.
         /// </summary>
         public void SetWindChangeRate(float value)
         {
@@ -198,13 +190,21 @@ namespace RocketSim
         {
             evaluation ??= new EvaluationConfig();
             evaluation.Clamp();
+            if (IsStandardEvaluation)
+                evaluation.ApplyStandardContract();
             return evaluation;
         }
 
+        /// <summary>Returns the evaluator's frozen per-episode difficulty.</summary>
+        public float StandardEvaluationDifficultyForEpisode(int episodeIndex) => IsStandardEvaluation && scenario.UsesCurriculumEvaluationBands() ? EvaluationConfig.DifficultyForEpisode(episodeIndex) : 0f;
+
         /// <summary>
-        /// Applies common deterministic evaluator settings. Landing tasks are
-        /// additionally forced to their independent full-difficulty profiles;
-        /// hover retains its natural fuel/failure endpoint for trajectory analysis.
+        /// Maps an evaluation episode to its paired replicate index. Training and non-curriculum evaluation retain their ordinary episode index.
+        /// </summary>
+        public int RandomSeedEpisodeIndex(int episodeIndex) => IsStandardEvaluation && scenario.UsesCurriculumEvaluationBands() ? EvaluationConfig.ReplicateIndexForEpisode(episodeIndex) : episodeIndex;
+
+        /// <summary>
+        /// Applies the frozen evaluator environment and scenario-specific cycle endpoints. The agent selects per-episode curriculum difficulty.
         /// </summary>
         public void PrepareStandardEvaluation()
         {
@@ -219,13 +219,22 @@ namespace RocketSim
             faults.evaluationFaultEnabled = false;
             faults.allowDuringTraining = false;
 
-            if (!scenario.IsLanding())
+            ScenarioObjectiveConfig objective = GetTrainingObjective(scenario);
+            if (scenario == ScenarioType.Hover)
             {
-                // Hover evaluation intentionally keeps the natural fuel/failure
-                // endpoint, but its initial-state distribution must still be
-                // fixed rather than inherited from Manual Inference edits.
-                if (scenario == ScenarioType.Hover || scenario == ScenarioType.HoverTracking)
-                    GetInferenceSpawnProfile(scenario).ResetToDefaults(scenario);
+                objective.terminations.timeLimitEnabled = false;
+                return;
+            }
+
+            if (scenario == ScenarioType.HoverTracking)
+            {
+                hoverTrackCurriculumLinearProgress = 0f;
+                hoverTrackCurriculumProgress = 0f;
+                targetMoveInterval = EvaluationConfig.HoverTrackTargetTimeoutSeconds;
+                ApplyHoverTrackCurriculum();
+                objective.terminations.trackingCaptureGoalEnabled = true;
+                objective.terminations.trackingRequiredCaptures = EvaluationConfig.HoverTrackRequiredCaptures;
+                objective.terminations.timeLimitEnabled = false;
                 return;
             }
 
@@ -235,23 +244,22 @@ namespace RocketSim
                 landingTargetYawDeg = 0f;
                 landingPlatformEnabled = true;
                 landingPlatformHalfSizeFull = LandingDefaultPlatformHalfSizeFull;
-                landingCurriculumMode = LandingCurriculumMode.FixedFullDifficulty;
-                landingCurriculumLinearProgress = 1f;
-                landingCurriculumPeakLinearProgress = 1f;
+                landingCurriculumMode = LandingCurriculumMode.Adaptive;
+                landingCurriculumLinearProgress = 0f;
+                landingCurriculumPeakLinearProgress = 0f;
             }
             else
             {
-                legLandingCurriculumMode = LandingCurriculumMode.FixedFullDifficulty;
-                legLandingCurriculumLinearProgress = 1f;
-                legLandingCurriculumPeakLinearProgress = 1f;
+                legLandingCurriculumMode = LandingCurriculumMode.Adaptive;
+                legLandingCurriculumLinearProgress = 0f;
+                legLandingCurriculumPeakLinearProgress = 0f;
             }
             ApplyActiveLandingCurriculum();
         }
 
         /// <summary>
         /// Ensures the complete reward, shaping, and termination objective exists.
-        /// Missing scenario objects are recreated without interpreting intentional
-        /// zero values as absent configuration.
+        /// Missing scenario objects are recreated without interpreting intentional zero values as absent configuration.
         /// </summary>
         public TrainingObjectiveConfig EnsureTrainingObjective()
         {

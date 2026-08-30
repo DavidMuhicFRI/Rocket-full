@@ -74,7 +74,8 @@ value(d) = lerp(initial, full, clamp01(d))
 
 ## Landing guidance
 
-Both landing tasks share the same suicide-burn-oriented descent features. Let:
+Both landing tasks share the gravity/height descent guide, position, attitude,
+near-target velocity, and rotation features. Let:
 
 ```text
 h               = max(0, altitude - terminalAltitude)
@@ -82,8 +83,10 @@ v_descent       = sqrt(2 * gravity * h) * landingBallisticDescentFraction
 v_vertical_goal = -v_descent
 descent_error   = clamp01(abs(verticalSpeed - v_vertical_goal)
                           / max(landingDescentErrorMinimumScaleMps, v_descent))
-signed_closure  = clamp(goalClosureRate
-                        / max(landingClosureMinimumScaleMps, v_descent), -1, 1)
+chopstick_closure = clamp(goalClosureRate
+                          / max(landingClosureMinimumScaleMps, v_descent), -1, 1)
+leg_closure       = clamp(horizontalClosureRate
+                          / landingClosureMinimumScaleMps, -1, 1)
 planar_error    = 1 - Exp01(planarDistance, landingPlanarDistanceFalloffM)
 upright_error   = 1 - upright01
 near_target     = Exp01(h, landingNearTargetAltitudeFalloffM)
@@ -94,7 +97,7 @@ angular_rate    = clamp01(angularRateDegS / landingAngularRateScaleDegS)
 The common rate is:
 
 ```text
-+ landingGoalClosureRewardRate             * signed_closure
++ landingGoalClosureRewardRate             * task_closure
 - landingDescentProfileErrorCostRate        * descent_error
 - landingPlanarDistanceCostRate             * planar_error
 - landingUprightErrorCostRate               * upright_error
@@ -104,9 +107,11 @@ The common rate is:
 - timeCostRate
 ```
 
-The desired vertical speed naturally approaches zero at ground level. The model
-does not reward a prescribed throttle, engine state, or ignition time; PPO must
-discover when thrust is necessary to follow that profile.
+The desired vertical speed naturally approaches zero at ground level. Leg
+landing deliberately uses horizontal closure so passive vertical fall cannot
+pay the navigation signal; chopstick capture retains 3D closure. The model does
+not prescribe throttle, engine count, or ignition time. PPO must discover the
+controls needed to follow the profile.
 
 ### Chopstick-specific shaping
 
@@ -123,16 +128,84 @@ stable.
 
 ```text
 yaw_spin = clamp01(abs(yawRateDegS) / landingYawSpinScaleDegS)
+vertical_excess = clamp01((abs(verticalSpeed) - current_vertical_limit)
+                          / landingVerticalSpeedExcessScaleMps)
+upward_excess = clamp01((verticalSpeed - landingUpwardVelocityToleranceMps)
+                         / landingUpwardVelocityScaleMps)
+upright_error = near_target
+                * clamp01(tiltDeg / max(6 deg, 2 * current_tilt_limit))
+center_quality = Exp01(planarDistance, landingPlanarDistanceFalloffM)
 
 - landingYawSpinCostRate * yaw_spin
+- landingNearTargetVerticalSpeedCostRate * near_target * vertical_excess
+- landingAngularRateCostRate * angular_rate
+- landingUpwardVelocityCostRate * upward_excess
++ landingReadinessProgressRewardRate * d(center_quality)/dt
 ```
 
-This independent body-axis term prevents the policy from using fins to spin
-around the rocket's vertical axis while still appearing upright. The following
-events are one-offs:
+This body-axis term prevents the policy from using fins to spin around the
+rocket's vertical axis while still appearing upright. Direct tilt shaping is
+gated by height, so the vehicle can lean to navigate aloft but is increasingly
+pressed upright through the flare. The bounded progress potential contains only
+center quality. Descent-profile, horizontal-speed, tilt, and angular-rate terms
+remain independent, so simply falling closer to the altitude gate cannot create
+positive progress while the vehicle drifts away. Center progress is disabled
+after impact. First contact pays no
+milestone. A flat `+2` event is emitted once when four-foot, propulsion-off
+support completes its required hold.
 
-- `firstFootContactReward`
-- `stableTouchdownReward`
+Balanced terminal magnitudes are:
+
+| Outcome | Reward or cost |
+|---|---:|
+| Successful touchdown | +7.5 to +30 from impact/center quality |
+| Successful mission efficiency | up to +4 at every difficulty; failed attempts receive zero |
+| Hard touchdown, structural strike, excessive rebound | -25 to -45 by impact severity |
+| Flyaway, fuel depletion, altitude escape, missed pad | -50 |
+| Timeout | -50 |
+| Foot outside pad | disabled by default; optional rule costs -25 to -45 |
+| Airborne unsafe attitude | disabled by default; attitude remains densely shaped |
+
+For a legal stable touchdown, first-contact quality combines translational
+speed, tilt, and angular rate inside the current curriculum envelope. Center
+quality falls smoothly from 1 at the pad center to 0 at the current success
+radius. Their geometric mean controls 75% of the `+30` reward; the remaining
+25% keeps a marginal but legal landing positive. Mission efficiency is a
+separate success-only tie-breaker and does not constrain which engines the
+policy may use:
+
+```text
+fuel_used_fraction = clamp01(1 - fuelRemainingFraction)
+additional_first_ignitions = max(0, distinctIgnitedEngineChannels - 1)
+mission_cost = fuel_used_fraction
+             + engineRestartCount * restartEquivalentFuelFraction
+             + additional_first_ignitions
+               * additionalEngineIgnitionEquivalentFuelFraction
+cost_scale = lerp(initialMissionCostScale,
+                  fullMissionCostScale,
+                  curriculumDifficulty)
+mission_efficiency = exp(-mission_cost / cost_scale)
+success_bonus = successfulMissionEfficiencyReward
+                * mission_efficiency
+                * efficiencyCurriculumGate
+```
+
+Balanced uses cost scales `0.20 -> 0.28`, a `0.003` equivalent-fuel charge per
+restart, and only `0.0005` for each additional engine channel's first ignition.
+Fuel therefore dominates, a one-to-three-engine braking transition is cheap,
+and repeated shutdown/relight PWM is appreciably worse. The exponential does
+not clip at a budget, so reducing mission cost remains useful for every legal
+landing.
+
+The Balanced leg objective has no per-second time cost: efficiency is judged
+only after a legal landing, so ending a failed episode quickly is not rewarded.
+For contact failures, the worst first-contact measurement is divided by its
+active success limit. Impact severity rises linearly from zero at `1x` to its
+full `-20` at `3x`. A typical `1.5x` L6 impact therefore costs `-30`, rather than
+about `-12`, while every physical contact failure remains capped at `-45` and
+every non-contact escape or timeout costs `-50`. This keeps a real attempt
+preferable without making a repeatable crash the cheap outcome or prescribing
+how many engines may fire.
 
 ## Hover baseline
 
@@ -201,11 +274,13 @@ policy. Validation requires at least one enabled rule because the agent's
 `MaxStep` is intentionally zero; this keeps every episode boundary explicit in
 the selected objective.
 
-Landing stability criteria also define the `stableCaptureReward` and
-`stableTouchdownReward` events while those magnitudes are nonzero. Moving-target
-capture criteria always define target-capture events, target movement, and
-curriculum accounting even when capture-count termination is disabled. Their
-thresholds therefore remain active and validated for those non-terminal roles.
+Landing stability criteria define `stableCaptureReward` while that magnitude is
+nonzero. Leg touchdown limits define the safe contact-quality and foot-support
+progress events independently of whether stable touchdown termination is
+enabled. Moving-target capture criteria always define target-capture events,
+target movement, and curriculum accounting even when capture-count termination
+is disabled. Their thresholds therefore remain active and validated for those
+non-terminal roles.
 
 ### Chopstick priority
 
@@ -222,22 +297,33 @@ the capture envelope and stable-hold requirement must also be satisfied.
 
 ### Leg-landing priority
 
-1. structural strike
-2. foot outside the pad
-3. hard first contact
-4. excessive rebound or sustained loss of all foot contacts
-5. stable touchdown success
-6. unsafe attitude
-7. horizontal flyaway
-8. fuel depletion
-9. altitude escape above the episode start
-10. missed pad
-11. time limit
+1. physical impact outside the designated pad (missed pad)
+2. structural strike on the pad
+3. foot outside the pad
+4. hard first contact
+5. excessive rebound or sustained loss of all foot contacts
+6. stable touchdown success
+7. settled four-foot support outside the active center radius (missed pad)
+8. unsafe attitude
+9. horizontal flyaway
+10. fuel depletion
+11. altitude escape above the episode start
+12. geometric missed pad
+13. time limit
 
 Hard first contact and stable touchdown use the interpolated landing envelope.
-Stable touchdown additionally requires the configured minimum number of feet and
-hold duration. Rebound measurements are sticky after first contact and use
+Default stable touchdown additionally requires all four feet, main engines and
+RCS physically off, and an uninterrupted hold from 0.4 to 1.0 seconds. The
+first external physical impact latches the one-way propulsion interlock, so the
+policy cannot relight after either pad or terrain contact. A non-pad impact
+terminates immediately at the fixed missed-pad cost and cannot create foot
+support or earn a pad-contact event. A calm four-foot landing outside the
+active center radius also terminates as missed-pad after the same short hold;
+it no longer waits for the global timeout. Rebound measurements are sticky after first contact and use
 `legMaximumReboundRiseM` and `legMaximumAllFeetContactLossSeconds`.
+
+The default leg objective leaves priority item 8 disabled and uses a 60-second
+limit. It remains in the configurable list for deliberate custom experiments.
 
 When `legAllowFuelDepletionAfterContact` is enabled, empty fuel does not end the
 settling hold after contact has begun.

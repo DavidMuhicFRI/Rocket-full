@@ -30,6 +30,7 @@ namespace RocketSim
 
         public int independentEngineCount;
         public bool independentEngines;
+        public bool separateEngineEnableActions;
         public EngineLayout engineLayout;
         public OctawebBurnGroup octawebBurnGroup;
         public int activeEngineCount;

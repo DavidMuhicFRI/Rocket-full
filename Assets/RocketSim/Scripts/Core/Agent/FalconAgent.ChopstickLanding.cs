@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.ChopstickLanding.cs
 // Purpose: Tracks the generated non-physical chopstick target, capture envelope,
 // and stable kinematic capture state.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;

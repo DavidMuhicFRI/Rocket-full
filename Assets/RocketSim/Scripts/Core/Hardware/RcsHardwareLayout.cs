@@ -23,8 +23,7 @@ namespace RocketSim
         /// Converts a pod index and nozzle enum into the flat command-array
         /// index shared by the RCS controller and telemetry.
         /// </summary>
-        public static int JetIndex(int podIndex, RcsComponent.RcsNozzle nozzle) =>
-            podIndex * NozzlesPerPod + (int)nozzle;
+        public static int JetIndex(int podIndex, RcsComponent.RcsNozzle nozzle) => podIndex * NozzlesPerPod + (int)nozzle;
 
         /// <summary>
         /// Returns the generated child name for a Falcon-style RCS pod index.

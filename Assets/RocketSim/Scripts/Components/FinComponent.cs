@@ -29,11 +29,14 @@ namespace RocketSim
         {
             FinLayout.ThreeFins_120 => 3,
             _ => 4 
+            //change this if we add more fin configurations
         };
 
         Quaternion[] _neutralRotations = new Quaternion[0];
 
-        /// <summary>Copies fin settings from a session and updates fin geometry.</summary>
+        /// <summary>
+        /// Copies fin settings from a session and updates fin geometry.
+        /// </summary>
         public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius, float bodyHeight)
         {
             if (config == null) return;
@@ -52,9 +55,7 @@ namespace RocketSim
         }
         
         /// <summary>
-        /// Enables the fin children required by the selected layout, scales and
-        /// positions them around the body, and remembers their neutral rotations
-        /// for later deflection commands.
+        /// Enables the fins in the selected layout, scales and positions them around the body, and saves their neutral rotations for later deflections.
         /// </summary>
         public void ApplyLayout(float bodyRadius = 1.83f)
         {
@@ -90,8 +91,8 @@ namespace RocketSim
                     float angleRad = angles[i] * Mathf.Deg2Rad;
 
                     // Distance from rocket center. 
-                    float dist = bodyRadius + (finWidthX / 2f);
-                    
+                    float dist = bodyRadius + finWidthX / 2f;
+
                     float x = Mathf.Cos(angleRad) * dist;
                     float z = Mathf.Sin(angleRad) * dist;
 
@@ -103,15 +104,13 @@ namespace RocketSim
                 }
                 else
                 {
-                    // Disable extra fins
                     fin.gameObject.SetActive(false); 
                 }
             }
         }
 
         /// <summary>
-        /// Rotates each active fin away from its cached neutral orientation,
-        /// clamping the requested angles to the configured actuator limit.
+        /// Rotates each active fin and clamps the requested angles to the actuator limits.
         /// </summary>
         public void ApplyDeflections(float[] deflectionsDeg)
         {

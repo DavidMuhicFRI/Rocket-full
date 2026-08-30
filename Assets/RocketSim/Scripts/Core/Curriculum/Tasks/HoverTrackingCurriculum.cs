@@ -17,7 +17,7 @@ namespace RocketSim
         [HideInInspector]
         public bool moveTargetEnabled = false;
         [HideInInspector]
-        public float targetMoveInterval = 35f;
+        public float targetMoveInterval = HoverTrackDefaultAttemptWindowSeconds;
         [HideInInspector]
         public float targetMoveRadius = 12f;
         [HideInInspector] public bool hoverTrackCurriculumEnabled = true;
@@ -35,6 +35,8 @@ namespace RocketSim
         public const float HoverTrackStartMoveRadius = 16f;
         public const float HoverTrackEndMoveRadius = 50f;
         public const float HoverTrackDefaultCurriculumBatchesToMostlyHard = 120f;
+        public const float HoverTrackDefaultAttemptWindowSeconds = 35f;
+        public const int HoverTrackMinimumCapturesPerSuccessfulEpisode = 2;
         public const float DefaultCurriculumDifficultyIncreaseSpeed = 1f;
         public const float MinCurriculumDifficultyIncreaseSpeed = 0.25f;
         public const float MaxCurriculumDifficultyIncreaseSpeed = 4f;
@@ -42,8 +44,26 @@ namespace RocketSim
         public const float CurriculumAdvanceRateFloor = 0.55f;
         public const float CurriculumAdvanceRateCeiling = 0.85f;
 
-        public float HoverTrackCurriculumSuccessRate =>
-            hoverTrackCurriculumEpisodeCount > 0 ? Mathf.Clamp01(hoverTrackCurriculumRecentSuccessRate) : 0f;
+        public float HoverTrackCurriculumSuccessRate => hoverTrackCurriculumEpisodeCount > 0 ? Mathf.Clamp01(hoverTrackCurriculumRecentSuccessRate) : 0f;
+
+        public float HoverTrackAttemptWindowSeconds => Mathf.Max(1f, targetMoveInterval);
+
+        public static bool HasCapturedRelocatedHoverTrackTarget(int episodeCaptures) => episodeCaptures >= HoverTrackMinimumCapturesPerSuccessfulEpisode;
+
+        /// <summary>Returns target travel radius at an explicit frozen difficulty.</summary>
+        public float HoverTrackMoveRadiusAt(float difficulty01) =>
+            Mathf.Lerp(Mathf.Max(0f, hoverTrackStartMoveRadius), Mathf.Max(0f, hoverTrackEndMoveRadius), Mathf.Clamp01(difficulty01));
+
+        /// <summary>
+        /// Requires acquisition of a moved target before an open-ended episode
+        /// counts as curriculum success. A single fall-through capture cannot
+        /// promote difficulty. Explicit capture-goal objectives use their real
+        /// success terminal instead.
+        /// </summary>
+        public static bool IsHoverTrackCurriculumEpisodeSuccessful(bool captureGoalEnabled, bool objectiveSuccessTerminalReached, int episodeCaptures)
+        {
+            return captureGoalEnabled ? objectiveSuccessTerminalReached : HasCapturedRelocatedHoverTrackTarget(episodeCaptures);
+        }
 
         /// <summary>
         /// Resets the hover track curriculum state back to its episode/default values.
@@ -59,24 +79,25 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Records one completed hover-track episode and advances continuous
-        /// difficulty from the recent average successful-episode rate.
+        /// Records one completed target-attempt window and advances continuous
+        /// difficulty from the recent target-capture rate. Serialized field
+        /// names retain "Episode" for backward compatibility with saved runs.
         /// </summary>
-        public void RecordHoverTrackCurriculumEpisode(bool successfulEpisode, int activeAreaCount)
+        public void RecordHoverTrackCurriculumAttempt(bool successfulAttempt, int activeAreaCount)
         {
             if (scenario != ScenarioType.HoverTracking) return;
 
             EnsureHoverTrackCurriculumDefaults();
             hoverTrackCurriculumEnabled = true;
             hoverTrackCurriculumEpisodeCount++;
-            if (successfulEpisode)
+            if (successfulAttempt)
                 hoverTrackCurriculumSuccessfulEpisodes++;
 
             hoverTrackCurriculumRecentSuccessRate = CurriculumSuccessRateAfterEpisode(
                 hoverTrackCurriculumRecentSuccessRate,
                 hoverTrackCurriculumSuccessfulEpisodes,
                 hoverTrackCurriculumEpisodeCount,
-                successfulEpisode);
+                successfulAttempt);
 
             hoverTrackCurriculumLinearProgress = Mathf.Clamp01(
                 hoverTrackCurriculumLinearProgress +
@@ -102,7 +123,7 @@ namespace RocketSim
 
             hoverTrackCurriculumProgress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(hoverTrackCurriculumLinearProgress));
 
-            targetMoveRadius = Mathf.Lerp(hoverTrackStartMoveRadius, hoverTrackEndMoveRadius, hoverTrackCurriculumProgress);
+            targetMoveRadius = HoverTrackMoveRadiusAt(hoverTrackCurriculumProgress);
         }
 
         /// <summary>
@@ -122,6 +143,8 @@ namespace RocketSim
 
             if (hoverTrackCurriculumBatchesToMostlyHard <= 0f)
                 hoverTrackCurriculumBatchesToMostlyHard = HoverTrackDefaultCurriculumBatchesToMostlyHard;
+            if (targetMoveInterval <= 0f)
+                targetMoveInterval = HoverTrackDefaultAttemptWindowSeconds;
             curriculumDifficultyIncreaseSpeed = Mathf.Clamp(
                 curriculumDifficultyIncreaseSpeed <= 0f ? DefaultCurriculumDifficultyIncreaseSpeed : curriculumDifficultyIncreaseSpeed,
                 MinCurriculumDifficultyIncreaseSpeed,
@@ -137,13 +160,15 @@ namespace RocketSim
             float previousRate,
             int successfulEpisodes,
             int episodeCount,
-            bool successfulEpisode)
+            bool successfulEpisode,
+            float windowEpisodes = CurriculumSuccessRateWindowEpisodes)
         {
             if (episodeCount <= 0) return 0f;
-            if (episodeCount <= CurriculumSuccessRateWindowEpisodes)
+            float window = Mathf.Max(1f, windowEpisodes);
+            if (episodeCount <= window)
                 return Mathf.Clamp01(successfulEpisodes / Mathf.Max(1f, episodeCount));
 
-            float alpha = 2f / (CurriculumSuccessRateWindowEpisodes + 1f);
+            float alpha = 2f / (window + 1f);
             return Mathf.Lerp(previousRate, successfulEpisode ? 1f : 0f, alpha);
         }
 
@@ -154,15 +179,8 @@ namespace RocketSim
         /// </summary>
         float CurriculumProgressDelta(float successRate, float batchesToFullDifficulty, int activeAreaCount)
         {
-            float successPressure = Mathf.InverseLerp(
-                CurriculumAdvanceRateFloor,
-                CurriculumAdvanceRateCeiling,
-                Mathf.Clamp01(successRate));
-            return successPressure *
-                   Mathf.Clamp(curriculumDifficultyIncreaseSpeed, MinCurriculumDifficultyIncreaseSpeed, MaxCurriculumDifficultyIncreaseSpeed) /
-                   Mathf.Max(1f, batchesToFullDifficulty) /
-                   Mathf.Max(1f, activeAreaCount);
+            float successPressure = Mathf.InverseLerp(CurriculumAdvanceRateFloor, CurriculumAdvanceRateCeiling, Mathf.Clamp01(successRate));
+            return successPressure * Mathf.Clamp(curriculumDifficultyIncreaseSpeed, MinCurriculumDifficultyIncreaseSpeed, MaxCurriculumDifficultyIncreaseSpeed) / Mathf.Max(1f, batchesToFullDifficulty) / Mathf.Max(1f, activeAreaCount);
         }
-
     }
 }

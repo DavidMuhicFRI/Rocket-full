@@ -34,7 +34,17 @@ namespace RocketSim
         TrackingFarDistanceScaleMultiplier,
         TrackingUsefulSpeedScaleMps,
         TrackingOverspeedThresholdMps,
-        TrackingOverspeedRangeMps
+        TrackingOverspeedRangeMps,
+        LandingVerticalSpeedExcessScaleMps,
+        LandingUpwardVelocityToleranceMps,
+        LandingUpwardVelocityScaleMps,
+        LegFuelEfficiencyStartDifficulty,
+        LegFuelEfficiencyFullDifficulty,
+        LegFuelEfficiencyBudgetFraction,
+        LegTouchdownQualityRewardFraction,
+        LegMissionEfficiencyBudgetFullFraction,
+        LegRestartEquivalentFuelFraction,
+        LegAdditionalEngineIgnitionEquivalentFuelFraction
     }
 
     public sealed class ShapingParameterDescriptor
@@ -121,10 +131,58 @@ namespace RocketSim
                 "Horizontal-speed scale", "Horizontal speed represented by a fully saturated touchdown-speed feature.", "m/s",
                 ObjectiveScenarioMask.BothLandings, 0.1f, 50f,
                 p => p.landingPlanarSpeedScaleMps, (p,v) => p.landingPlanarSpeedScaleMps = v),
+            D(ShapingParameterId.LandingVerticalSpeedExcessScaleMps, "leg.shape.vertical_speed_excess_scale_mps",
+                "Vertical overspeed scale", "Vertical speed above the active touchdown limit represented by a saturated near-pad feature.", "m/s",
+                ObjectiveScenarioMask.LegLanding, 0.1f, 30f,
+                p => p.landingVerticalSpeedExcessScaleMps, (p,v) => p.landingVerticalSpeedExcessScaleMps = v),
             D(ShapingParameterId.LandingAngularRateScaleDegS, "landing.shape.angular_rate_scale_deg_s",
                 "Angular-rate scale", "Angular speed represented by a fully saturated landing rotation feature.", "deg/s",
                 ObjectiveScenarioMask.BothLandings, 1f, 180f,
                 p => p.landingAngularRateScaleDegS, (p,v) => p.landingAngularRateScaleDegS = v),
+            D(ShapingParameterId.LandingUpwardVelocityToleranceMps, "leg.shape.upward_velocity_tolerance_mps",
+                "Upward-speed tolerance", "Upward speed allowed before the climb cost begins.", "m/s",
+                ObjectiveScenarioMask.LegLanding, 0f, 10f,
+                p => p.landingUpwardVelocityToleranceMps, (p,v) => p.landingUpwardVelocityToleranceMps = v,
+                50f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LandingUpwardVelocityScaleMps, "leg.shape.upward_velocity_scale_mps",
+                "Upward-speed scale", "Upward speed above tolerance represented by a saturated climb feature.", "m/s",
+                ObjectiveScenarioMask.LegLanding, 0.1f, 50f,
+                p => p.landingUpwardVelocityScaleMps, (p,v) => p.landingUpwardVelocityScaleMps = v),
+            D(ShapingParameterId.LegFuelEfficiencyStartDifficulty, "leg.shape.fuel_efficiency_start_difficulty",
+                "Mission-efficiency start", "Curriculum difficulty below which successful landings receive no mission-efficiency bonus.", "ratio",
+                ObjectiveScenarioMask.LegLanding, 0f, 1f,
+                p => p.legFuelEfficiencyStartDifficulty, (p,v) => p.legFuelEfficiencyStartDifficulty = v,
+                1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegFuelEfficiencyFullDifficulty, "leg.shape.fuel_efficiency_full_difficulty",
+                "Mission-efficiency full", "Curriculum difficulty at which the complete successful-landing mission-efficiency bonus is active.", "ratio",
+                ObjectiveScenarioMask.LegLanding, 0f, 1f,
+                p => p.legFuelEfficiencyFullDifficulty, (p,v) => p.legFuelEfficiencyFullDifficulty = v,
+                1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegFuelEfficiencyBudgetFraction, "leg.shape.fuel_efficiency_budget_fraction",
+                "Initial mission-cost scale", "Exponential cost scale at initial difficulty. Mission cost is fuel used plus equivalent-fuel charges for switching engines; this is a smooth normalization scale, not a hard budget.", "ratio",
+                ObjectiveScenarioMask.LegLanding, 0.01f, 0.50f,
+                p => p.legFuelEfficiencyBudgetFraction, (p,v) => p.legFuelEfficiencyBudgetFraction = v,
+                1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegTouchdownQualityRewardFraction, "leg.shape.touchdown_quality_reward_fraction",
+                "Quality-weighted success", "Fraction of the successful-touchdown reward scaled by continuous first-contact speed, uprightness, and rotation quality. The remainder is guaranteed by completing a legal landing.", "ratio",
+                ObjectiveScenarioMask.LegLanding, 0f, 1f,
+                p => p.legTouchdownQualityRewardFraction, (p,v) => p.legTouchdownQualityRewardFraction = v,
+                1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegMissionEfficiencyBudgetFullFraction, "leg.shape.mission_efficiency_cost_scale_full_fraction",
+                "Full mission-cost scale", "Exponential mission-cost scale at full curriculum difficulty. A larger value normalizes for longer and harder trajectories without changing the incentive to reduce cost.", "ratio",
+                ObjectiveScenarioMask.LegLanding, 0.01f, 0.50f,
+                p => p.legMissionEfficiencyBudgetFullFraction, (p,v) => p.legMissionEfficiencyBudgetFullFraction = v,
+                1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegRestartEquivalentFuelFraction, "leg.shape.restart_equivalent_fuel_fraction",
+                "Restart equivalent fuel", "Equivalent fraction of starting fuel added to mission cost for each ignition after that engine channel previously shut down.", "ratio/restart",
+                ObjectiveScenarioMask.LegLanding, 0f, 0.02f,
+                p => p.legRestartEquivalentFuelFraction, (p,v) => p.legRestartEquivalentFuelFraction = v,
+                0.1f, NumericScaleMode.Linear),
+            D(ShapingParameterId.LegAdditionalEngineIgnitionEquivalentFuelFraction, "leg.shape.additional_engine_ignition_equivalent_fuel_fraction",
+                "Additional first-ignition fuel", "Small equivalent-fuel charge for each additional engine channel's first ignition. This keeps a three-engine braking burn cheap compared with repeated relights.", "ratio/engine",
+                ObjectiveScenarioMask.LegLanding, 0f, 0.005f,
+                p => p.legAdditionalEngineIgnitionEquivalentFuelFraction, (p,v) => p.legAdditionalEngineIgnitionEquivalentFuelFraction = v,
+                0.1f, NumericScaleMode.Linear),
             D(ShapingParameterId.LandingYawErrorScaleDeg, "landing.shape.yaw_error_scale_deg",
                 "Yaw-error scale", "Heading error represented by a fully saturated chopstick yaw feature.", "deg",
                 ObjectiveScenarioMask.ChopstickLanding, 1f, 180f,
@@ -234,7 +292,29 @@ namespace RocketSim
                 if (scenario == ScenarioType.ChopstickLanding)
                     shaping.landingYawErrorScaleDeg = 45f;
                 else
+                {
+                    // Terminal quality fades in before touchdown while
+                    // horizontal navigation remains a separate all-altitude
+                    // objective in the leg reward model.
+                    shaping.landingNearTargetAltitudeFalloffM = 75f;
+                    shaping.landingVerticalSpeedExcessScaleMps = 5f;
+                    shaping.landingUpwardVelocityToleranceMps = 0.5f;
+                    shaping.landingUpwardVelocityScaleMps = 3f;
+                    // This is a small success-only tie-breaker, never an action
+                    // restriction or a reward available to failed attempts.
+                    // Fuel dominates. Restarts are appreciably costly, while
+                    // lighting the remaining braking engines once is cheap.
+                    shaping.legFuelEfficiencyStartDifficulty = 0f;
+                    shaping.legFuelEfficiencyFullDifficulty = 0f;
+                    shaping.legFuelEfficiencyBudgetFraction = 0.20f;
+                    shaping.legMissionEfficiencyBudgetFullFraction = 0.28f;
+                    shaping.legRestartEquivalentFuelFraction = 0.003f;
+                    shaping.legAdditionalEngineIgnitionEquivalentFuelFraction = 0.0005f;
+                    // A legal boundary landing retains 25% of the success
+                    // reward; the remaining 75% grades smoothness and center.
+                    shaping.legTouchdownQualityRewardFraction = 0.75f;
                     shaping.landingYawSpinScaleDegS = 20f;
+                }
                 return;
             }
 

@@ -66,7 +66,8 @@ namespace RocketSim
                 "FinalPlanarDistance_m", "FinalYawError_deg", "FinalSpeed_mps",
                 "FinalVerticalSpeed_mps", "FinalHorizontalSpeed_mps",
                 "FinalTilt_deg", "FinalAngularRate_deg_s", "FuelUsed_kg",
-                "RcsPropellantUsed_kg", "EngineRestartCount",
+                "RcsPropellantUsed_kg", "EngineRestartCount", "EngineFirstIgnitionCount",
+                "HoverTrackCaptures", "HoverTrackRelocatedCaptures",
                 "LegTouchdownOccurred01", "LegFeetOnPad", "LegFootOutsidePad01",
                 "LegStructuralStrike01", "LegTouchdownTime_s", "LegFirstContactSpeed_mps",
                 "LegFirstContactVerticalSpeed_mps", "LegFirstContactHorizontalSpeed_mps",
@@ -149,6 +150,9 @@ namespace RocketSim
             Append(acc.Outcome.fuelUsedKg);
             Append(acc.Outcome.rcsPropellantUsedKg);
             Append(acc.Outcome.engineRestartCount);
+            Append(acc.Outcome.engineFirstIgnitionCount);
+            Append(acc.Outcome.hoverTrackCaptures);
+            Append(acc.Outcome.hoverTrackRelocatedCaptures);
             Append(acc.Outcome.legTouchdownOccurred ? 1 : 0);
             Append(acc.Outcome.legFeetOnPad);
             Append(acc.Outcome.legFootOutsidePad ? 1 : 0);

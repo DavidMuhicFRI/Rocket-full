@@ -149,7 +149,12 @@ namespace RocketSim
             // ML-Agents receives a stable root-level path. The authoritative
             // copy remains beside the immutable session revision.
             File.WriteAllText(Path.Combine(runRoot, "TrainingConfig.yaml"), session.learning.ToYAML());
-            SimulationSessionStore.SaveRuntimeState(runId, RunRuntimeState.Capture(envConfig));
+            int completedEpisodes = request.Mode == RunLaunchMode.ResumeTraining
+                ? SimulationSessionStore.LoadRuntimeState(runId).completedEpisodes
+                : 0;
+            SimulationSessionStore.SaveRuntimeState(
+                runId,
+                RunRuntimeState.Capture(envConfig, completedEpisodes));
             return snapshot;
         }
 
@@ -225,12 +230,17 @@ namespace RocketSim
         }
 
         /// <summary>Persists live curriculum progress without changing the frozen session.</summary>
-        public static void SaveRuntimeState(string runId, SimEnvironmentConfig envConfig)
+        public static void SaveRuntimeState(
+            string runId,
+            SimEnvironmentConfig envConfig,
+            int completedEpisodes = 0)
         {
             if (string.IsNullOrWhiteSpace(runId) || envConfig == null ||
                 !SimulationSessionStore.HasCurrentSession(runId))
                 return;
-            SimulationSessionStore.SaveRuntimeState(runId, RunRuntimeState.Capture(envConfig));
+            SimulationSessionStore.SaveRuntimeState(
+                runId,
+                RunRuntimeState.Capture(envConfig, completedEpisodes));
         }
 
         public static string[] ListRunIds()

@@ -72,6 +72,7 @@ namespace RocketSim
 
             cfg.engineLayout = EngineLayout.Octaweb;
             cfg.independentEngines = true;
+            cfg.separateEngineEnableActions = false;
             cfg.octawebBurnGroup = OctawebBurnGroup.CenterPlusTwo;
             cfg.maxThrustPerEngine = Falcon9Reference.MerlinSeaLevelThrustN;
             cfg.minThrottle = RocketPartsConfig.Falcon9MinThrottle;

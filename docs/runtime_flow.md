@@ -58,6 +58,9 @@ The policy interface is derived from the selected session. Disabled engines,
 fins, and RCS channels are absent, and the four foot-contact observations exist
 only for leg landing. Consequently, a model may be resumed or loaded only when
 both the vehicle controls and task-specific observation count are compatible.
+The optional separate engine-enable interface remains continuous: it inserts
+one hysteretic enable action and one latch observation per engine command
+channel. It is disabled by default because enabling it changes that schema.
 
 ## Environment, faults, and actuators
 
@@ -107,7 +110,10 @@ Inference does not start Python. The coordinator creates an in-memory snapshot,
 installs its runtime copy, starts evaluation telemetry when requested, and asks
 the area host for one model-driven area. Standard evaluation applies its frozen
 evaluation contract only to that runtime copy, not to the editable or persisted
-training session.
+training session. Curriculum tasks select 50 sequential episodes at each of five
+fixed difficulty bands while reusing the same 50 random replicates across bands.
+The evaluator accelerates wall-clock execution to 20x and restores the previous
+Unity time scale on completion, cancellation, or launch failure.
 
 ## Stop and failure
 

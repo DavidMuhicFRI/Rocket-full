@@ -4,8 +4,7 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// Creates and freezes the non-running vehicle shown while users edit the
-    /// session. It has no training, policy, telemetry, or run responsibility.
+    /// Creates and freezes the non-running vehicle shown while users edit the session.
     /// </summary>
     public sealed class VehiclePreviewController
     {
@@ -24,11 +23,7 @@ namespace RocketSim
         public void Spawn(RocketPartsConfig vehicle)
         {
             if (!_previewPrefab) return;
-            GameObject root = Object.Instantiate(
-                _previewPrefab,
-                Vector3.zero,
-                Quaternion.identity,
-                _parent);
+            GameObject root = Object.Instantiate(_previewPrefab, Vector3.zero, Quaternion.identity, _parent);
             root.name = "VehiclePreview";
             RocketAssembly assembly = root.GetComponentInChildren<RocketAssembly>();
             if (assembly)
@@ -73,7 +68,6 @@ namespace RocketSim
 
                 RigidbodyPose pose = _poses[body];
                 body.transform.SetLocalPositionAndRotation(pose.localPosition, pose.localRotation);
-                // Unity rejects velocity writes while a body is kinematic.
                 body.isKinematic = false;
                 body.linearVelocity = Vector3.zero;
                 body.angularVelocity = Vector3.zero;

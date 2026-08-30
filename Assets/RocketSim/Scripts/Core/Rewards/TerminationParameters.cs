@@ -49,6 +49,7 @@ namespace RocketSim
         public bool legStableTouchdownEnabled;
         public bool legMissedPadEnabled;
         public float legMissedPadDepthM;
+        public int legInitialMinimumStableFeet;
         public int legMinimumStableFeet;
         public float legMaximumReboundRiseM;
         public float legMaximumAllFeetContactLossSeconds;
@@ -98,6 +99,7 @@ namespace RocketSim
             legStableTouchdownEnabled = false;
             legMissedPadEnabled = false;
             legMissedPadDepthM = 0f;
+            legInitialMinimumStableFeet = 0;
             legMinimumStableFeet = 0;
             legMaximumReboundRiseM = 0f;
             legMaximumAllFeetContactLossSeconds = 0f;
@@ -147,6 +149,7 @@ namespace RocketSim
             legStableTouchdownEnabled = source.legStableTouchdownEnabled;
             legMissedPadEnabled = source.legMissedPadEnabled;
             legMissedPadDepthM = source.legMissedPadDepthM;
+            legInitialMinimumStableFeet = source.legInitialMinimumStableFeet;
             legMinimumStableFeet = source.legMinimumStableFeet;
             legMaximumReboundRiseM = source.legMaximumReboundRiseM;
             legMaximumAllFeetContactLossSeconds = source.legMaximumAllFeetContactLossSeconds;

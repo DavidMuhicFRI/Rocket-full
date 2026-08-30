@@ -27,29 +27,19 @@ namespace RocketSim
 
             float heightAboveCapture = Mathf.Max(0f, ctx.altitude - ctx.terminalAltitude);
             float gravity = SafeScale(ctx.gravityMagnitude);
-            float desiredDescentSpeed =
-                Mathf.Sqrt(2f * gravity * heightAboveCapture) * s.landingBallisticDescentFraction;
+            float desiredDescentSpeed = Mathf.Sqrt(2f * gravity * heightAboveCapture) * s.landingBallisticDescentFraction;
             float desiredVerticalSpeed = -desiredDescentSpeed;
-            float descentErrorScale = Mathf.Max(
-                SafeScale(s.landingDescentErrorMinimumScaleMps),
-                desiredDescentSpeed);
-            float closureScale = Mathf.Max(
-                SafeScale(s.landingClosureMinimumScaleMps),
-                desiredDescentSpeed);
+            float descentErrorScale = Mathf.Max(SafeScale(s.landingDescentErrorMinimumScaleMps), desiredDescentSpeed);
+            float closureScale = Mathf.Max(SafeScale(s.landingClosureMinimumScaleMps), desiredDescentSpeed);
 
-            float descentError01 = Mathf.Clamp01(
-                Mathf.Abs(t.verticalSpeed - desiredVerticalSpeed) / descentErrorScale);
+            float descentError01 = Mathf.Clamp01(Mathf.Abs(t.verticalSpeed - desiredVerticalSpeed) / descentErrorScale);
             float signedClosure = Mathf.Clamp(t.goalClosureRate / closureScale, -1f, 1f);
-            float planarError01 = 1f - Exp01(
-                Mathf.Max(0f, t.planarDistance), s.landingPlanarDistanceFalloffM);
+            float planarError01 = 1f - Exp01(Mathf.Max(0f, t.planarDistance), s.landingPlanarDistanceFalloffM);
             float uprightError01 = 1f - Mathf.Clamp01(t.upright01);
             float nearCapture01 = Exp01(heightAboveCapture, s.landingNearTargetAltitudeFalloffM);
-            float planarSpeedError01 = Mathf.Clamp01(
-                t.planarSpeed / SafeScale(s.landingPlanarSpeedScaleMps));
-            float angularRateError01 = Mathf.Clamp01(
-                t.angularRateDegS / SafeScale(s.landingAngularRateScaleDegS));
-            float yawError01 = Mathf.Clamp01(
-                Mathf.Abs(t.yawErrorDeg) / SafeScale(s.landingYawErrorScaleDeg));
+            float planarSpeedError01 = Mathf.Clamp01(t.planarSpeed / SafeScale(s.landingPlanarSpeedScaleMps));
+            float angularRateError01 = Mathf.Clamp01(t.angularRateDegS / SafeScale(s.landingAngularRateScaleDegS));
+            float yawError01 = Mathf.Clamp01(Mathf.Abs(t.yawErrorDeg) / SafeScale(s.landingYawErrorScaleDeg));
 
             float shapingRate = 0f;
             shapingRate += RewardRate(contributions, RewardParameterId.LandingGoalClosureRewardRate,

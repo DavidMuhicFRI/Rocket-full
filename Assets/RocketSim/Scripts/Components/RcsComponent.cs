@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Components/RcsComponent.cs
 // Purpose: Exposes the rocket's two cold-gas RCS pods as a simple flat list of
 // jets for the agent, physics, hardware tests, and plume-visual code.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -33,6 +31,10 @@ namespace RocketSim
         [Range(0f, 1000f)] public float propellantMass = RocketPartsConfig.DefaultRcsPropellantMassKg;
         [Range(0f, 1000f)] public float dryMass = RocketPartsConfig.DefaultRcsDryMassKg;
 
+        [Header("Visual Material Overrides")]
+        [SerializeField] Material podMaterialOverride;
+        [SerializeField] Material nozzleMaterialOverride;
+
         /// <summary>Copies RCS settings from a session and updates pod geometry.</summary>
         public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius, float bodyHeight)
         {
@@ -50,20 +52,14 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Converts a pod/nozzle pair into the flat RCS command-buffer index
-        /// used by the agent and valve bank.
+        /// Converts a pod/nozzle pair into the flat RCS command-buffer index used by the agent and valve bank.
         /// </summary>
-        public static int JetIndex(int podIndex, RcsNozzle nozzle) =>
-            RcsHardwareLayout.JetIndex(podIndex, nozzle);
+        public static int JetIndex(int podIndex, RcsNozzle nozzle) => RcsHardwareLayout.JetIndex(podIndex, nozzle);
 
         /// <summary>
-        /// Returns the generated pod transform for the requested Falcon-style
-        /// RCS pod, or null when the layout has not been built.
+        /// Returns the generated pod transform for the requested RCS pod, or null when the layout has not been built.
         /// </summary>
-        public Transform GetPod(int podIndex) =>
-            podIndex >= 0 && podIndex < FalconPodCount
-                ? FindDirectChild(RcsHardwareLayout.PodName(podIndex))
-                : null;
+        public Transform GetPod(int podIndex) => podIndex is >= 0 and < FalconPodCount ? FindDirectChild(RcsHardwareLayout.PodName(podIndex)) : null;
 
         /// <summary>
         /// Returns the world-space direction the selected jet exhausts gas,
@@ -79,15 +75,12 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the world-space force direction applied to the rocket by the
-        /// selected jet, which is opposite the exhaust direction.
+        /// Returns the world-space force direction applied to the rocket by the selected jet -> opposite the exhaust direction.
         /// </summary>
-        public Vector3 WorldForceDirectionForJet(int jetIndex) =>
-            -WorldExhaustDirectionForJet(jetIndex);
+        public Vector3 WorldForceDirectionForJet(int jetIndex) => -WorldExhaustDirectionForJet(jetIndex);
 
         /// <summary>
-        /// Returns the world-space nozzle position used as the RCS force
-        /// application point for torque calculations.
+        /// Returns the world-space nozzle position used as the RCS force application point.
         /// </summary>
         public Vector3 WorldPositionForJet(int jetIndex)
         {
@@ -100,8 +93,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Rebuilds the generated pod layout around the rocket body radius so
-        /// RCS geometry stays attached to resized hardware.
+        /// Rebuilds the generated pod layout around the rocket body radius.
         /// </summary>
         public void Reposition(float bodyRadius = 1.83f)
         {
@@ -124,22 +116,23 @@ namespace RocketSim
 
                 MeshRenderer rootRenderer = pod.GetComponent<MeshRenderer>();
                 if (rootRenderer) rootRenderer.enabled = false;
-                RcsGeometryPresenter.BuildPodVisuals(pod, bodyRadius);
+                RcsGeometryPresenter.BuildPodVisuals(
+                    pod,
+                    bodyRadius,
+                    podMaterialOverride,
+                    nozzleMaterialOverride);
             }
         }
 
         /// <summary>
-        /// Updates the visual cold-gas plumes to mirror the current RCS command
-        /// buffer without changing the physics forces.
+        /// Updates the visual cold-gas plumes to mirror the current RCS command buffer.
         /// </summary>
-        public void ShowCommands(float[] commands) =>
-            RcsPlumePresenter.ShowCommands(transform, commands);
+        public void ShowCommands(float[] commands) => RcsPlumePresenter.ShowCommands(transform, commands);
 
         /// <summary>
         /// Clears generated RCS plume meshes, lights, and particles.
         /// </summary>
-        public void ClearVisuals() =>
-            RcsPlumePresenter.ClearVisuals(transform);
+        public void ClearVisuals() => RcsPlumePresenter.ClearVisuals(transform);
 
         /// <summary>
         /// Generates and positions RCS pods from the serialized body-relative layout.
@@ -158,8 +151,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Creates a missing pod root as a defensive fallback for custom prefabs.
-        /// The supplied simulator prefab already contains both roots.
+        /// Creates a missing pod root as a fallback for custom prefabs.
         /// </summary>
         void EnsurePodRoots()
         {

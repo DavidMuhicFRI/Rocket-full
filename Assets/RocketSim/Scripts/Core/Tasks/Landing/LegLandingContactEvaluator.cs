@@ -51,7 +51,29 @@ namespace RocketSim
 
         public static bool IsStableCandidate(
             int footMask,
-            bool footOutsidePad,
+            bool structuralStrike,
+            RewardTerms terms,
+            float tiltDeg,
+            LandingCurriculumProfile profile,
+            int minimumStableFeet)
+        {
+            return IsSettledSupportCandidate(
+                       footMask,
+                       structuralStrike,
+                       terms,
+                       tiltDeg,
+                       profile,
+                       minimumStableFeet) &&
+                   terms.planarDistance <= profile.successRadius;
+        }
+
+        /// <summary>
+        /// Checks four-foot, propulsion-independent physical settling without
+        /// treating center error as contact instability. This lets a calm
+        /// off-center landing resolve as a miss instead of idling to timeout.
+        /// </summary>
+        public static bool IsSettledSupportCandidate(
+            int footMask,
             bool structuralStrike,
             RewardTerms terms,
             float tiltDeg,
@@ -60,9 +82,7 @@ namespace RocketSim
         {
             int requiredFeet = Mathf.Clamp(minimumStableFeet, 1, LandingLegComponent.LegCount);
             return CountFeet(footMask) >= requiredFeet &&
-                   !footOutsidePad &&
                    !structuralStrike &&
-                   terms.planarDistance <= profile.successRadius &&
                    terms.speed <= profile.successMaxSpeed &&
                    Mathf.Abs(terms.verticalSpeed) <= profile.successMaxVerticalSpeed &&
                    terms.planarSpeed <= profile.successMaxHorizontalSpeed &&

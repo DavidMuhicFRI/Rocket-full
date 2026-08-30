@@ -26,12 +26,7 @@ namespace RocketSim
         int _count;
 
         /// <summary>Selects the faults used for the next episode.</summary>
-        public void BeginEpisode(
-            RocketFaultConfig config,
-            BehaviorType behavior,
-            RocketPhysicsConfig vehicle,
-            int areaIndex,
-            int episode)
+        public void BeginEpisode(RocketFaultConfig config, BehaviorType behavior, RocketPhysicsConfig vehicle, int areaIndex, int episode)
         {
             _config = config;
             _vehicle = vehicle;

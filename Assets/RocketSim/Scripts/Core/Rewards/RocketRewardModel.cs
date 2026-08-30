@@ -109,6 +109,17 @@ namespace RocketSim
             return magnitude;
         }
 
+        static float TerminalFeatureReward(
+            RewardContributionBuffer contributions,
+            RewardParameterId id,
+            float magnitude,
+            float feature)
+        {
+            float value = magnitude * feature;
+            contributions?.AddTerminal(id, feature, magnitude, value);
+            return value;
+        }
+
         static float TerminalCost(
             RewardContributionBuffer contributions,
             RewardParameterId id,
@@ -116,6 +127,17 @@ namespace RocketSim
         {
             float value = -magnitude;
             contributions?.AddTerminal(id, 1f, -magnitude, value);
+            return value;
+        }
+
+        static float TerminalFeatureCost(
+            RewardContributionBuffer contributions,
+            RewardParameterId id,
+            float magnitude,
+            float feature)
+        {
+            float value = -magnitude * feature;
+            contributions?.AddTerminal(id, feature, -magnitude, value);
             return value;
         }
 

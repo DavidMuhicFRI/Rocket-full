@@ -39,42 +39,37 @@ namespace RocketSim
             return BaseObservationCount +
                    TaskObservationCount(scenario) +
                    EngineObservationCount * parts.GetIndependentEngineCount() +
+                   (parts.separateEngineEnableActions ? parts.GetIndependentEngineCount() : 0) +
                    parts.GetFinCount() +
                    parts.GetRCSCount();
         }
 
         /// <summary>Returns observations used only by the selected task.</summary>
-        public static int TaskObservationCount(ScenarioType scenario) =>
-            scenario == ScenarioType.LegLanding ? LandingFootObservationCount : 0;
+        public static int TaskObservationCount(ScenarioType scenario) => scenario == ScenarioType.LegLanding ? LandingFootObservationCount : 0;
 
         /// <summary>
-        /// Returns throttle plus two-axis gimbal control for every engine
-        /// command channel, followed by the enabled fin and RCS channels.
+        /// Returns throttle plus two-axis gimbal control for every engine command channel, followed by the enabled fin and RCS channels.
         /// </summary>
         public static int ContinuousActionSize(RocketPartsConfig parts)
         {
             if (parts == null) return 0;
-
-            return 3 * parts.GetIndependentEngineCount() +
-                   parts.GetFinCount() +
-                   parts.GetRCSCount();
+            return (parts.separateEngineEnableActions ? 4 : 3) * parts.GetIndependentEngineCount() + parts.GetFinCount() + parts.GetRCSCount();
         }
 
-        /// <summary>First two-axis gimbal command after all throttle commands.</summary>
-        public static int GimbalActionOffset(int engineChannelCount) => engineChannelCount;
+        /// <summary>First optional continuous enable command after all throttle commands.</summary>
+        public static int EngineEnableActionOffset(int engineChannelCount) => engineChannelCount;
+
+        /// <summary>First two-axis gimbal command after throttle and optional enable commands.</summary>
+        public static int GimbalActionOffset(int engineChannelCount, bool separateEngineEnableActions = false) => engineChannelCount + (separateEngineEnableActions ? engineChannelCount : 0);
 
         /// <summary>First fin command after throttle and gimbal commands.</summary>
-        public static int FinActionOffset(int engineChannelCount) => 3 * engineChannelCount;
+        public static int FinActionOffset(int engineChannelCount, bool separateEngineEnableActions = false) => GimbalActionOffset(engineChannelCount, separateEngineEnableActions) + 2 * engineChannelCount;
 
         /// <summary>First RCS valve command after every engine and fin command.</summary>
-        public static int RcsActionOffset(int engineChannelCount, int finCount) =>
-            FinActionOffset(engineChannelCount) + finCount;
+        public static int RcsActionOffset(int engineChannelCount, int finCount, bool separateEngineEnableActions = false) => FinActionOffset(engineChannelCount, separateEngineEnableActions) + finCount;
 
         /// <summary>
-        /// Keeps the policy in a single continuous action space. RCS valves are
-        /// binary actuators driven by continuous commands above a neutral
-        /// dead-zone threshold, not discrete branches, because the
-        /// ML-Agents CUDA trainer path has a known categorical-device mismatch.
+        /// placeholder because of a bug in ML-Agents
         /// </summary>
         public static int[] DiscreteActionBranches(RocketPartsConfig parts)
         {
@@ -95,17 +90,12 @@ namespace RocketSim
             if (!behavior) return;
 
             behavior.BrainParameters.VectorObservationSize = ObservationSize(parts, scenario);
-            behavior.BrainParameters.ActionSpec = new ActionSpec(
-                ContinuousActionSize(parts),
-                DiscreteActionBranches(parts));
+            behavior.BrainParameters.ActionSpec = new ActionSpec(ContinuousActionSize(parts), DiscreteActionBranches(parts));
 
             if (mode == BehaviorType.Inference)
             {
                 behavior.BehaviorType = Unity.MLAgents.Policies.BehaviorType.InferenceOnly;
                 behavior.Model = model;
-                // Thesis evaluation uses the policy mean rather than sampling
-                // fresh action noise, so every model sees the same deterministic
-                // policy and environment-seed combination.
                 behavior.DeterministicInference = true;
             }
             else
@@ -117,8 +107,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Applies the one authoritative control frequency used by training and
-        /// evaluation, overriding stale values inherited through Unity prefabs.
+        /// Applies the one authoritative control frequency used by training and evaluation, overriding stale values inherited through Unity prefabs.
         /// </summary>
         public static void ConfigureDecisionRequester(Unity.MLAgents.DecisionRequester requester)
         {

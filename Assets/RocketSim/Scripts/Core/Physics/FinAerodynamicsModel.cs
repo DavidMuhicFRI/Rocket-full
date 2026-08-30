@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Core/Physics/FinAerodynamicsModel.cs
 // Purpose: Calculates approximate lift and drag from one grid fin using its
 // position, deflection, air-relative velocity, density, and area.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -13,8 +11,7 @@ namespace RocketSim
     internal static class FinAerodynamicsModel
     {
         /// <summary>
-        /// Calculates the world-space lift and drag force for one grid fin from
-        /// local deflection, air density, and air-relative velocity.
+        /// Calculates the world-space lift and drag force for one grid fin from local deflection, air density, and air-relative velocity.
         /// </summary>
         public static Vector3 CalculateForce(
             Transform rocketTransform,
@@ -40,9 +37,7 @@ namespace RocketSim
             float vTangent = Vector3.Dot(effVelWorld, tangentWorld);
 
             float deflectionRad = finAngleDeg * Mathf.Deg2Rad;
-            float sideslipRad = Mathf.Abs(vSpine) > 0.5f
-                ? Mathf.Atan2(vTangent, Mathf.Abs(vSpine))
-                : 0f;
+            float sideslipRad = Mathf.Abs(vSpine) > 0.5f ? Mathf.Atan2(vTangent, Mathf.Abs(vSpine)) : 0f;
             float effectiveAoARad = deflectionRad + sideslipRad;
 
             float qFin = 0.5f * rho * vSpine * Mathf.Abs(vSpine);

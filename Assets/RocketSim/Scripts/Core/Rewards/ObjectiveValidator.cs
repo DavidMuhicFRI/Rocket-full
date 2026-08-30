@@ -146,6 +146,22 @@ namespace RocketSim
                         $"{descriptor.label} must be between {descriptor.hardMinimum:g} and {descriptor.hardMaximum:g}.",
                         descriptor.key));
             }
+
+            if (scenario == ScenarioType.LegLanding &&
+                parameters.legFuelEfficiencyFullDifficulty <
+                parameters.legFuelEfficiencyStartDifficulty)
+                issues.Add(Error(
+                    "shaping.fuel_efficiency_curriculum_order",
+                    "Mission-efficiency full difficulty must be greater than or equal to its start difficulty.",
+                    "leg.shape.fuel_efficiency_full_difficulty"));
+
+            if (scenario == ScenarioType.LegLanding &&
+                parameters.legMissionEfficiencyBudgetFullFraction <
+                parameters.legFuelEfficiencyBudgetFraction)
+                issues.Add(Error(
+                    "shaping.mission_efficiency_scale_order",
+                    "Full-difficulty mission-cost scale must be greater than or equal to the initial scale because harder episodes require at least as much propellant authority.",
+                    "leg.shape.mission_efficiency_cost_scale_full_fraction"));
         }
 
         static void ValidateTermination(
@@ -197,7 +213,9 @@ namespace RocketSim
                 {
                     RewardParameterDescriptor terminal =
                         RewardParameterCatalog.Find(rule.terminalParameters[i]);
-                    if (terminal != null && terminal.GetValue(objective.rewards) == 0f)
+                    if (terminal != null &&
+                        terminal.GetValue(objective.rewards) == 0f &&
+                        !AllowsZeroTerminalMagnitude(rule.terminalParameters[i]))
                         issues.Add(Warning(
                             "termination.zero_outcome",
                             $"{rule.label} is enabled but its {terminal.label} magnitude is zero.",
@@ -216,6 +234,16 @@ namespace RocketSim
                     "termination.no_success_rule",
                     "No landing success rule is enabled, so episodes cannot report a successful landing."));
 
+            if (scenario == ScenarioType.LegLanding)
+            {
+                if (parameters.legInitialMinimumStableFeet > parameters.legMinimumStableFeet)
+                    issues.Add(Error(
+                        "termination.minimum_feet_curriculum_order",
+                        "Initial minimum feet must be less than or equal to the full-difficulty minimum.",
+                        "leg.initial_minimum_stable_feet"));
+                ValidateLegLandingOutcomeHierarchy(objective, issues);
+            }
+
             if (scenario == ScenarioType.HoverTracking &&
                 parameters.trackingCaptureGoalEnabled &&
                 parameters.trackingRequiredCaptures < 1)
@@ -232,6 +260,14 @@ namespace RocketSim
                 "landing.stable_hold_seconds", "Stable-hold duration", issues, fullShouldBeLarger: true);
         }
 
+        static bool AllowsZeroTerminalMagnitude(RewardParameterId parameterId)
+        {
+            // Impact severity is a supplemental, quality-scaled add-on to a
+            // contact rule's fixed terminal cost. A zero value intentionally
+            // disables that add-on without making the outcome unrewarded.
+            return parameterId == RewardParameterId.LegImpactSeverityCost;
+        }
+
         static void ValidateThresholdFinite(
             TerminationThresholdDescriptor descriptor,
             TerminationParameters parameters,
@@ -243,6 +279,44 @@ namespace RocketSim
             if (descriptor.usesDifficultyRange)
                 ValidateThresholdEndpointFinite(
                     descriptor, descriptor.GetFullValue(parameters), "full", issues);
+        }
+
+        static void ValidateLegLandingOutcomeHierarchy(
+            ScenarioObjectiveConfig objective,
+            List<ObjectiveValidationIssue> issues)
+        {
+            RewardParameters rewards = objective.rewards;
+            TerminationParameters terminations = objective.terminations;
+
+            if (terminations.unsafeAttitudeEnabled)
+                issues.Add(Warning(
+                    "leg.unsafe_attitude_shortcut",
+                    "Airborne unsafe-attitude termination can become an easy reset action. Prefer continuous attitude costs and let the episode reach contact or a true escape limit.",
+                    "landing.unsafe_attitude"));
+
+            float maximumContactCost = rewards.legImpactSeverityCost + Math.Max(
+                Math.Max(rewards.legHardTouchdownCost, rewards.legStructuralStrikeCost),
+                Math.Max(rewards.legFootOutsidePadCost, rewards.legExcessiveReboundCost));
+            float avoidableTimeCost = terminations.timeLimitEnabled
+                ? rewards.timeCostRate * Math.Max(0f, terminations.maximumEpisodeSeconds)
+                : 0f;
+            float earlyEscapeBreakEvenCost = maximumContactCost + avoidableTimeCost;
+            bool weakEscape =
+                (terminations.planarFlyawayEnabled &&
+                 rewards.legTooFarFromTargetCost <= earlyEscapeBreakEvenCost) ||
+                (terminations.fuelDepletionEnabled &&
+                 rewards.legFuelDepletedCost <= earlyEscapeBreakEvenCost) ||
+                (terminations.altitudeCeilingEnabled &&
+                 rewards.legAboveAltitudeLimitCost <= earlyEscapeBreakEvenCost) ||
+                (terminations.legMissedPadEnabled &&
+                 rewards.legMissedPadCost <= earlyEscapeBreakEvenCost) ||
+                (terminations.timeLimitEnabled &&
+                 rewards.legTimeLimitCost <= maximumContactCost);
+            if (weakEscape)
+                issues.Add(Warning(
+                    "leg.outcome_hierarchy",
+                    "At least one early non-contact escape is cheaper than a physical landing attempt after accounting for avoidable time costs. PPO may learn to reset early instead of improving touchdown.",
+                    "leg.terminal"));
         }
 
         static void ValidateThresholdRange(

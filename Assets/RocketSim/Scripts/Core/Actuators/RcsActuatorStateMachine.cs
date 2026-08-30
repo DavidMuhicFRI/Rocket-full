@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Core/Actuators/RcsActuatorStateMachine.cs
 // Purpose: Converts momentary binary RCS requests into valve states that remain
 // open for at least the configured minimum pulse duration.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -13,8 +11,7 @@ namespace RocketSim
     internal static class RcsActuatorStateMachine
     {
         /// <summary>
-        /// Advances the binary RCS valve states for one physics step, enforcing
-        /// a minimum pulse duration so short agent commands still produce visible force.
+        /// Advances the RCS states for one physics step.
         /// </summary>
         public static void Step(
             float[] requests,

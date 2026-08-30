@@ -113,21 +113,58 @@ namespace RocketSim
                     return;
 
                 case ScenarioType.LegLanding:
-                    ApplyLandingGuidance(p);
-                    p.landingYawSpinCostRate = 0.040f;
-                    p.firstFootContactReward = 0.25f;
-                    p.stableTouchdownReward = 1f;
-                    p.legSuccessfulTouchdownReward = 10f;
-                    p.legHardTouchdownCost = 5f;
-                    p.legStructuralStrikeCost = 5f;
-                    p.legFootOutsidePadCost = 5f;
-                    p.legExcessiveReboundCost = 5f;
-                    p.legUnsafeAttitudeCost = 5f;
-                    p.legTooFarFromTargetCost = 5f;
-                    p.legFuelDepletedCost = 5f;
-                    p.legAboveAltitudeLimitCost = 5f;
-                    p.legMissedPadCost = 5f;
-                    p.legTimeLimitCost = 5f;
+                    // Horizontal progress is evaluated independently from the
+                    // ballistic descent profile in the leg reward model. This
+                    // prevents falling toward the deck from masquerading as
+                    // successful navigation toward its center.
+                    p.landingGoalClosureRewardRate = 0.500f;
+                    p.landingDescentProfileErrorCostRate = 0.120f;
+                    p.landingPlanarDistanceCostRate = 0.040f;
+                    p.landingUprightErrorCostRate = 0.150f;
+                    p.landingYawSpinCostRate = 0.025f;
+                    p.landingNearTargetPlanarSpeedCostRate = 0.040f;
+                    p.landingNearTargetAngularRateCostRate = 0.100f;
+                    p.landingNearTargetVerticalSpeedCostRate = 0.080f;
+                    p.landingAngularRateCostRate = 0.010f;
+                    // A bounded center-only potential provides a clear planar
+                    // navigation signal at every altitude. Approach quality is
+                    // handled by the independent speed, tilt, and rate terms so
+                    // passive descent cannot manufacture positive progress.
+                    p.landingReadinessProgressRewardRate = 4f;
+                    // Upward motion is always contrary to this descent task.
+                    // Penalize the state, not any particular engine choice,
+                    // so the policy keeps full three-engine authority.
+                    p.landingUpwardVelocityCostRate = 0.300f;
+                    p.controlEffortCostRate = 0.003f;
+                    // Do not pay the policy to end a failed attempt quickly.
+                    // Mission efficiency is scored only after a legal touchdown.
+                    p.timeCostRate = 0f;
+
+                    // Merely touching is not success. The useful milestone is
+                    // a sustained four-foot, propulsion-off stable state.
+                    p.firstFootContactReward = 0f;
+                    p.stableTouchdownReward = 2f;
+                    p.legSuccessfulTouchdownReward = 30f;
+                    p.legSuccessfulFuelEfficiencyReward = 4f;
+
+                    // A normal L6 hard arrival cost only about -12, making a
+                    // reliable crash much cheaper than a -50 escape. Put the
+                    // active touchdown boundary at -25 and grade increasingly
+                    // unsafe contact up to -45, still below non-contact escape.
+                    p.legHardTouchdownCost = 25f;
+                    p.legImpactSeverityCost = 20f;
+                    p.legStructuralStrikeCost = 25f;
+                    p.legFootOutsidePadCost = 25f;
+                    p.legExcessiveReboundCost = 25f;
+                    p.legUnsafeAttitudeCost = 16f;
+                    // Airborne escape must remain worse than a physical
+                    // landing attempt even after the policy accounts for the
+                    // per-second cost it avoids by resetting early.
+                    p.legTooFarFromTargetCost = 50f;
+                    p.legFuelDepletedCost = 50f;
+                    p.legAboveAltitudeLimitCost = 50f;
+                    p.legMissedPadCost = 50f;
+                    p.legTimeLimitCost = 50f;
                     return;
 
                 case ScenarioType.Hover:
@@ -265,31 +302,33 @@ namespace RocketSim
             switch (name)
             {
                 case "Soft Landing":
-                    ApplySoftLanding(p, includeYawSpin: true);
+                    p.landingDescentProfileErrorCostRate = 0.065f;
+                    p.landingUprightErrorCostRate = 0.050f;
+                    p.landingNearTargetPlanarSpeedCostRate = 0.055f;
+                    p.landingNearTargetAngularRateCostRate = 0.045f;
+                    p.landingNearTargetVerticalSpeedCostRate = 0.120f;
+                    p.landingAngularRateCostRate = 0.015f;
                     break;
                 case "Descent Focus":
-                    p.landingGoalClosureRewardRate = 0.102f;
-                    p.landingDescentProfileErrorCostRate = 0.068f;
-                    p.landingPlanarDistanceCostRate = 0.02875f;
-                    p.landingUprightErrorCostRate = 0.022f;
+                    p.landingGoalClosureRewardRate = 0.135f;
+                    p.landingDescentProfileErrorCostRate = 0.080f;
+                    p.landingNearTargetVerticalSpeedCostRate = 0.100f;
                     break;
                 case "Upright Focus":
-                    p.landingUprightErrorCostRate = 0.034f;
-                    p.landingNearTargetAngularRateCostRate = 0.01875f;
-                    p.landingYawSpinCostRate = 0.050f;
-                    p.landingNearTargetPlanarSpeedCostRate = 0.0275f;
+                    p.landingUprightErrorCostRate = 0.065f;
+                    p.landingNearTargetAngularRateCostRate = 0.050f;
+                    p.landingAngularRateCostRate = 0.020f;
+                    p.landingYawSpinCostRate = 0.040f;
                     break;
                 case "Target Precision":
-                    p.landingPlanarDistanceCostRate = 0.04125f;
-                    p.stableTouchdownReward = 1.25f;
-                    p.firstFootContactReward = 0.3125f;
-                    p.landingNearTargetPlanarSpeedCostRate = 0.0275f;
+                    p.landingGoalClosureRewardRate = 0.150f;
+                    p.landingPlanarDistanceCostRate = 0.065f;
+                    p.stableTouchdownReward = 2.5f;
+                    p.landingNearTargetPlanarSpeedCostRate = 0.050f;
                     break;
                 case "Efficient Control":
-                    p.controlEffortCostRate = 0.009f;
-                    p.landingNearTargetPlanarSpeedCostRate = 0.02875f;
-                    p.landingNearTargetAngularRateCostRate = 0.01725f;
-                    p.landingYawSpinCostRate = 0.046f;
+                    p.controlEffortCostRate = 0.006f;
+                    p.legSuccessfulFuelEfficiencyReward = 5f;
                     break;
             }
         }

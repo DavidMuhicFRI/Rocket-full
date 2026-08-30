@@ -30,6 +30,8 @@ namespace RocketSim
         public bool Stable { get; private set; }
         public bool BecameStable { get; private set; }
         public float StableTime { get; private set; }
+        public bool SupportSettled { get; private set; }
+        public float SupportSettledTime { get; private set; }
         public float TouchdownTime { get; private set; }
         public float FirstContactSpeed { get; private set; }
         public float FirstContactVerticalSpeed { get; private set; }
@@ -39,6 +41,8 @@ namespace RocketSim
         public float MaximumContactImpulseNs { get; private set; }
         public float MaximumReboundHeightM { get; private set; }
         public bool ExcessiveRebound { get; private set; }
+        public bool ImpactStarted { get; private set; }
+        public bool OffPadImpact { get; private set; }
 
         /// <summary>Finds scene components and enables gear only for leg landing.</summary>
         public void ConfigureHardware(
@@ -67,6 +71,9 @@ namespace RocketSim
                 ? CollisionDetectionMode.ContinuousDynamic
                 : defaultCollisionMode;
         }
+
+        public void ConfigurePadFootprint(float halfSizeM) =>
+            PadSurface?.SetFootprintHalfSize(halfSizeM);
 
         /// <summary>Publishes contacts from the preceding physics solve.</summary>
         public void CommitContactFrame()
@@ -97,6 +104,8 @@ namespace RocketSim
             Stable = false;
             BecameStable = false;
             StableTime = 0f;
+            SupportSettled = false;
+            SupportSettledTime = 0f;
             TouchdownTime = 0f;
             FirstContactSpeed = 0f;
             FirstContactVerticalSpeed = 0f;
@@ -108,6 +117,8 @@ namespace RocketSim
             MaximumContactImpulseNs = 0f;
             MaximumReboundHeightM = 0f;
             ExcessiveRebound = false;
+            ImpactStarted = false;
+            OffPadImpact = false;
         }
 
         /// <summary>Updates touchdown stability and rebound measurements.</summary>
@@ -117,7 +128,7 @@ namespace RocketSim
             float tiltDeg,
             LandingCurriculumProfile profile,
             TerminationParameters termination,
-            float difficulty01,
+            bool propulsionOff,
             float feetHeightAbovePad,
             float deltaTime)
         {
@@ -126,22 +137,28 @@ namespace RocketSim
             {
                 Stable = false;
                 StableTime = 0f;
+                SupportSettled = false;
+                SupportSettledTime = 0f;
                 return;
             }
 
-            bool ready = LegLandingContactEvaluator.IsStableCandidate(
-                FootMask,
-                FootOutsidePad,
-                StructuralStrike,
-                terms,
-                tiltDeg,
-                profile,
-                termination.legMinimumStableFeet);
+            bool settledReady = propulsionOff &&
+                LegLandingContactEvaluator.IsSettledSupportCandidate(
+                    FootMask,
+                    StructuralStrike,
+                    terms,
+                    tiltDeg,
+                    profile,
+                    profile.minimumStableFeet);
+            bool ready = settledReady && terms.planarDistance <= profile.successRadius;
 
             bool wasStable = Stable;
             float dt = Mathf.Max(0f, deltaTime);
+            float requiredHold = profile.platformStableHoldTime;
+            SupportSettledTime = settledReady ? SupportSettledTime + dt : 0f;
+            SupportSettled = settledReady &&
+                SupportSettledTime >= Mathf.Max(0f, requiredHold);
             StableTime = ready ? StableTime + dt : 0f;
-            float requiredHold = termination.landingStableHoldSeconds.At(difficulty01);
             Stable = ready && StableTime >= Mathf.Max(0f, requiredHold);
             BecameStable = !wasStable && Stable;
 
@@ -161,21 +178,49 @@ namespace RocketSim
             index >= 0 && index < LandingLegComponent.LegCount &&
             (FootMask & (1 << index)) != 0;
 
-        /// <summary>Buffers contacts against this area's landing pad.</summary>
+        /// <summary>
+        /// Captures every external impact for propulsion safety, while only
+        /// designated-pad contacts can contribute landing support.
+        /// </summary>
         public void RecordCollision(
             Collision collision,
             LandingGearCollider sourceMarker,
             Rigidbody body,
             Transform rocketTransform,
             float episodeElapsedSeconds,
-            float feetHeightAbovePad)
+            float feetHeightAbovePad,
+            bool initialContact)
         {
-            if (collision == null || !PadSurface || !body || !rocketTransform)
-                return;
-            if (collision.collider.GetComponentInParent<LandingPadSurface>() != PadSurface)
+            if (collision == null || !body || !rocketTransform)
                 return;
 
+            bool onDesignatedPad = PadSurface &&
+                collision.collider.GetComponentInParent<LandingPadSurface>() == PadSurface;
+            if (!onDesignatedPad)
+                OffPadImpact = true;
+
             MaximumContactImpulseNs = Mathf.Max(MaximumContactImpulseNs, collision.impulse.magnitude);
+
+            // OnCollisionEnter normally supplies pre-solver kinematics. The
+            // fallback also treats a first-seen stay callback as an impact so
+            // propulsion safety cannot depend on Unity delivering Enter.
+            if (!ImpactStarted)
+            {
+                ImpactStarted = true;
+                Vector3 impactVelocity = collision.relativeVelocity;
+                FirstContactSpeed = impactVelocity.magnitude;
+                FirstContactVerticalSpeed = impactVelocity.y;
+                FirstContactHorizontalSpeed = new Vector2(
+                    impactVelocity.x,
+                    impactVelocity.z).magnitude;
+                FirstContactTiltDeg = Vector3.Angle(rocketTransform.up, Vector3.up);
+                FirstContactAngularRateDegS = body.angularVelocity.magnitude * Mathf.Rad2Deg;
+            }
+
+            // Terrain, walls, and other non-pad geometry are physical impacts,
+            // but they must never manufacture foot support or a valid touchdown.
+            if (!onDesignatedPad)
+                return;
 
             for (int i = 0; i < collision.contactCount; i++)
             {
@@ -200,18 +245,15 @@ namespace RocketSim
                 if (!foot || !PadSurface.ContainsFootCenter(foot.position, Legs.FootEdgeMarginM))
                     _pendingFootOutsidePad = true;
 
-                if (TouchdownStarted || _pendingFirstContact)
+                // Collision-stay callbacks maintain the support mask but must
+                // never manufacture a gentle "first contact" after the physics
+                // solver has already removed the impact velocity.
+                if (!initialContact || TouchdownStarted || _pendingFirstContact)
                     continue;
 
                 TouchdownStarted = true;
                 _pendingFirstContact = true;
                 TouchdownTime = episodeElapsedSeconds;
-                Vector3 contactVelocity = body.GetPointVelocity(contact.point);
-                FirstContactSpeed = contactVelocity.magnitude;
-                FirstContactVerticalSpeed = contactVelocity.y;
-                FirstContactHorizontalSpeed = new Vector2(contactVelocity.x, contactVelocity.z).magnitude;
-                FirstContactTiltDeg = Vector3.Angle(rocketTransform.up, Vector3.up);
-                FirstContactAngularRateDegS = body.angularVelocity.magnitude * Mathf.Rad2Deg;
                 _firstContactHeightAbovePad = feetHeightAbovePad;
             }
         }

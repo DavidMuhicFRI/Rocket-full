@@ -94,7 +94,9 @@ namespace RocketSim
         HoverMaxStepOrExternalReset = 28,
         LegLandingExcessiveRebound = 29,
         HoverTimeLimit = 30,
-        HoverTrackingCaptureGoal = 31
+        HoverTrackingCaptureGoal = 31,
+        HoverTrackingTargetTimeout = 32,
+        HoverEvaluationHorizon = 33
     }
 
 }

@@ -267,6 +267,9 @@ namespace RocketSim
         public float fuelUsedKg;
         public float rcsPropellantUsedKg;
         public int engineRestartCount;
+        public int engineFirstIgnitionCount;
+        public int hoverTrackCaptures;
+        public int hoverTrackRelocatedCaptures;
         public bool legTouchdownOccurred;
         public int legFeetOnPad;
         public bool legFootOutsidePad;
@@ -310,7 +313,7 @@ namespace RocketSim
         public float leg_touchdownStarted01, leg_firstContactEvent01, leg_feetOnPad;
         public float leg_foot1OnPad01, leg_foot2OnPad01, leg_foot3OnPad01, leg_foot4OnPad01;
         public float leg_footOutsidePad01, leg_structuralStrike01;
-        public float leg_stable01, leg_stableTime;
+        public float leg_propulsionOff01, leg_stable01, leg_stableTime;
         public float leg_firstContactSpeed, leg_firstContactVerticalSpeed, leg_firstContactHorizontalSpeed;
         public float leg_firstContactTiltDeg, leg_firstContactAngularRateDegS;
         public float leg_maxContactImpulseNs, leg_maxReboundHeightM;
@@ -322,7 +325,7 @@ namespace RocketSim
         public float vel_speed3D, vel_planarSpeed, vel_verticalSpeed, vel_goalClosureRate, vel_horizontalClosureRate;
         public float ctrl_throttleMean, ctrl_throttleMax, ctrl_gimbalMeanAbsDeg, ctrl_finMeanAbsDeg, ctrl_rcsActiveFraction;
         public float ctrl_throttleSaturatedFraction, ctrl_gimbalSaturatedFraction, ctrl_finSaturatedFraction;
-        public float ctrl_engineRestartEvents, ctrl_engineRestartCount;
+        public float ctrl_engineRestartEvents, ctrl_engineRestartCount, ctrl_engineFirstIgnitionCount;
         public float rcs_propellantKg, rcs_propellantFraction;
         public float fuel_fraction, fuel_usedKg;
         public float load_gForce, load_angularAccelDegS2;

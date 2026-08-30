@@ -1,8 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.cs
 // Purpose: Defines the shared state, references, constants, and public read-only accessors for the FalconAgent partial class.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -10,15 +8,6 @@ using Unity.MLAgents;
 
 namespace RocketSim
 {
-    // ============================================================================
-    //  FalconAgent — Falcon 9 landing simulation (ML-Agents)
-    //
-    //  Physics constants come from RocketAssembly.GetPhysicsConfig()
-    //
-    //  envConfig is a frozen runtime reference set by SimulationAreaHost at spawn time.
-    //  The right-side panel edits a separate session draft while a run is active.
-    //
-    // ============================================================================
     public partial class FalconAgent : Agent
     {
         [Header("References — wire inside prefab")]
@@ -36,10 +25,10 @@ namespace RocketSim
         RocketSensorPackage _sensors = new();
         
         // Telemetry identity
-        int _areaIndex;   // set by SimulationAreaHost after spawn
+        int _areaIndex;
         int _episode;
         int _step;
-        float _stepReward;   // accumulator so we can log reward per step
+        float _stepReward;
         bool _hasEpisodeStarted;
         bool _currentEpisodeCompleted;
         bool _telemetryLoggedThisStep;
@@ -53,8 +42,7 @@ namespace RocketSim
         readonly RewardContributionBuffer _rewardContributions = new();
         float _objectiveDifficulty01;
         
-
-
+        
         [Header("Flame Visual")] public float minFlameWidth = 1.5f;
         public float maxFlameWidth = 4f;
         public float minFlameLength = 2f;
@@ -66,6 +54,7 @@ namespace RocketSim
         // ── Engine ─────────────────────────────────────────────────
         Vector2[] targetGimbal, gimbal;
         float[] commandedThrottle, targetThrottle, throttle;
+        float[] engineEnableCommands;
         private float fuel;
         private float rcsPropellant;
 
@@ -76,6 +65,7 @@ namespace RocketSim
         int[] engineIgnitionCounts;
         int _engineRestartsThisStep;
         int _episodeEngineRestartCount;
+        bool _legLandingPropulsionLocked;
 
         // Fins 
         float[] finAngles;
@@ -117,6 +107,11 @@ namespace RocketSim
         int _defaultSolverIterations = 6;
         int _defaultSolverVelocityIterations = 1;
         CollisionDetectionMode _defaultCollisionDetectionMode = CollisionDetectionMode.Discrete;
+        bool _defaultIsKinematic;
+        bool _defaultDetectCollisions = true;
+        Vector3 _stagedEpisodeLinearVelocity;
+        Vector3 _stagedEpisodeAngularVelocity;
+        bool _hasStagedEpisodeMotion;
         LandingCurriculumProfile _landingEpisodeProfile;
         bool _landingEpisodeProfileInitialized;
         bool _landingEpisodeUsesEasierReplay;
@@ -134,6 +129,9 @@ namespace RocketSim
         float _episodeMinimumCommandableNonzeroThrustToWeight;
         float _episodeAllEnginesMinimumThrustToWeight;
         float _episodeAllEnginesMaximumThrustToWeight;
+        float _previousLegLandingCenteringPotential;
+        bool _legLandingCenteringPotentialInitialized;
+        int _maximumRewardedLegSupportFeet;
 
         const float Rho0 = 1.225f; // ISA sea-level density (kg/m³)
         const float HScale = 8500f; // ISA scale height (m)
@@ -141,38 +139,42 @@ namespace RocketSim
         const float BaseGroundClearance = 0.5f;
         const float EngineIgnitionThreshold = 0.08f;
         const float EngineShutdownThreshold = 0.03f;
+        const float EngineEnableOnThreshold = 0.35f;
+        const float EngineEnableOffThreshold = -0.35f;
         const float RcsValveActionThreshold = 0.5f;
         const float VacuumThrustMultiplier = 1.08f;
         const float VacuumIspMultiplier = 1.10f;
         const float EngineCommandEpsilon = 0.01f;
 
         //public getters for HUD
-        public int GetEngineCount => throttle?.Length ?? 0;
         /// <summary>
         /// Reads one bounded engine throttle channel after spool smoothing so HUD and hardware tests can show actuator state safely.
         /// </summary>
-        public float GetCurrentThrottle(int index) =>
-            throttle != null && index >= 0 && index < throttle.Length ? throttle[index] : 0f;
+        public float GetCurrentThrottle(int index) => throttle != null && index >= 0 && index < throttle.Length ? throttle[index] : 0f;
+        
         public float GetFuel => fuel;
+        
         /// <summary>
         /// Reads one bounded engine gimbal X channel in degrees for HUD and hardware-test displays.
         /// </summary>
-        public float GetGimbalX(int index) =>
-            gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].x : 0f;
+        public float GetGimbalX(int index) => gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].x : 0f;
+        
         /// <summary>
         /// Reads one bounded engine gimbal Z channel in degrees for HUD and hardware-test displays.
         /// </summary>
-        public float GetGimbalZ(int index) =>
-            gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].y : 0f;
+        public float GetGimbalZ(int index) => gimbal != null && index >= 0 && index < gimbal.Length ? gimbal[index].y : 0f;
         public RocketPhysicsConfig CurrentPhysicsConfig => cfg;
         public float DynamicPressure => q;
-        public float AngleOfAttackDeg => aoaDeg;
         public bool HardwareTestMode => _hardwareTestMode;
+        public float ObjectiveDifficulty01 => _objectiveDifficulty01;
+        public int HoverTrackEpisodeCaptures => _hoverTrackEpisodeCaptures;
+        public bool LegLandingPropulsionLocked => _legLandingPropulsionLocked;
         
         void ResetEpisodeRandom()
         {
-            int baseSeed = envConfig != null ? envConfig.environmentSeed : 1;
-            _episodeSeed = DeterministicRandom.EpisodeSeed(baseSeed, _areaIndex, _episode);
+            int baseSeed = envConfig?.environmentSeed ?? 1;
+            int seedEpisodeIndex = envConfig?.RandomSeedEpisodeIndex(_episode) ?? _episode;
+            _episodeSeed = DeterministicRandom.EpisodeSeed(baseSeed, _areaIndex, seedEpisodeIndex);
             _episodeRandom = new DeterministicRandom(_episodeSeed);
         }
 
@@ -183,17 +185,12 @@ namespace RocketSim
         Vector3 RandomUnitVector3() => _episodeRandom.UnitVector3();
 
         /// <summary>
-        /// Returns the landing thresholds frozen at episode start. Editor
-        /// previews fall back to the shared current profile before an episode exists.
+        /// Returns the landing thresholds frozen at the episode start.
         /// </summary>
-        LandingCurriculumProfile ActiveLandingProfile =>
-            _landingEpisodeProfileInitialized
-                ? _landingEpisodeProfile
-                : envConfig.GetActiveLandingCurriculumProfile(envConfig.ActiveLandingCurriculumProgress);
+        LandingCurriculumProfile ActiveLandingProfile => _landingEpisodeProfileInitialized ? _landingEpisodeProfile : envConfig.GetActiveLandingCurriculumProfile(envConfig.ActiveLandingCurriculumProgress);
 
         /// <summary>
-        /// Freezes one task difficulty for the whole episode and independently
-        /// samples the controlled easier-task replay condition.
+        /// Freezes one task difficulty for the whole episode and independently samples the controlled easier-task replay condition.
         /// </summary>
         void PrepareLandingEpisodeProfile()
         {
@@ -201,20 +198,14 @@ namespace RocketSim
             _landingEpisodeUsesEasierReplay = false;
             if (envConfig == null || !envConfig.scenario.IsLanding())
                 return;
-
-            // Use a separate deterministic stream so enabling replay does not
-            // shift spawn, wind, or fault samples for the same experiment seed.
-            var curriculumRandom = new DeterministicRandom(DeterministicRandom.EpisodeSeed(
-                envConfig.environmentSeed,
-                _areaIndex,
-                _episode,
-                stream: 1));
+            
+            var curriculumRandom = new DeterministicRandom(DeterministicRandom.EpisodeSeed(envConfig.environmentSeed, _areaIndex, _episode, stream: 1));
             _landingEpisodeUsesEasierReplay =
                 envConfig.behaviorType == BehaviorType.Training &&
                 envConfig.ActiveLandingCurriculumEnabled &&
                 envConfig.ActiveLandingCurriculumProgress > 0f &&
                 curriculumRandom.Chance(envConfig.ActiveLandingReplayProbability);
-            float difficulty = envConfig.LandingEpisodeDifficulty(_landingEpisodeUsesEasierReplay);
+            float difficulty = envConfig.IsStandardEvaluation ? envConfig.StandardEvaluationDifficultyForEpisode(_episode) : envConfig.LandingEpisodeDifficulty(_landingEpisodeUsesEasierReplay);
             _landingEpisodeProfile = envConfig.GetActiveLandingCurriculumProfile(difficulty);
             _landingEpisodeProfileInitialized = true;
         }

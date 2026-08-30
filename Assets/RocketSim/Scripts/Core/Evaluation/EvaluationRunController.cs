@@ -5,8 +5,7 @@ using UnityEngine;
 namespace RocketSim
 {
     /// <summary>
-    /// Owns one standard-evaluation suite from telemetry subscription through
-    /// final summary. The launch coordinator only starts or cancels it.
+    /// Owns one standard-evaluation suite from telemetry subscription through final summary. The launch coordinator only starts or cancels it.
     /// </summary>
     public sealed class EvaluationRunController
     {
@@ -15,6 +14,8 @@ namespace RocketSim
         EvaluationSession _session;
         SimulationAreaHost _areaHost;
         bool _completing;
+        bool _timeScaleApplied;
+        float _previousTimeScale = 1f;
 
         public string LastSummaryPath { get; private set; }
         public bool IsActive => _session != null;
@@ -22,9 +23,7 @@ namespace RocketSim
 
         public EvaluationRunController(MonoBehaviour coroutineOwner)
         {
-            _coroutineOwner = coroutineOwner
-                ? coroutineOwner
-                : throw new ArgumentNullException(nameof(coroutineOwner));
+            _coroutineOwner = coroutineOwner ? coroutineOwner : throw new ArgumentNullException(nameof(coroutineOwner));
         }
 
         /// <summary>Starts collecting outcomes for a fixed evaluation suite.</summary>
@@ -43,16 +42,18 @@ namespace RocketSim
                 evaluation.seed,
                 evaluation.episodeCount,
                 episodeFilePath,
-                scenario);
+                scenario,
+                evaluation.timeScale);
+            ApplyEvaluationTimeScale(evaluation.timeScale);
             LastSummaryPath = null;
-            if (TelemetryLogger.Instance != null)
+            if (TelemetryLogger.Instance)
                 TelemetryLogger.Instance.EpisodeCompleted += OnEpisodeCompleted;
         }
 
         /// <summary>Writes an optional partial summary and releases callbacks.</summary>
         public void Cancel(bool writePartialSummary)
         {
-            if (TelemetryLogger.Instance != null)
+            if (TelemetryLogger.Instance)
                 TelemetryLogger.Instance.EpisodeCompleted -= OnEpisodeCompleted;
 
             if (_session != null && writePartialSummary)
@@ -70,6 +71,7 @@ namespace RocketSim
             _session = null;
             _areaHost = null;
             _completing = false;
+            RestoreTimeScale();
         }
 
         void OnEpisodeCompleted(TelemetryEpisodeOutcome outcome)
@@ -77,12 +79,8 @@ namespace RocketSim
             if (_session == null || _completing) return;
 
             bool complete = _session.Record(outcome);
-            string successes = _session.SuccessMetricDefined
-                ? _session.SuccessfulEpisodes.ToString()
-                : "n/a (trajectory endpoint task)";
-            Debug.Log(
-                $"[Evaluator] {_session.CompletedEpisodes}/{_session.TargetEpisodes} episodes, " +
-                $"successes={successes}.");
+            string successes = _session.SuccessMetricDefined ? _session.SuccessfulEpisodes.ToString() : "n/a (trajectory endpoint task)";
+            Debug.Log($"[Evaluator] {_session.CompletedEpisodes}/{_session.TargetEpisodes} episodes, " + $"successes={successes}.");
             if (!complete) return;
 
             _completing = true;
@@ -96,7 +94,7 @@ namespace RocketSim
                 LastSummaryPath = null;
             }
 
-            if (TelemetryLogger.Instance != null)
+            if (TelemetryLogger.Instance)
             {
                 TelemetryLogger.Instance.EpisodeCompleted -= OnEpisodeCompleted;
                 TelemetryLogger.Instance.DisableLogging();
@@ -112,8 +110,24 @@ namespace RocketSim
             _areaHost = null;
             _session = null;
             _completing = false;
+            RestoreTimeScale();
             Debug.Log($"[Evaluator] Complete. Summary: {LastSummaryPath}");
             Completed?.Invoke(LastSummaryPath);
+        }
+
+        void ApplyEvaluationTimeScale(float requestedTimeScale)
+        {
+            RestoreTimeScale();
+            _previousTimeScale = Time.timeScale;
+            Time.timeScale = Mathf.Max(1f, requestedTimeScale);
+            _timeScaleApplied = true;
+        }
+
+        void RestoreTimeScale()
+        {
+            if (!_timeScaleApplied) return;
+            Time.timeScale = _previousTimeScale;
+            _timeScaleApplied = false;
         }
     }
 }

@@ -154,6 +154,14 @@ namespace RocketSim
 
             root.Add(UIHelper.Toggle("Independent Engine Control", partsConfig.independentEngines, v =>
                 EditCustomParts(() => partsConfig.independentEngines = v)));
+            VisualElement separateEnable = UIHelper.Toggle(
+                "Separate Continuous Engine Enable",
+                partsConfig.separateEngineEnableActions,
+                v => EditCustomParts(() => partsConfig.separateEngineEnableActions = v));
+            separateEnable.tooltip =
+                "Adds one continuous, hysteretic on/off command and observation per engine channel. " +
+                "Enabling it changes the policy schema, so existing models are incompatible.";
+            root.Add(separateEnable);
             root.Add(UIHelper.Slider("Thrust / Engine (kN)", partsConfig.maxThrustPerEngine / 1000f, 50f, 1500f, v =>
                 EditCustomParts(() => partsConfig.maxThrustPerEngine = v * 1000f, () => RefreshEngineReadouts(root)),
                 "Sets the maximum force produced by each installed main engine."));

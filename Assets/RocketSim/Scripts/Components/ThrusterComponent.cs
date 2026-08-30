@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Components/ThrusterComponent.cs
 // Purpose: Stores main-engine limits, arranges engine scene objects for each
 // layout, maps control channels to engines, and updates gimbal/flame visuals.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -15,6 +13,7 @@ namespace RocketSim
         [Header("Engine Specs")]
         public EngineLayout layout = EngineLayout.Single;
         public bool independentEngines = true;
+        public bool separateEngineEnableActions;
         public OctawebBurnGroup octawebBurnGroup = OctawebBurnGroup.CenterOnly;
         [Range(50000f, 1200000f)]   public float maxThrustPerEngine = 845000f;
         [Range(0.15f, 0.80f)]       public float minThrottle        = 0.57f;
@@ -38,27 +37,29 @@ namespace RocketSim
             EngineLayout.Triple => 3,
             EngineLayout.Octaweb => 9,
             _ => 1
+            //change this if we add more engine configurations
         };
         /// <summary>
-        /// Returns how many installed engines can currently produce thrust for
-        /// the selected engine layout and octaweb burn group.
+        /// How many engines can currently produce thrust for the selected engine layout and burn group.
         /// </summary>
         public int ActiveEngineCount => EngineBurnGroups.ActiveEngineCount(layout, octawebBurnGroup);
+        
         /// <summary>
-        /// Returns how many independent throttle/gimbal command channels the
-        /// agent should expose for the current engine layout.
+        /// How many independent throttle/gimbal command channels the agent should expose for the current engine layout.
         /// </summary>
         public int IndependentEngineCount => EngineBurnGroups.ControlChannelCount(layout, independentEngines, octawebBurnGroup);
+        
         /// <summary>Maximum propellant flow of one engine at full throttle.</summary>
         public float BurnRate => maxThrustPerEngine / (specificImpulse * 9.80665f);
 
-        /// <summary>Copies engine settings from a session and updates engine placement.</summary>
+        /// <summary>Copies engine settings and updates engine placement.</summary>
         public void ApplyConfiguration(RocketPartsConfig config, float bodyRadius)
         {
             if (config == null) return;
 
             layout = config.engineLayout;
             independentEngines = config.independentEngines;
+            separateEngineEnableActions = config.separateEngineEnableActions;
             octawebBurnGroup = config.octawebBurnGroup;
             engineSpacing = config.engineSpacing;
             maxThrustPerEngine = config.maxThrustPerEngine;
@@ -76,8 +77,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Applies the current throttle/gimbal state to each active engine
-        /// transform and updates the child flame visuals.
+        /// Applies the current throttle/gimbal state to each active engine and updates the flame visuals.
         /// </summary>
         public void ApplyActuatorVisuals(
             float[] throttle,
@@ -110,8 +110,7 @@ namespace RocketSim
         }
         
         /// <summary>
-        /// Positions and enables the child engine objects for the configured
-        /// engine layout so physics and visuals use the same hardware geometry.
+        /// Positions and enables the child engine objects for the engine layout.
         /// </summary>
         public void ApplyLayout(float bodyRadius)
         {
@@ -125,8 +124,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Enables only the center engine and parks it on the rocket axis for
-        /// single-engine scenarios.
+        /// Enables only the center engine.
         /// </summary>
         void ApplyLayoutSingle()
         {
@@ -143,8 +141,7 @@ namespace RocketSim
         }
         
         /// <summary>
-        /// Enables the first three engine objects and spaces them evenly around
-        /// the body so a triple-engine layout has symmetric thrust points.
+        /// Enables the first three engine objects and spaces them evenly around the body, so a triple-engine layout has symmetric thrust points.
         /// </summary>
         void ApplyLayoutTriple(float spacing)
         {
@@ -162,8 +159,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Enables the center engine plus eight outer engines in a Falcon-style
-        /// octaweb ring and disables any extra child engine objects.
+        /// Enables the full set of engines and positions them in a grid around the body.
         /// </summary>
         void ApplyLayoutOctaweb(float spacing)
         {

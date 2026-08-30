@@ -41,12 +41,7 @@ namespace RocketSim
             {
                 radius = body.radius,
                 length = body.height,
-                dryMass = AdjustDryMassForInstalledHardware(
-                    body.DryMass,
-                    engineCount,
-                    finCount,
-                    hasRcs,
-                    rcsDryMass),
+                dryMass = AdjustDryMassForInstalledHardware(body.DryMass, engineCount, finCount, hasRcs, rcsDryMass),
                 maxFuelMass = body.MaxFuelCapacity,
                 startFuelMass = body.startFuelMass,
 
@@ -55,6 +50,7 @@ namespace RocketSim
                 cpLocalY = body.CPLocalY,
 
                 independentEngines = !thrusters || thrusters.independentEngines,
+                separateEngineEnableActions = thrusters && thrusters.separateEngineEnableActions,
                 independentEngineCount = thrusters ? thrusters.IndependentEngineCount : 1,
                 engineLayout = thrusters ? thrusters.layout : EngineLayout.Octaweb,
                 octawebBurnGroup = thrusters ? thrusters.octawebBurnGroup : OctawebBurnGroup.CenterOnly,
@@ -68,26 +64,16 @@ namespace RocketSim
                 throttleSpoolRate = thrusters ? thrusters.throttleSpoolRate : 5f,
                 gimbalSlewRate = thrusters ? thrusters.gimbalSlewRate : 30f,
                 maxGimbal = thrusters ? thrusters.maxGimbalAngle : RocketPartsConfig.Falcon9MaxGimbalDeg,
-                engineStartupDelay = thrusters
-                    ? thrusters.engineStartupDelay
-                    : RocketPartsConfig.Falcon9EngineStartupDelayS,
-                engineShutdownTransient = thrusters
-                    ? thrusters.engineShutdownTransient
-                    : RocketPartsConfig.Falcon9EngineShutdownTransientS,
-                engineMinimumRunTime = thrusters
-                    ? thrusters.engineMinimumRunTime
-                    : RocketPartsConfig.Falcon9EngineMinimumRunTimeS,
-                engineRestartCooldown = thrusters
-                    ? thrusters.engineRestartCooldown
-                    : RocketPartsConfig.Falcon9EngineRestartCooldownS,
+                engineStartupDelay = thrusters ? thrusters.engineStartupDelay : RocketPartsConfig.Falcon9EngineStartupDelayS,
+                engineShutdownTransient = thrusters ? thrusters.engineShutdownTransient : RocketPartsConfig.Falcon9EngineShutdownTransientS,
+                engineMinimumRunTime = thrusters ? thrusters.engineMinimumRunTime : RocketPartsConfig.Falcon9EngineMinimumRunTimeS,
+                engineRestartCooldown = thrusters ? thrusters.engineRestartCooldown : RocketPartsConfig.Falcon9EngineRestartCooldownS,
 
                 hasFins = hasFins,
                 finCount = finCount,
                 finSlewRate = fins ? fins.finSlewRate : 50f,
                 maxFinAngle = fins ? fins.maxFinAngle : 35f,
-                A_fin = fins
-                    ? fins.A_fin
-                    : RocketPartsConfig.DefaultFinRadialLengthM * RocketPartsConfig.DefaultFinTangentialWidthM,
+                A_fin = fins ? fins.A_fin : RocketPartsConfig.DefaultFinRadialLengthM * RocketPartsConfig.DefaultFinTangentialWidthM,
                 finLiftScale = fins ? fins.liftScale : RocketPartsConfig.DefaultGridFinLiftScale,
                 finDryMass = finCount * GridFinDryMassKg,
                 finLocalY = fins ? fins.transform.localPosition.y : body.height - 1.2f,
@@ -111,36 +97,17 @@ namespace RocketSim
         {
             if (config == null) return 0f;
 
-            float surfaceArea = 2f * Mathf.PI * config.bodyRadius *
-                                (config.bodyHeight + config.bodyRadius);
-            float referenceArea = 2f * Mathf.PI * RocketPartsConfig.ReferenceBodyRadiusM *
-                                  (RocketPartsConfig.ReferenceBodyHeightM + RocketPartsConfig.ReferenceBodyRadiusM);
-            float scaledBodyDryMass = config.baseDryMass * surfaceArea /
-                                      Mathf.Max(0.001f, referenceArea);
-            return AdjustDryMassForInstalledHardware(
-                scaledBodyDryMass,
-                config.GetEngineCount(),
-                config.GetFinCount(),
-                config.rcsEnabled,
-                config.rcsDryMass);
+            float surfaceArea = 2f * Mathf.PI * config.bodyRadius * (config.bodyHeight + config.bodyRadius);
+            float referenceArea = 2f * Mathf.PI * RocketPartsConfig.ReferenceBodyRadiusM * (RocketPartsConfig.ReferenceBodyHeightM + RocketPartsConfig.ReferenceBodyRadiusM);
+            float scaledBodyDryMass = config.baseDryMass * surfaceArea / Mathf.Max(0.001f, referenceArea);
+            return AdjustDryMassForInstalledHardware(scaledBodyDryMass, config.GetEngineCount(), config.GetFinCount(), config.rcsEnabled, config.rcsDryMass);
         }
 
-        static float AdjustDryMassForInstalledHardware(
-            float scaledBodyDryMass,
-            int engineCount,
-            int finCount,
-            bool hasRcs,
-            float rcsDryMass)
+        static float AdjustDryMassForInstalledHardware(float scaledBodyDryMass, int engineCount, int finCount, bool hasRcs, float rcsDryMass)
         {
-            float referenceHardwareMass = ReferenceEngineCount * EngineDryMassKg +
-                                          ReferenceFinCount * GridFinDryMassKg +
-                                          RocketPartsConfig.DefaultRcsDryMassKg;
-            float installedHardwareMass = Mathf.Max(0, engineCount) * EngineDryMassKg +
-                                          Mathf.Max(0, finCount) * GridFinDryMassKg +
-                                          (hasRcs ? Mathf.Max(0f, rcsDryMass) : 0f);
-            return Mathf.Max(
-                scaledBodyDryMass * 0.35f,
-                scaledBodyDryMass + installedHardwareMass - referenceHardwareMass);
+            float referenceHardwareMass = ReferenceEngineCount * EngineDryMassKg + ReferenceFinCount * GridFinDryMassKg + RocketPartsConfig.DefaultRcsDryMassKg;
+            float installedHardwareMass = Mathf.Max(0, engineCount) * EngineDryMassKg + Mathf.Max(0, finCount) * GridFinDryMassKg + (hasRcs ? Mathf.Max(0f, rcsDryMass) : 0f);
+            return Mathf.Max(scaledBodyDryMass * 0.35f, scaledBodyDryMass + installedHardwareMass - referenceHardwareMass);
         }
 
         static readonly RocketPhysicsConfig Fallback = new()
@@ -161,6 +128,7 @@ namespace RocketSim
             octawebBurnGroup = OctawebBurnGroup.CenterOnly,
             activeEngineCount = 1,
             independentEngines = true,
+            separateEngineEnableActions = false,
             independentEngineCount = 1,
             engineCount = ReferenceEngineCount,
             engineDryMass = ReferenceEngineCount * EngineDryMassKg,

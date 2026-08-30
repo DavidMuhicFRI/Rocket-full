@@ -35,21 +35,16 @@ namespace RocketSim
                 return;
             }
 
-            float directionDeg = config.randomizeWindDirectionEachEpisode
-                ? random.Range(0f, 360f)
-                : config.windDirectionDeg;
+            float directionDeg = config.randomizeWindDirectionEachEpisode ? random.Range(0f, 360f) : config.windDirectionDeg;
             float directionRad = directionDeg * Mathf.Deg2Rad;
-            _prevailing = new Vector3(
-                Mathf.Sin(directionRad),
-                0f,
-                Mathf.Cos(directionRad)) * config.windSpeed;
+            _prevailing = new Vector3(Mathf.Sin(directionRad), 0f, Mathf.Cos(directionRad)) * config.windSpeed;
             _target = Current = _prevailing;
         }
 
         /// <summary>Advances gust selection and smooth wind response by one physics step.</summary>
         public void Step(SimEnvironmentConfig config, ref DeterministicRandom random, float deltaTime)
         {
-            if (config == null || !config.windEnabled)
+            if (config is not { windEnabled: true })
             {
                 Clear();
                 return;

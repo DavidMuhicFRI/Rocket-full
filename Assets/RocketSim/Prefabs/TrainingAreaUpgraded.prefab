@@ -25984,6 +25984,8 @@ MonoBehaviour:
   minimumPulseDuration: 0.1
   propellantMass: 150
   dryMass: 250
+  podMaterialOverride: {fileID: 0}
+  nozzleMaterialOverride: {fileID: 0}
 --- !u!1 &1934748426697319136
 GameObject:
   m_ObjectHideFlags: 0
@@ -47643,6 +47645,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.ThrusterComponent
   layout: 2
   independentEngines: 1
+  separateEngineEnableActions: 0
   octawebBurnGroup: 0
   maxThrustPerEngine: 845000
   minThrottle: 0.57
@@ -64427,7 +64430,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b067cd4d56c142c681736764cfa02b96, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RocketSim.LandingLegComponent
 --- !u!4 &2995973119889803290 stripped
 Transform:

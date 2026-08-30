@@ -50,7 +50,6 @@ namespace RocketSim
         }
 
         /// <summary>Captures the immutable physical constants used by an episode.</summary>
-        public RocketPhysicsConfig GetPhysicsConfig() =>
-            RocketPhysicsConfigFactory.Create(body, thrusters, fins, rcs);
+        public RocketPhysicsConfig GetPhysicsConfig() => RocketPhysicsConfigFactory.Create(body, thrusters, fins, rcs);
     }
 }

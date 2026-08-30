@@ -1,8 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: Assets/RocketSim/Scripts/Core/Agent/FalconAgent.Telemetry.cs
 // Purpose: Measures reward terms and flight values and sends telemetry rows to the logger.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -27,12 +25,8 @@ namespace RocketSim
             Vector3 localAngularVelocity = transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
 
             float upDot = Vector3.Dot(transform.up, Vector3.up);
-            float goalClosureRate = error.sqrMagnitude > 0.0001f
-                ? -Vector3.Dot(guidanceVelocity, error.normalized)
-                : 0f;
-            float horizontalClosureRate = planarError.sqrMagnitude > 0.0001f
-                ? -Vector2.Dot(planarVelocity, planarError.normalized)
-                : 0f;
+            float goalClosureRate = error.sqrMagnitude > 0.0001f ? -Vector3.Dot(guidanceVelocity, error.normalized) : 0f;
+            float horizontalClosureRate = planarError.sqrMagnitude > 0.0001f ? -Vector2.Dot(planarVelocity, planarError.normalized) : 0f;
 
             return new RewardTerms
             {
@@ -49,10 +43,7 @@ namespace RocketSim
                 angularRateDegS = localAngularVelocity.magnitude,
                 yawRateDegS = localAngularVelocity.y,
                 yawErrorDeg = Mathf.Abs(SignedHeadingErrorDeg()),
-                controlEffort = Mean(throttle) +
-                                0.05f * MeanAbs(gimbal) +
-                                0.02f * MeanAbs(finAngles) +
-                                0.10f * Mean(rcsValveStates)
+                controlEffort = Mean(throttle) + 0.05f * MeanAbs(gimbal) + 0.02f * MeanAbs(finAngles) + 0.10f * Mean(rcsValveStates)
             };
         }
 
@@ -76,44 +67,24 @@ namespace RocketSim
             float targetBearing = BearingDeg(horizontalTargetDir);
             float velocityBearing = BearingDeg(horizontalVelocityDir);
             float gimbalBearing = BearingDeg(meanGimbal);
-            float goalAlignment = horizontalTargetDir.sqrMagnitude > 0f && horizontalVelocityDir.sqrMagnitude > 0f
-                ? Vector2.Dot(horizontalVelocityDir, horizontalTargetDir)
-                : 0f;
+            float goalAlignment = horizontalTargetDir.sqrMagnitude > 0f && horizontalVelocityDir.sqrMagnitude > 0f ? Vector2.Dot(horizontalVelocityDir, horizontalTargetDir) : 0f;
             Vector3 localAngularVelocity = transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
             Vector3 euler = transform.localEulerAngles;
             float upDot = Vector3.Dot(transform.up, Vector3.up);
             float startFuel = Mathf.Max(cfg.startFuelMass, 1f);
-            float goalClosureRate = error.sqrMagnitude > 0.0001f
-                ? -Vector3.Dot(guidanceVelocity, error.normalized)
-                : 0f;
+            float goalClosureRate = error.sqrMagnitude > 0.0001f ? -Vector3.Dot(guidanceVelocity, error.normalized) : 0f;
             bool isHoverTracking = envConfig.scenario == ScenarioType.HoverTracking;
-            float hoverTrackSettleRadius = isHoverTracking
-                ? Mathf.Max(
-                    envConfig.GetTrainingObjective(ScenarioType.HoverTracking)
-                        .terminations.trackingCaptureRadiusM.At(_objectiveDifficulty01),
-                    0.01f)
-                : 0f;
+            float hoverTrackSettleRadius = isHoverTracking ? Mathf.Max(envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations.trackingCaptureRadiusM.At(_objectiveDifficulty01), 0.01f) : 0f;
             bool hoverTrackHoverPhase = isHoverTracking && horizontalError.magnitude <= hoverTrackSettleRadius;
             bool hoverTrackReady = isHoverTracking && IsHoverTrackHoverReady();
-            float horizontalClosureRate = horizontalError.sqrMagnitude > 0.0001f
-                ? -Vector2.Dot(horizontalVelocity, horizontalError.normalized)
-                : 0f;
+            float horizontalClosureRate = horizontalError.sqrMagnitude > 0.0001f ? -Vector2.Dot(horizontalVelocity, horizontalError.normalized) : 0f;
             bool isChopstickLanding = envConfig.scenario == ScenarioType.ChopstickLanding;
             bool isLegLanding = envConfig.scenario == ScenarioType.LegLanding;
-            float directionEfficiency01 = horizontalVelocity.magnitude > 0.1f && horizontalError.sqrMagnitude > 0.0001f
-                ? Mathf.Clamp01((Vector2.Dot(horizontalVelocity.normalized, horizontalTargetDir) + 1f) * 0.5f)
-                : 0.5f;
+            float directionEfficiency01 = horizontalVelocity.magnitude > 0.1f && horizontalError.sqrMagnitude > 0.0001f ? Mathf.Clamp01((Vector2.Dot(horizontalVelocity.normalized, horizontalTargetDir) + 1f) * 0.5f) : 0.5f;
             float segmentDistance = Mathf.Max(_hoverTrackSegmentStartDistance, hoverTrackSettleRadius);
-            float travelProgress01 = isHoverTracking
-                ? Mathf.Clamp01(1f - horizontalError.magnitude / Mathf.Max(segmentDistance, 0.001f))
-                : 0f;
-            float travelProgressRate = isHoverTracking
-                ? horizontalClosureRate / Mathf.Max(segmentDistance, 0.001f)
-                : 0f;
-            float settleQuality01 = isHoverTracking
-                ? HoverTrackSettleQuality(horizontalError.magnitude, error.y, horizontalVelocity.magnitude,
-                    guidanceVelocity.y, Vector3.Angle(transform.up, Vector3.up), localAngularVelocity.magnitude)
-                : 0f;
+            float travelProgress01 = isHoverTracking ? Mathf.Clamp01(1f - horizontalError.magnitude / Mathf.Max(segmentDistance, 0.001f)) : 0f;
+            float travelProgressRate = isHoverTracking ? horizontalClosureRate / Mathf.Max(segmentDistance, 0.001f) : 0f;
+            float settleQuality01 = isHoverTracking ? HoverTrackSettleQuality(horizontalError.magnitude, error.y, horizontalVelocity.magnitude, guidanceVelocity.y, Vector3.Angle(transform.up, Vector3.up), localAngularVelocity.magnitude) : 0f;
 
             var row = new TelemetryRow
             {
@@ -129,8 +100,7 @@ namespace RocketSim
                 obs_altNorm      = guidancePosition.y / 250f,
                 obs_aoaDeg       = aoaDeg / 90f,
                 obs_dynPressNorm = Mathf.Clamp01(q / 5000f),
-                obs_windLocal    = transform.InverseTransformDirection(wind) /
-                                   Mathf.Max(envConfig.windSpeed, 1f),
+                obs_windLocal    = transform.InverseTransformDirection(wind) / Mathf.Max(envConfig.windSpeed, 1f),
 
                 act_throttle = throttle,
                 act_gimbal   = gimbal,
@@ -159,9 +129,7 @@ namespace RocketSim
                 track_travelProgressRate = travelProgressRate,
                 track_directionEfficiency01 = isHoverTracking ? directionEfficiency01 : 0f,
                 track_settleQuality01 = settleQuality01,
-                chopstick_platformRequired01 = isChopstickLanding &&
-                    envConfig.GetTrainingObjective(ScenarioType.ChopstickLanding)
-                        .terminations.chopstickRequireStablePlatform ? 1f : 0f,
+                chopstick_platformRequired01 = isChopstickLanding && envConfig.GetTrainingObjective(ScenarioType.ChopstickLanding).terminations.chopstickRequireStablePlatform ? 1f : 0f,
                 chopstick_platformInsideCapture01 = isChopstickLanding && _landingPlatformInsideCapture ? 1f : 0f,
                 chopstick_platformStable01 = isChopstickLanding && _landingPlatformStable ? 1f : 0f,
                 chopstick_platformStableTime = isChopstickLanding ? _landingPlatformStableTime : 0f,
@@ -175,6 +143,7 @@ namespace RocketSim
                 leg_foot4OnPad01 = isLegLanding && IsLandingFootOnPad(3) ? 1f : 0f,
                 leg_footOutsidePad01 = isLegLanding && _legLanding.FootOutsidePad ? 1f : 0f,
                 leg_structuralStrike01 = isLegLanding && _legLanding.StructuralStrike ? 1f : 0f,
+                leg_propulsionOff01 = isLegLanding && IsLegLandingPropulsionOff() ? 1f : 0f,
                 leg_stable01 = isLegLanding && _legLanding.Stable ? 1f : 0f,
                 leg_stableTime = isLegLanding ? _legLanding.StableTime : 0f,
                 leg_firstContactSpeed = isLegLanding ? _legLanding.FirstContactSpeed : 0f,
@@ -215,19 +184,16 @@ namespace RocketSim
                 ctrl_finSaturatedFraction = FractionAtLimit(finAngles, cfg.maxFinAngle, 0.98f),
                 ctrl_engineRestartEvents = _engineRestartsThisStep,
                 ctrl_engineRestartCount = _episodeEngineRestartCount,
+                ctrl_engineFirstIgnitionCount = EpisodeEngineFirstIgnitionCount(),
                 rcs_propellantKg      = rcsPropellant,
-                rcs_propellantFraction = cfg.rcsPropellantMass > 0f
-                    ? rcsPropellant / cfg.rcsPropellantMass
-                    : 0f,
+                rcs_propellantFraction = cfg.rcsPropellantMass > 0f ? rcsPropellant / cfg.rcsPropellantMass : 0f,
                 fuel_fraction         = fuel / startFuel,
                 fuel_usedKg           = Mathf.Max(0f, startFuel - fuel),
                 load_gForce           = _sensors.GMagnitude,
                 load_angularAccelDegS2 = _sensors.AngularAccel.magnitude * Mathf.Rad2Deg,
                 env_windSpeed         = wind.magnitude,
                 env_windPlanarSpeed   = new Vector2(wind.x, wind.z).magnitude,
-                env_windAlignment     = effVel.sqrMagnitude > 0.0001f && wind.sqrMagnitude > 0.0001f
-                    ? Vector3.Dot(effVel.normalized, wind.normalized)
-                    : 0f,
+                env_windAlignment     = effVel.sqrMagnitude > 0.0001f && wind.sqrMagnitude > 0.0001f ? Vector3.Dot(effVel.normalized, wind.normalized) : 0f,
 
                 stepReward = _stepReward,
                 rewardContributions = _rewardContributions
@@ -246,8 +212,7 @@ namespace RocketSim
             if (envConfig == null)
                 return;
 
-            RewardTerms terms = MeasureRewardTerms(
-                ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
+            RewardTerms terms = MeasureRewardTerms(ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig));
             _episodeInitialPlanarDistance = terms.planarDistance;
             _episodeInitialYawErrorDeg = terms.yawErrorDeg;
             _episodeInitialSpeed = terms.speed;

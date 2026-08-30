@@ -7,8 +7,7 @@
 namespace RocketSim
 {
     /// <summary>
-    /// Routes runtime events to the selected task curriculum. Task-specific
-    /// interpolation and progression remain in the matching Tasks file.
+    /// Routes runtime events to the selected task curriculum. Task-specific interpolation and progression remain in the matching Tasks file.
     /// </summary>
     public sealed class CurriculumController
     {
@@ -29,31 +28,10 @@ namespace RocketSim
             }
         }
 
-        /// <summary>Returns the selected task to its initial progression state.</summary>
-        public void Reset(SimEnvironmentConfig environment)
+        /// <summary>Records one terminal episode for a landing curriculum.</summary>
+        public void RecordEpisode(SimEnvironmentConfig environment, bool successfulEpisode, bool includeInEstimate, int activeAreaCount)
         {
             if (environment == null) return;
-
-            if (environment.scenario == ScenarioType.HoverTracking)
-                environment.ResetHoverTrackCurriculum();
-            else if (environment.scenario.IsLanding())
-                environment.ResetActiveLandingCurriculum();
-        }
-
-        /// <summary>Records one terminal episode for the active curriculum.</summary>
-        public void RecordEpisode(
-            SimEnvironmentConfig environment,
-            bool successfulEpisode,
-            bool includeInEstimate,
-            int activeAreaCount)
-        {
-            if (environment == null) return;
-
-            if (environment.scenario == ScenarioType.HoverTracking)
-            {
-                environment.RecordHoverTrackCurriculumEpisode(successfulEpisode, activeAreaCount);
-                return;
-            }
 
             if (environment.scenario.IsLanding() && includeInEstimate)
                 environment.RecordLandingCurriculumEpisode(successfulEpisode, activeAreaCount);
@@ -64,6 +42,13 @@ namespace RocketSim
         {
             if (environment?.scenario == ScenarioType.HoverTracking)
                 environment.hoverTrackCurriculumSuccesses++;
+        }
+
+        /// <summary>Records one completed hover-target attempt window.</summary>
+        public void RecordHoverTrackAttempt(SimEnvironmentConfig environment, bool successfulAttempt, int activeAreaCount)
+        {
+            if (environment?.scenario == ScenarioType.HoverTracking)
+                environment.RecordHoverTrackCurriculumAttempt(successfulAttempt, activeAreaCount);
         }
     }
 }

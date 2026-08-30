@@ -2,8 +2,6 @@
 // File: Assets/RocketSim/Scripts/Components/BodyComponent.cs
 // Purpose: Applies editable body dimensions to the scene mesh and derives the
 // aerodynamic areas, structural-mass estimate, and fuel capacity from that size.
-// Documentation: Comments in this file use plain language to describe intent,
-// so the simulator architecture is easier to understand and maintain.
 // -----------------------------------------------------------------------------
 
 using UnityEngine;
@@ -26,15 +24,13 @@ namespace RocketSim
         // ── Computed geometry (read by RocketAssembly.GetPhysicsConfig) ───────
         public float AxialArea         => Mathf.PI * radius * radius;
         public float ProjectedSideArea => 2f * radius * height;
-
-        // Bare-body lateral drag acts near the projected side-area centroid.
-        // Grid fins and base drag are modeled separately, so do not move this
-        // upward to emulate the whole vehicle aerodynamic center.
+        
+        // Grid fins and base drag are modeled separately, so do not move this upward to emulate the whole vehicle aerodynamic center.
         public float CPLocalY => height * 0.50f;
 
         /// <summary>
-        /// Estimated dry mass. It scales with outer surface area as a simple
-        /// structural-mass approximation; it is not a detailed material model.
+        /// Estimated dry mass.
+        /// Scales with outer surface area as a simple structural-mass approximation;
         /// </summary>
         public float DryMass
         {
@@ -47,14 +43,13 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Estimated fuel capacity. It scales with cylinder volume as a simple
-        /// tank-capacity approximation.
+        /// Estimated fuel capacity. Scales with cylinder volume as a simple tank-capacity approximation.
         /// </summary>
-        public float MaxFuelCapacity =>
-            baseFuelMass * (Mathf.PI * radius * radius * height)
-                         / (Mathf.PI * BaseR   * BaseR   * BaseH);
+        public float MaxFuelCapacity => baseFuelMass * (Mathf.PI * radius * radius * height) / (Mathf.PI * BaseR   * BaseR   * BaseH);
 
-        /// <summary>Copies body settings from a session and updates the scene mesh.</summary>
+        /// <summary>
+        /// Copies body settings from a session and updates the scene mesh.
+        /// </summary>
         public void ApplyConfiguration(RocketPartsConfig config)
         {
             if (config == null) return;
@@ -66,14 +61,9 @@ namespace RocketSim
             startFuelMass = config.startFuelMass;
             ApplyDimensions();
         }
-
-        // ── Apply to transform ────────────────────────────────────────────────
-        // Unity's default cylinder is 1 m radius, 2 m tall at scale (1,1,1).
-        // The agent root is the booster base plane, so the body centre is height / 2.
+        
         /// <summary>
-        /// Resizes Unity's default cylinder mesh to the configured radius and
-        /// height, then keeps its bottom aligned with the rocket-root origin.
-        /// Unity's cylinder is two units tall at scale one, hence height * 0.5.
+        /// Resizes the cylinder mesh to the configured radius and height, keeps bottom aligned with the rocket-root.
         /// </summary>
         public void ApplyDimensions()
         {
@@ -82,8 +72,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Keeps the cylinder mesh centered above the booster-base origin after
-        /// radius or height changes, matching the coordinate frame used by the agent.
+        /// Moves the cylinder mesh to keep the bottom aligned with the rocket-root.
         /// </summary>
         public void ChangePosition()
         {

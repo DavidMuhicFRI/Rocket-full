@@ -21,9 +21,14 @@ namespace RocketSim
         public float landingPlanarDistanceCostRate;
         public float landingUprightErrorCostRate;
         public float landingNearTargetPlanarSpeedCostRate;
+        public float landingNearTargetVerticalSpeedCostRate;
         public float landingNearTargetAngularRateCostRate;
+        public float landingUpwardVelocityCostRate;
+        public float landingPlanarSpeedCostRate;
+        public float landingAngularRateCostRate;
         public float landingYawErrorCostRate;
         public float landingYawSpinCostRate;
+        public float landingReadinessProgressRewardRate;
         public float controlEffortCostRate;
         public float timeCostRate;
 
@@ -69,7 +74,9 @@ namespace RocketSim
 
         // Leg-landing terminal outcomes.
         public float legSuccessfulTouchdownReward;
+        public float legSuccessfulFuelEfficiencyReward;
         public float legHardTouchdownCost;
+        public float legImpactSeverityCost;
         public float legStructuralStrikeCost;
         public float legFootOutsidePadCost;
         public float legExcessiveReboundCost;

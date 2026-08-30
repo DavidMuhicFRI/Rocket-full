@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace RocketSim
 {
@@ -123,8 +124,20 @@ namespace RocketSim
         public float legLandingCurriculumPeakProgress;
         public int legLandingCurriculumAttempts;
         public int legLandingCurriculumSuccesses;
+        public bool legLandingCurriculumDetailsCaptured;
+        public float legLandingCurriculumLinearProgress;
+        public float legLandingCurriculumRecentSuccessRate;
+        public int legLandingCurriculumEpisodeCount;
+        public int legLandingCurriculumSuccessfulEpisodes;
         public float hoverTrackingCurriculumProgress;
+        public bool hoverTrackingCurriculumDetailsCaptured;
+        // False for runtime-state files written while hover progression used
+        // terminal episodes rather than bounded target attempts.
+        public bool hoverTrackingCurriculumUsesTargetAttempts;
+        public float hoverTrackingCurriculumLinearProgress;
+        public float hoverTrackingCurriculumRecentSuccessRate;
         public int hoverTrackingCurriculumAttempts;
+        public int hoverTrackingCurriculumSuccessfulEpisodes;
         public int hoverTrackingCurriculumSuccesses;
 
         public static RunRuntimeState Capture(SimEnvironmentConfig environment, int completedEpisodes = 0)
@@ -141,8 +154,18 @@ namespace RocketSim
                 legLandingCurriculumPeakProgress = environment.legLandingCurriculumPeakLinearProgress,
                 legLandingCurriculumAttempts = environment.legLandingCurriculumBatchEpisodeCount,
                 legLandingCurriculumSuccesses = environment.legLandingCurriculumSuccesses,
+                legLandingCurriculumDetailsCaptured = true,
+                legLandingCurriculumLinearProgress = environment.legLandingCurriculumLinearProgress,
+                legLandingCurriculumRecentSuccessRate = environment.legLandingCurriculumRecentSuccessRate,
+                legLandingCurriculumEpisodeCount = environment.legLandingCurriculumEpisodeCount,
+                legLandingCurriculumSuccessfulEpisodes = environment.legLandingCurriculumSuccessfulEpisodes,
                 hoverTrackingCurriculumProgress = environment.hoverTrackCurriculumProgress,
+                hoverTrackingCurriculumDetailsCaptured = true,
+                hoverTrackingCurriculumUsesTargetAttempts = true,
+                hoverTrackingCurriculumLinearProgress = environment.hoverTrackCurriculumLinearProgress,
+                hoverTrackingCurriculumRecentSuccessRate = environment.hoverTrackCurriculumRecentSuccessRate,
                 hoverTrackingCurriculumAttempts = environment.hoverTrackCurriculumEpisodeCount,
+                hoverTrackingCurriculumSuccessfulEpisodes = environment.hoverTrackCurriculumSuccessfulEpisodes,
                 hoverTrackingCurriculumSuccesses = environment.hoverTrackCurriculumSuccesses
             };
         }
@@ -158,9 +181,75 @@ namespace RocketSim
             environment.legLandingCurriculumPeakLinearProgress = legLandingCurriculumPeakProgress;
             environment.legLandingCurriculumBatchEpisodeCount = legLandingCurriculumAttempts;
             environment.legLandingCurriculumSuccesses = legLandingCurriculumSuccesses;
+            if (legLandingCurriculumDetailsCaptured)
+            {
+                environment.legLandingCurriculumLinearProgress =
+                    Mathf.Clamp01(legLandingCurriculumLinearProgress);
+                environment.legLandingCurriculumRecentSuccessRate =
+                    Mathf.Clamp01(legLandingCurriculumRecentSuccessRate);
+                environment.legLandingCurriculumEpisodeCount =
+                    Math.Max(0, legLandingCurriculumEpisodeCount);
+                environment.legLandingCurriculumSuccessfulEpisodes = Mathf.Clamp(
+                    legLandingCurriculumSuccessfulEpisodes,
+                    0,
+                    environment.legLandingCurriculumEpisodeCount);
+            }
+            else
+            {
+                // Older runtime files stored only the derived SmoothStep value.
+                // Preserve achieved difficulty, then rebuild a fresh EMA window.
+                environment.legLandingCurriculumLinearProgress =
+                    InverseSmoothStep01(legLandingCurriculumProgress);
+                environment.legLandingCurriculumRecentSuccessRate = 0f;
+                environment.legLandingCurriculumEpisodeCount = 0;
+                environment.legLandingCurriculumSuccessfulEpisodes = 0;
+            }
             environment.hoverTrackCurriculumProgress = hoverTrackingCurriculumProgress;
-            environment.hoverTrackCurriculumEpisodeCount = hoverTrackingCurriculumAttempts;
-            environment.hoverTrackCurriculumSuccesses = hoverTrackingCurriculumSuccesses;
+            environment.hoverTrackCurriculumSuccesses = Math.Max(0, hoverTrackingCurriculumSuccesses);
+            // Preserve achieved difficulty, but do not mix legacy episode
+            // outcomes into the new target-attempt success window.
+            environment.hoverTrackCurriculumEpisodeCount = hoverTrackingCurriculumUsesTargetAttempts
+                ? Math.Max(0, hoverTrackingCurriculumAttempts)
+                : 0;
+
+            if (hoverTrackingCurriculumDetailsCaptured)
+            {
+                environment.hoverTrackCurriculumLinearProgress =
+                    Mathf.Clamp01(hoverTrackingCurriculumLinearProgress);
+                environment.hoverTrackCurriculumRecentSuccessRate = hoverTrackingCurriculumUsesTargetAttempts
+                    ? Mathf.Clamp01(hoverTrackingCurriculumRecentSuccessRate)
+                    : 0f;
+                environment.hoverTrackCurriculumSuccessfulEpisodes = hoverTrackingCurriculumUsesTargetAttempts
+                    ? Mathf.Clamp(
+                        hoverTrackingCurriculumSuccessfulEpisodes,
+                        0,
+                        environment.hoverTrackCurriculumEpisodeCount)
+                    : 0;
+                return;
+            }
+
+            // RuntimeState files written before the detailed hover fields can
+            // still resume without collapsing their saved derived progress.
+            environment.hoverTrackCurriculumLinearProgress =
+                InverseSmoothStep01(hoverTrackingCurriculumProgress);
+            environment.hoverTrackCurriculumSuccessfulEpisodes = 0;
+            environment.hoverTrackCurriculumRecentSuccessRate = 0f;
+        }
+
+        static float InverseSmoothStep01(float value)
+        {
+            float target = Mathf.Clamp01(value);
+            float low = 0f;
+            float high = 1f;
+            for (int i = 0; i < 16; i++)
+            {
+                float midpoint = (low + high) * 0.5f;
+                if (Mathf.SmoothStep(0f, 1f, midpoint) < target)
+                    low = midpoint;
+                else
+                    high = midpoint;
+            }
+            return (low + high) * 0.5f;
         }
     }
 

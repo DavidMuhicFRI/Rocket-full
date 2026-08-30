@@ -21,13 +21,6 @@ namespace RocketSim
             return Vector3.SignedAngle(targetHeading, currentHeading.normalized, Vector3.up);
         }
 
-        /// <summary>Returns the target position projected into the XZ plane.</summary>
-        Vector2 TargetPlanar()
-        {
-            Vector3 target = targetPad ? targetPad.localPosition : Vector3.zero;
-            return new Vector2(target.x, target.z);
-        }
-
         /// <summary>Updates hover-track stable time and reports a newly captured target.</summary>
         bool UpdateHoverTrackSuccess()
         {
@@ -47,8 +40,7 @@ namespace RocketSim
             if (_hoverTrackCaptureLatched) return false;
 
             _hoverTrackStableTime += Time.fixedDeltaTime;
-            TerminationParameters criteria =
-                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            TerminationParameters criteria = envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
             float holdSeconds = criteria.trackingCaptureHoldSeconds.At(_objectiveDifficulty01);
             if (_hoverTrackStableTime < Mathf.Max(0f, holdSeconds)) return false;
 
@@ -60,14 +52,14 @@ namespace RocketSim
         bool IsHoverTrackHoverReady()
         {
             Vector3 goal = ScenarioProfile.GoalPosition(envConfig.scenario, targetPad, envConfig);
-            Vector3 error = transform.localPosition - goal;
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
+            Vector3 guidanceVelocity = ScenarioReferenceVelocity();
+            Vector3 error = guidancePosition - goal;
             Vector2 horizontalError = new(error.x, error.z);
-            Vector2 horizontalVelocity = new(rb.linearVelocity.x, rb.linearVelocity.z);
-            Vector3 localAngularVelocity =
-                transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
+            Vector2 horizontalVelocity = new(guidanceVelocity.x, guidanceVelocity.z);
+            Vector3 localAngularVelocity = transform.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
 
-            TerminationParameters criteria =
-                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            TerminationParameters criteria = envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
             float difficulty = _objectiveDifficulty01;
             float settleRadius = Mathf.Max(criteria.trackingCaptureRadiusM.At(difficulty), 0.01f);
             float maxVerticalError = Mathf.Max(criteria.trackingCaptureMaxVerticalErrorM.At(difficulty), 0.01f);
@@ -79,7 +71,7 @@ namespace RocketSim
             return horizontalError.magnitude <= settleRadius &&
                    Mathf.Abs(error.y) <= maxVerticalError &&
                    horizontalVelocity.magnitude <= maxHorizontalSpeed &&
-                   Mathf.Abs(rb.linearVelocity.y) <= maxVerticalSpeed &&
+                   Mathf.Abs(guidanceVelocity.y) <= maxVerticalSpeed &&
                    Vector3.Angle(transform.up, Vector3.up) <= maxTilt &&
                    localAngularVelocity.magnitude <= maxAngularRate;
         }
@@ -93,8 +85,7 @@ namespace RocketSim
             float tiltDeg,
             float angularRateDegS)
         {
-            TerminationParameters criteria =
-                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            TerminationParameters criteria = envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
             float difficulty = _objectiveDifficulty01;
             float settleRadius = Mathf.Max(criteria.trackingCaptureRadiusM.At(difficulty), 0.01f);
             float maxVerticalError = Mathf.Max(criteria.trackingCaptureMaxVerticalErrorM.At(difficulty), 0.01f);
@@ -112,38 +103,53 @@ namespace RocketSim
             return (horizontalPosition + verticalPosition + horizontalCalm + verticalCalm + attitude + rotationCalm) / 6f;
         }
 
-        /// <summary>Selects a sufficiently distant hover-tracking target.</summary>
-        void RandomizeTarget()
+        /// <summary>Initializes the fixed or moving target for a new episode.</summary>
+        void InitializeTargetForEpisode()
         {
-            if (envConfig.scenario != ScenarioType.HoverTracking)
+            if (!targetPad) return;
+
+            if (envConfig.scenario == ScenarioType.HoverTracking)
             {
-                Vector3 fixedTarget = targetPad.localPosition;
-                fixedTarget.x = 0f;
-                fixedTarget.z = 0f;
-                targetPad.localPosition = fixedTarget;
-                _hoverTrackSegmentElapsedTime = 0f;
-                _hoverTrackStableTime = 0f;
-                _hoverTrackCaptureLatched = false;
+                PlaceNewHoverTrackingTarget();
                 return;
             }
 
-            float radius = envConfig.targetMoveRadius;
-            TerminationParameters criteria =
-                envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
+            Vector3 target = targetPad.localPosition;
+            target.x = 0f;
+            target.z = 0f;
+            targetPad.localPosition = target;
+            ResetHoverTrackSegment();
+        }
+
+        /// <summary>Selects a sufficiently distant target after a capture.</summary>
+        void MoveTargetAfterCapture()
+        {
+            if (envConfig.scenario != ScenarioType.HoverTracking || !targetPad)
+                return;
+
+            PlaceNewHoverTrackingTarget();
+        }
+
+        /// <summary>
+        /// Spawns a target far enough from the rocket that it must move to reach it (acquisition on start bug)
+        /// </summary>
+        void PlaceNewHoverTrackingTarget()
+        {
+            if (!targetPad) return;
+
+            float radius = envConfig.IsStandardEvaluation ? envConfig.HoverTrackMoveRadiusAt(_objectiveDifficulty01) : Mathf.Max(0f, envConfig.targetMoveRadius);
+            TerminationParameters criteria = envConfig.GetTrainingObjective(ScenarioType.HoverTracking).terminations;
             float settleRadius = Mathf.Max(criteria.trackingCaptureRadiusM.At(_objectiveDifficulty01), 0.01f);
             Vector3 selected = targetPad.localPosition;
             float minimumTravel = Mathf.Min(radius, Mathf.Max(settleRadius * 1.2f, settleRadius + 1f));
             float bestDistance = -1f;
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
 
             for (int attempt = 0; attempt < 12; attempt++)
             {
-                Vector3 candidate = new(
-                    RandomRange(-radius, radius),
-                    targetPad.localPosition.y,
-                    RandomRange(-radius, radius));
-                Vector2 fromRocket = new(
-                    candidate.x - transform.localPosition.x,
-                    candidate.z - transform.localPosition.z);
+                Vector2 offset = RandomInsideUnitCircle() * radius;
+                Vector3 candidate = new(offset.x, targetPad.localPosition.y, offset.y);
+                Vector2 fromRocket = new(candidate.x - guidancePosition.x, candidate.z - guidancePosition.z);
                 float distance = fromRocket.magnitude;
 
                 if (distance > bestDistance)
@@ -155,12 +161,16 @@ namespace RocketSim
             }
 
             targetPad.localPosition = selected;
+            ResetHoverTrackSegment();
+        }
+
+        void ResetHoverTrackSegment()
+        {
             _hoverTrackSegmentElapsedTime = 0f;
             _hoverTrackStableTime = 0f;
             _hoverTrackCaptureLatched = false;
-            _hoverTrackSegmentStartDistance = new Vector2(
-                targetPad.localPosition.x - transform.localPosition.x,
-                targetPad.localPosition.z - transform.localPosition.z).magnitude;
+            Vector3 guidancePosition = ScenarioReferenceLocalPosition();
+            _hoverTrackSegmentStartDistance = new Vector2(targetPad.localPosition.x - guidancePosition.x, targetPad.localPosition.z - guidancePosition.z).magnitude;
         }
     }
 }

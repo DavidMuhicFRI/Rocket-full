@@ -60,6 +60,7 @@ namespace RocketSim
         [Header("Thruster")]
         public EngineLayout engineLayout = EngineLayout.Octaweb;
         public bool independentEngines = true;
+        public bool separateEngineEnableActions;
         public OctawebBurnGroup octawebBurnGroup = OctawebBurnGroup.CenterOnly;
         [Range(50000f, 1200000f)] public float maxThrustPerEngine = Falcon9Reference.MerlinSeaLevelThrustN;
         [Range(0.15f, 0.80f)] public float minThrottle = Falcon9MinThrottle;
@@ -116,8 +117,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the number of engine command channels the agent needs after
-        /// accounting for grouped versus independent control.
+        /// Returns the number of engine command channels the agent needs after accounting for grouped versus independent control.
         /// </summary>
         public int GetIndependentEngineCount()
         {
@@ -125,8 +125,7 @@ namespace RocketSim
         }
 
         /// <summary>
-        /// Returns the number of enabled grid fins for the selected fin layout,
-        /// or zero when fins are disabled.
+        /// Returns the number of enabled grid fins for the selected fin layout, or zero when fins are disabled.
         /// </summary>
         public int GetFinCount()
         {
@@ -155,8 +154,7 @@ namespace RocketSim
         /// </summary>
         public float EstimatedMaxFuelCapacity()
         {
-            return baseFuelMass * (Mathf.PI * bodyRadius * bodyRadius * bodyHeight)
-                                / (Mathf.PI * ReferenceBodyRadiusM * ReferenceBodyRadiusM * ReferenceBodyHeightM);
+            return baseFuelMass * (Mathf.PI * bodyRadius * bodyRadius * bodyHeight) / (Mathf.PI * ReferenceBodyRadiusM * ReferenceBodyRadiusM * ReferenceBodyHeightM);
         }
 
         /// <summary>
