@@ -1,0 +1,67 @@
+[RocketSim] Trainer started at 2026-08-30T23:19:46.1776767Z
+[RocketSim] Working directory: C:\Users\dadii\Falcon9
+[RocketSim] Command: C:\Users\dadii\Anaconda3\envs\mlagents_gpu\python.exe -u -m mlagents.trainers.learn "C:\Users\dadii\Falcon9\results\L10\TrainingConfig.yaml" --run-id="L10" --resume --torch-device "cuda" --seed 1
+
+
+	Unity Technologies
+
+ Version information:
+  ml-agents: 1.1.0,
+  ml-agents-envs: 1.1.0,
+  Communicator API: 1.5.0,
+  PyTorch: 2.1.0+cu121
+[INFO] Listening on port 5004. Start training by pressing the Play button in the Unity Editor.
+[INFO] Connected to Unity environment with package version 4.0.2 and communication version 1.5.0
+[INFO] Connected new brain: Rocket?team=0
+[INFO] Hyperparameters for behavior name Rocket: 
+	trainer_type:	ppo
+	hyperparameters:	
+	  batch_size:	4096
+	  buffer_size:	40960
+	  learning_rate:	0.000603
+	  beta:	0.0204
+	  epsilon:	0.109
+	  lambd:	0.98
+	  num_epoch:	6
+	  shared_critic:	False
+	  learning_rate_schedule:	linear
+	  beta_schedule:	linear
+	  epsilon_schedule:	linear
+	checkpoint_interval:	500000
+	network_settings:	
+	  normalize:	True
+	  hidden_units:	512
+	  num_layers:	3
+	  vis_encode_type:	simple
+	  memory:	None
+	  goal_conditioning_type:	hyper
+	  deterministic:	False
+	reward_signals:	
+	  extrinsic:	
+	    gamma:	0.9995
+	    strength:	1.0
+	    network_settings:	
+	      normalize:	False
+	      hidden_units:	128
+	      num_layers:	2
+	      vis_encode_type:	simple
+	      memory:	None
+	      goal_conditioning_type:	hyper
+	      deterministic:	False
+	init_path:	None
+	keep_checkpoints:	60
+	even_checkpoints:	False
+	max_steps:	50000000
+	time_horizon:	1024
+	summary_freq:	20000
+	threaded:	True
+	self_play:	None
+	behavioral_cloning:	None
+[INFO] Resuming from results\L10\Rocket.
+[INFO] Resuming training from step 30000477.
+[INFO] Rocket. Step: 30020000. Time Elapsed: 21.259 s. Mean Reward: 6.239. Std of Reward: 20.216. Training.
+[INFO] Rocket. Step: 30040000. Time Elapsed: 39.073 s. Mean Reward: -3.540. Std of Reward: 25.405. Training.
+[INFO] Rocket. Step: 30060000. Time Elapsed: 64.038 s. Mean Reward: 10.603. Std of Reward: 18.162. Training.
+[INFO] Rocket. Step: 30080000. Time Elapsed: 82.037 s. Mean Reward: 3.384. Std of Reward: 24.886. Training.
+[INFO] Rocket. Step: 30100000. Time Elapsed: 105.934 s. Mean Reward: 11.320. Std of Reward: 20.091. Training.
+[INFO] Rocket. Step: 30120000. Time Elapsed: 125.951 s. Mean Reward: 5.836. Std of Reward: 24.291. Training.

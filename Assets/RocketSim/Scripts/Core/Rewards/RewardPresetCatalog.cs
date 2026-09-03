@@ -118,13 +118,18 @@ namespace RocketSim
                     // prevents falling toward the deck from masquerading as
                     // successful navigation toward its center.
                     p.landingGoalClosureRewardRate = 0.500f;
-                    p.landingDescentProfileErrorCostRate = 0.120f;
+                    // L10's difficult-band failures were already far too fast
+                    // by 100 m and violated the vertical contact envelope much
+                    // more often than attitude or pad limits. Strengthen the
+                    // existing descent target without rewarding ascent or
+                    // prescribing an ignition schedule.
+                    p.landingDescentProfileErrorCostRate = 0.150f;
                     p.landingPlanarDistanceCostRate = 0.040f;
                     p.landingUprightErrorCostRate = 0.150f;
                     p.landingYawSpinCostRate = 0.025f;
                     p.landingNearTargetPlanarSpeedCostRate = 0.040f;
                     p.landingNearTargetAngularRateCostRate = 0.100f;
-                    p.landingNearTargetVerticalSpeedCostRate = 0.080f;
+                    p.landingNearTargetVerticalSpeedCostRate = 0.120f;
                     p.landingAngularRateCostRate = 0.010f;
                     // A bounded center-only potential provides a clear planar
                     // navigation signal at every altitude. Approach quality is
@@ -145,7 +150,11 @@ namespace RocketSim
                     p.firstFootContactReward = 0f;
                     p.stableTouchdownReward = 2f;
                     p.legSuccessfulTouchdownReward = 30f;
-                    p.legSuccessfulFuelEfficiencyReward = 4f;
+                    // This remains success-only: failed attempts cannot earn a
+                    // reward by refusing to burn. It is large enough to separate
+                    // a smooth one-to-three-engine mission from L10-style PWM,
+                    // while touchdown quality still dominates the objective.
+                    p.legSuccessfulFuelEfficiencyReward = 6f;
 
                     // A normal L6 hard arrival cost only about -12, making a
                     // reliable crash much cheaper than a -50 escape. Put the

@@ -32,6 +32,13 @@ namespace RocketSim
     [Serializable]
     public class MLAgentsConfig
     {
+        // These are editor limits, not ML-Agents limits. Long adaptive
+        // curricula need room to continue an existing policy without creating
+        // a new run and losing its runtime curriculum state.
+        public const int MinimumSupportedMaxSteps = 100_000;
+        public const int MaximumSupportedMaxSteps = 100_000_000;
+        public const int MaximumSupportedKeepCheckpoints = 200;
+
         public string behaviorName = "Rocket";
         public TrainerType trainerType = TrainerType.PPO;
 

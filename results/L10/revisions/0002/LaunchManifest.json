@@ -1,0 +1,22 @@
+{
+    "schemaVersion": 1,
+    "revision": 2,
+    "runId": "L10",
+    "sessionSha256": "0e8d490095ec1005e3869010837d1e314226a7ecbc98e67141687a4f0c183e03",
+    "createdUtc": "2026-08-30T23:19:46.1595360Z",
+    "launchMode": "ResumeTraining",
+    "sourceRunId": "",
+    "trainingEnvironment": {
+        "probeSucceeded": true,
+        "probeError": "",
+        "condaEnvironmentName": "mlagents_gpu",
+        "pythonExecutable": "C:\\Users\\dadii\\Anaconda3\\envs\\mlagents_gpu\\python.exe",
+        "pythonVersion": "3.10.12",
+        "mlAgentsPythonVersion": "1.1.0",
+        "pytorchVersion": "2.1.0+cu121",
+        "cudaRuntimeVersion": "12.1",
+        "cudaAvailable": true,
+        "gpuName": "NVIDIA GeForce RTX 4070 SUPER"
+    },
+    "configuredTorchDevice": "cuda"
+}

@@ -1,0 +1,19 @@
+{
+    "schemaVersion": 1,
+    "runId": "HoverFixed",
+    "createdUtc": "2026-09-03T08:28:52.2479549Z",
+    "lastLaunchedUtc": "2026-09-03T11:03:07.5067039Z",
+    "currentRevision": 2,
+    "currentSessionSha256": "2d538507a7da5d1ef0c61feaf135d33a10ffac3812fbe0b466b440f95aba0b22",
+    "scenario": "Hover",
+    "vectorObservationSize": 29,
+    "continuousActionSize": 3,
+    "engineControlChannels": 1,
+    "finCount": 0,
+    "rcsJetCount": 0,
+    "trainerType": "PPO",
+    "behaviorName": "Rocket",
+    "hiddenUnits": 512,
+    "numLayers": 3,
+    "normalize": true
+}

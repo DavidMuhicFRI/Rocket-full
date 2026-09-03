@@ -1,0 +1,19 @@
+{
+    "schemaVersion": 1,
+    "runId": "HoverTrackSimple3",
+    "createdUtc": "2026-08-23T16:31:19.1583230Z",
+    "lastLaunchedUtc": "2026-08-24T16:19:27.0291920Z",
+    "currentRevision": 3,
+    "currentSessionSha256": "c8374dfcdb9dd021a3f7c1fd47e528a9f769945b828ead2192862e812002c332",
+    "scenario": "HoverTracking",
+    "vectorObservationSize": 30,
+    "continuousActionSize": 4,
+    "engineControlChannels": 1,
+    "finCount": 0,
+    "rcsJetCount": 0,
+    "trainerType": "PPO",
+    "behaviorName": "Rocket",
+    "hiddenUnits": 512,
+    "numLayers": 3,
+    "normalize": true
+}

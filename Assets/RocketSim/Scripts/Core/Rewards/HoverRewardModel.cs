@@ -157,21 +157,33 @@ namespace RocketSim
         {
             RewardParameters r = objective.rewards;
             RewardShapingParameters s = objective.shaping;
+            float altitudeProximity01 = Exp01(t.verticalError, s.hoverAltitudeFalloffM);
+            float planarProximity01 = Exp01(t.planarDistance, s.hoverPlanarFalloffM);
+
+            // HoverSimple4 exposed a reward-hacking path in the old additive
+            // baseline: a calm, upright vehicle could earn most of the reward
+            // indefinitely while remaining far above the commanded altitude.
+            // Gate every positive term by joint target proximity so satisfying
+            // only one position axis, or merely surviving elsewhere, cannot
+            // amortize a later safety failure.  The geometric mean keeps a
+            // usable gradient at the 50 m training spawn while still reaching
+            // exactly one only at the complete hover target.
+            float targetProximity01 = Mathf.Sqrt(altitudeProximity01 * planarProximity01);
             float rate = 0f;
             rate += RewardRate(contributions, RewardParameterId.HoverAltitudeProximityRewardRate,
                 r.hoverAltitudeProximityRewardRate,
-                Exp01(t.verticalError, s.hoverAltitudeFalloffM));
+                altitudeProximity01 * targetProximity01);
             rate += RewardRate(contributions, RewardParameterId.HoverPlanarProximityRewardRate,
                 r.hoverPlanarProximityRewardRate,
-                Exp01(t.planarDistance, s.hoverPlanarFalloffM));
+                planarProximity01 * targetProximity01);
             rate += RewardRate(contributions, RewardParameterId.HoverUprightRewardRate,
-                r.hoverUprightRewardRate, t.upright01);
+                r.hoverUprightRewardRate, t.upright01 * targetProximity01);
             rate += RewardRate(contributions, RewardParameterId.HoverSpeedCalmRewardRate,
                 r.hoverSpeedCalmRewardRate,
-                Exp01(t.speed, s.hoverSpeedFalloffMps));
+                Exp01(t.speed, s.hoverSpeedFalloffMps) * targetProximity01);
             rate += RewardRate(contributions, RewardParameterId.HoverRotationCalmRewardRate,
                 r.hoverRotationCalmRewardRate,
-                Exp01(t.angularRateDegS, s.hoverAngularRateFalloffDegS));
+                Exp01(t.angularRateDegS, s.hoverAngularRateFalloffDegS) * targetProximity01);
             rate += CostRate(contributions, RewardParameterId.HoverLinearSpeedCostRate,
                 r.hoverLinearSpeedCostRate, t.speed);
             rate += CostRate(contributions, RewardParameterId.HoverAngularRateCostRate,
