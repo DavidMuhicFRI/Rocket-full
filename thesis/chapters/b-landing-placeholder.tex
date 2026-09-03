@@ -1,0 +1,64 @@
+\chapter{Landing Experiment Record}
+\label{app:landing}
+
+The main text follows L11 as the final step in the landing campaign. This appendix gathers its
+identity, configuration and outcome in one place so that the narrative can be checked against the
+immutable artifacts. Repository identity remains a submission placeholder until the working tree
+is frozen for publication.
+
+\newcommand{\hashvalue}[4]{\begingroup\ttfamily\footnotesize#1\hspace{0pt}#2\hspace{0pt}#3\hspace{0pt}#4\endgroup}
+\small
+\begin{longtable}{p{0.38\textwidth}p{0.52\textwidth}}
+  \toprule
+  Field & Value \\
+  \midrule
+  \endhead
+  Run ID and revision & \texttt{L11}, revision 2 (continuation of the same run from 90M to 100M) \\
+  Repository commit & TODO after final source freeze \\
+  Manifest session identity & \hashvalue{438cf2baccfafe0f}{0a924bf61021a88d}{eb3515c33e74d9d3}{871f539338888deb} \\
+  Raw revision-2 \texttt{Session.json} SHA-256 &
+  \hashvalue{c166eb67f9b0e810}{b8d40b43b8f0f17f}{33290e4d41119b6a}{bc7bccbf36f45a40} \\
+  Model SHA-256 &
+  \hashvalue{e03b8facb32a0c40}{ee9449625767d6b4}{315965450028ec3a}{c8f511c8b344830b} \\
+  Evaluation-summary SHA-256 &
+  \hashvalue{fd48f2dc02351a0c}{752853939ee04b4c}{a267ff0d36df9f59}{796922b3828e329d} \\
+  Reward preset/version & Balanced, objective schema 16; success-only mission efficiency \\
+  Trainer/environment seeds & 1 / 1 \\
+  Training steps and revisions & 100,000,086; two immutable revisions \\
+  Final curriculum progress & 100\% linear and effective; 92.90\% recent success \\
+  Policy interface & 52 observations; 12 continuous actions; three independent engines \\
+  Evaluated model & \texttt{Rocket.onnx}, final checkpoint 100,000,086 \\
+  Evaluation seed and episode count & 20257; 250 (50 per fixed difficulty band) \\
+  Stable four-foot touchdown rate (95\% CI) & 212/250 = 84.8\% (79.8--88.7\%) \\
+  Full-difficulty touchdown rate (95\% CI) & 18/50 = 36\% (24.1--49.9\%) \\
+  First-contact speed, vertical/horizontal & \SI{1.38}{m/s}; \SI{1.33}{m/s} / \SI{0.279}{m/s}
+  over 248 touchdown episodes \\
+  First-contact tilt and angular rate & \SI{0.637}{\degree}; \SI{1.72}{\degree\per\second} \\
+  Maximum impulse and rebound & mean maximum \SI{39146}{\newton\second}; mean maximum
+  \SI{6.55}{\micro\metre} \\
+  Stable-hold time & mean \SI{0.566}{s} \\
+  Structural-strike rate & 0/250 = 0\% \\
+  Foot-outside-pad rate & 1/250 = 0.4\% \\
+  Engine use & mean 3.00 first ignitions and 1.56 restarts per episode \\
+  Fuel used & mean \SI{4529}{kg} over all evaluation episodes \\
+  Dominant failure modes & 33 hard touchdowns, 3 missed-pad and 2 too-far terminations; 30 hard
+  touchdowns occurred at full difficulty \\
+  \bottomrule
+\end{longtable}
+\normalsize
+
+The evaluation-summary file reports \texttt{aborted: false}. No wind, fins, RCS or injected
+faults were active. L11 used minimum throttle 0.499, startup delay \SI{0.45}{s}, shutdown
+transient \SI{0.20}{s}, minimum run \SI{1.5}{s}, cooldown \SI{2.0}{s} and throttle spool rate
+5.8 per second. Its success-only efficiency magnitude, restart equivalent and touchdown-quality
+fraction were increased relative to L10 to favour longer useful burns without making early
+shutdown attractive on failed episodes.
+
+The full-difficulty result is based on a model trained at 100\% curriculum, but it remains much
+lower than exact-$d=1$ training success. This discrepancy is retained as a finding rather than
+removed through checkpoint selection. The next controlled diagnostic is the deterministic versus
+stochastic inference comparison described in Chapter~\ref{ch:limitations}.
+
+Before submission, add representative seed-labelled success and failure videos and the final
+public repository commit. Video remains qualitative evidence; the numeric result above comes
+from the complete evaluation summary.

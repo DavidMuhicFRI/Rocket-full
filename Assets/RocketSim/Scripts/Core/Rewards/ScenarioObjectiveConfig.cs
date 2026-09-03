@@ -10,7 +10,7 @@ namespace RocketSim
     [Serializable]
     public sealed class ScenarioObjectiveConfig
     {
-        public const int CurrentSchemaVersion = 15;
+        public const int CurrentSchemaVersion = 16;
 
         // Zero identifies objectives saved before objective-level versioning.
         // CreateDefault writes the current version explicitly so intentional
@@ -240,6 +240,16 @@ namespace RocketSim
             bool versionFourteenBaseline =
                 schemaVersion == 14 && MatchesLegObjective(VersionFourteenLegBaseline());
             if (versionFourteenBaseline)
+                return true;
+
+            // Version 15 is the L10 baseline. It introduced a success-only
+            // mission-efficiency tie-breaker, but L10 evaluation still averaged
+            // eighteen relights and failed harder bands primarily through late
+            // vertical braking. Upgrade only the exact untouched baseline;
+            // hand-tuned L10 experiments remain custom and are preserved.
+            bool versionFifteenBaseline =
+                schemaVersion == 15 && MatchesLegObjective(VersionFifteenLegBaseline());
+            if (versionFifteenBaseline)
                 return true;
 
             if (schemaVersion >= 7)
@@ -520,9 +530,21 @@ namespace RocketSim
             return expected;
         }
 
-        static ScenarioObjectiveConfig VersionFourteenLegBaseline()
+        static ScenarioObjectiveConfig VersionFifteenLegBaseline()
         {
             ScenarioObjectiveConfig expected = CreateDefault(ScenarioType.LegLanding);
+            expected.rewards.landingDescentProfileErrorCostRate = 0.120f;
+            expected.rewards.landingNearTargetVerticalSpeedCostRate = 0.080f;
+            expected.rewards.legSuccessfulFuelEfficiencyReward = 4f;
+            expected.shaping.legRestartEquivalentFuelFraction = 0.003f;
+            expected.shaping.legTouchdownQualityRewardFraction = 0.75f;
+            expected.schemaVersion = 15;
+            return expected;
+        }
+
+        static ScenarioObjectiveConfig VersionFourteenLegBaseline()
+        {
+            ScenarioObjectiveConfig expected = VersionFifteenLegBaseline();
             expected.rewards.legSuccessfulFuelEfficiencyReward = 3f;
             expected.shaping.legFuelEfficiencyBudgetFraction = 0.08f;
             expected.shaping.legMissionEfficiencyBudgetFullFraction = 0f;

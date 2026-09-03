@@ -1,0 +1,94 @@
+\chapter{Evaluation Method}
+\label{ch:evaluation}
+
+Training produced the behaviours described in Chapter~\ref{ch:development}, but it also showed
+why a learning curve cannot be the final test. The training distribution changes with the
+curriculum, actions are sampled stochastically, and a recent-success counter remembers only a
+moving window. A convincing live trajectory can therefore coexist with a weak exported policy.
+The evaluator was built to separate those two kinds of evidence.
+
+\section{Freezing the test before observing the result}
+
+Evaluation runs inside the same simulator with training disabled. It loads an exported ONNX
+model, fixes the random seed and difficulty, records every episode and writes a machine-readable
+summary. Success conditions come from the immutable session rather than from values adjusted
+after evaluation begins.
+
+The three tasks require different evidence. Fixed hover currently has no binary definition, so
+it reports duration, fuel, planar error, three-dimensional and component velocities, tilt and
+angular rate. Moving-target hover succeeds only after capturing the initial target and two
+relocated targets, each within a \SI{35}{s} limit. Leg landing requires a stable four-foot
+touchdown and additionally records first-contact speed, tilt, angular rate, impulse, rebound,
+stable-hold time, fuel, feet outside the pad and structural strikes. Binary rates are accompanied
+by the Wilson interval from Equation~\eqref{eq:wilson}.
+
+For tracking and landing, the fixed protocol uses evaluation seed 20257 and five difficulty
+bands,
+\[
+  d\in\{0,0.25,0.5,0.75,1.0\}.
+\]
+Each band contains 50 episodes, producing 250 trials per model. This arrangement was chosen to
+show where performance changes. A single aggregate result could otherwise hide a policy that is
+perfect on easy starts and fails completely at the curriculum boundary. Wind and injected
+faults are disabled so that the evaluation measures the trained base task.
+
+\section{A complete continuous-metric hover evaluation}
+
+The earlier \texttt{HoverSimple2} diagnostic was stopped after four episodes and exposed a
+large vertical drift. Its replacement, \texttt{HoverFixed}, started from fresh weights and was
+continued through two immutable revisions to 20,078,171 PPO decision steps. The revised
+single-engine interface has 29 observations and three continuous actions, with no separate
+engine-enable action; minimum throttle is 25\%. Environment and trainer seeds are both 1.
+
+The final ONNX export was evaluated deterministically with seed 20257 for all 250 planned
+episodes. Each episode used the same \SI{60}{s} horizon, without curriculum bands, wind, grid
+fins or RCS. All 250 episodes completed at the horizon, so the result provides a full distribution
+of state and control metrics. The summary nevertheless declares
+\texttt{successMetricDefined=false}. Horizon completion is consequently reported as a
+termination outcome rather than interpreted as binary hover success.
+
+\section{A complete tracking evaluation}
+
+\texttt{HoverTrackSimple3} completed 30,000,039 steps. Its saved runtime state reported nonlinear
+curriculum progress 0.9757 and linear progress 0.9070. Those values describe where training
+finished; they are not evaluation outcomes. The final ONNX model was tested across all five
+fixed bands, including exact $d=1$, even though training had not remained at that boundary.
+
+Revision 3 records one sandbox engine, \SI{40000}{kg} starting fuel, no grid fins, RCS or wind,
+and environment and trainer seeds equal to 1. The curriculum value during evaluation is supplied
+by the evaluator rather than restored from runtime progress. This made the sharp boundary found
+in Chapter~\ref{ch:results} observable instead of averaging it into easier trials.
+
+\section{From the L10 baseline to the final landing test}
+
+Landing was evaluated twice because L10 exposed a specific actuator problem that L11 was built
+to address. L10 started from fresh weights and was continued through four immutable revisions to
+79,629,752 steps. It reached 60.25\% effective curriculum difficulty and provided the first
+complete 250-episode landing baseline. That evaluation finished before L11 began, preserving a
+chronological comparison rather than selecting the better run after inspecting both.
+
+L11 again started from fresh weights. Revision 1 reached 90M steps; revision 2 continued the
+same policy to its final 100,000,086-step export. By then, the saved runtime state recorded both
+linear and effective curriculum progress at 100\%, with a 92.9\% recent training-success rate.
+The 90M checkpoint was evaluated before the continuation and is used only to show what the final
+ten million steps changed. The official landing result uses the final \texttt{Rocket.onnx}.
+
+Both L10 and L11 use the five-band protocol, seed 20257 and 50 episodes per band. Inference is
+deterministic. Every success must satisfy the band-specific centre, velocity, tilt, angular-rate,
+four-foot-support and hold-time limits stored in the session. The evaluator also preserves the
+failure reason and post-contact actuator state.
+
+The meaning of $d=1$ differs between the two runs. For L10 it is an out-of-distribution boundary
+test because the curriculum reached only about 60\%. For L11 it is an in-range test because the
+policy trained at full difficulty. The shared protocol makes the numerical comparison simple,
+but this difference is necessary when interpreting why each model failed.
+
+\section{Using video without replacing evidence}
+
+Training and landing videos are useful because they show motion that a table cannot: engine
+sequencing, final flare, foot contact and recovery. They should nevertheless be treated as
+illustrations. A selected clip can overrepresent the most attractive trajectory. Any video used
+in the presentation should therefore display the run ID, checkpoint, evaluation seed and
+difficulty, while the complete CSV and JSON summaries remain the quantitative record. The
+public repository should contain the plotting instructions and artifact layout needed to trace
+those figures back to the frozen runs.

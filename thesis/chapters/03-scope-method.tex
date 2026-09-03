@@ -1,0 +1,83 @@
+\chapter{Scope and Method}
+\label{ch:scope}
+
+\section{From a demonstration to an engineering objective}
+
+The first cylinder answered the original feasibility question: reinforcement learning could
+produce a basic landing behaviour. It could not answer whether that result would survive a
+change of vehicle, reward, actuator or simulator version. The engineering objective therefore
+shifted from producing one successful policy to producing a desktop simulator in which an
+experiment could be configured, repeated and inspected.
+
+In the resulting workflow, a user defines the vehicle, environment, task, reward, learning run
+and telemetry before launching one or more independent simulation areas. The same application
+supports PPO training, ONNX inference, deterministic evaluation and component-level tests. A
+completed run should retain the configuration that produced it, and a policy whose observation
+or action interface no longer matches the vehicle should be rejected before inference begins.
+
+The simulator eventually grew beyond what could be evaluated within one bachelor thesis. The
+experimental scope was therefore reduced to a sequence of three increasingly demanding tasks:
+holding a fixed hover, tracking relocated hover targets, and landing on four physical legs.
+Alternative vehicle configurations, wind and injected actuator faults remain implemented
+capabilities, but they are not presented as validated results. External-arm capture is treated
+as a separate future task rather than being added to an already broad landing study.
+
+\section{Development method}
+
+Development followed the same loop throughout the project:
+
+\begin{enumerate}
+  \item add or modify one physical, actuator or task component;
+  \item test its direction, limits and feasibility independently of learning;
+  \item train a policy and inspect trajectories, episode outcomes and telemetry;
+  \item identify the simulator defect, reward loophole or control limitation revealed by the
+  new behaviour;
+  \item move configuration and responsibility into a clearer module when the change exposed
+  unwanted coupling; and
+  \item preserve the resulting configuration as a new run or immutable revision before
+  continuing.
+\end{enumerate}
+
+This method emerged because training alone was a poor debugging instrument. A bad learning
+curve could mean that the task was too difficult, but it could also mean that drag pointed in
+the wrong direction or that the requested spawn velocity was never applied. I therefore added
+what the interface calls \emph{hardware tests}: component-level experiments inside Unity that
+isolate the simulated hardware from the policy. No physical rocket hardware was built or
+tested. These checks answer questions such as whether drag opposes air-relative motion, whether
+an engine respects its spool rate, and whether the available thrust can arrest the selected
+descent.
+
+The important part of the loop is that an unexpected policy is treated as evidence. It is first
+reproduced and measured, then used to decide what the next run should change. Chapter~\ref{ch:development}
+applies this method to the L1--L11 landing campaign.
+
+\section{Separating capability from evidence}
+
+As the simulator gained features, it became easy to confuse an available checkbox with an
+evaluated contribution. To prevent that, this thesis uses three evidence classes. A
+\emph{completed evaluation} executes its predefined episode count and fixed seed without manual
+interruption. A \emph{preliminary diagnostic} can reveal useful behaviour but is too small or
+incomplete for a reliability claim. A \emph{capability} exists in the code or UI but has not yet
+been evaluated under the thesis protocol.
+
+The \texttt{HoverFixed}, moving-target hover and L11 landing policies have completed their
+planned evaluation episode counts. L10 is retained as a completed landing baseline because
+comparing it with L11 shows what changed after the actuator and reward redesign. Fixed hover is
+reported through continuous state and control metrics because its evaluator still has no binary
+success rule; completing 250 horizons is not silently relabelled as 100\% task success. Wind,
+faults and vehicle-configuration comparisons remain capabilities. These labels follow each
+result into Chapters~\ref{ch:evaluation}--\ref{ch:limitations}.
+
+\section{Reproducibility boundary}
+
+Each reported run is identified by its run ID, session revision, environment and trainer seed,
+training configuration, exported model and evaluation summary. This record is the final step of
+the development loop: it connects a plotted result back to the exact experiment that produced
+it. The public repository URL and commit cannot be filled in truthfully until the working tree
+is frozen, because the current Git HEAD does not include uncommitted simulator changes.
+
+\begin{thesistodo}
+  Freeze the submission revision, publish the repository, and replace the repository and commit
+  placeholders in Appendix~\ref{app:reproducibility}. Do this only after the working tree is
+  stable, so that the published identity matches the submitted implementation.
+\end{thesistodo}

@@ -1,0 +1,191 @@
+{
+    "Rocket": {
+        "checkpoints": [
+            {
+                "steps": 21499816,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-21499816.onnx",
+                "reward": null,
+                "creation_time": 1787588379.6155717,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-21499816.pt"
+                ]
+            },
+            {
+                "steps": 21999400,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-21999400.onnx",
+                "reward": 124.75390076637268,
+                "creation_time": 1787588772.1475036,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-21999400.pt"
+                ]
+            },
+            {
+                "steps": 22499244,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-22499244.onnx",
+                "reward": 104.29078948497772,
+                "creation_time": 1787589175.8590884,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-22499244.pt"
+                ]
+            },
+            {
+                "steps": 22999719,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-22999719.onnx",
+                "reward": 115.18651247024536,
+                "creation_time": 1787589573.369161,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-22999719.pt"
+                ]
+            },
+            {
+                "steps": 23499329,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-23499329.onnx",
+                "reward": null,
+                "creation_time": 1787589971.9159715,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-23499329.pt"
+                ]
+            },
+            {
+                "steps": 23999795,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-23999795.onnx",
+                "reward": 123.79376443227132,
+                "creation_time": 1787590369.8568602,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-23999795.pt"
+                ]
+            },
+            {
+                "steps": 24499602,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-24499602.onnx",
+                "reward": 127.63219014803569,
+                "creation_time": 1787590768.1882613,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-24499602.pt"
+                ]
+            },
+            {
+                "steps": 24998982,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-24998982.onnx",
+                "reward": 131.24985361099243,
+                "creation_time": 1787591164.3078454,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-24998982.pt"
+                ]
+            },
+            {
+                "steps": 25499569,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-25499569.onnx",
+                "reward": 89.82761414845784,
+                "creation_time": 1787591561.7528746,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-25499569.pt"
+                ]
+            },
+            {
+                "steps": 25999708,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-25999708.onnx",
+                "reward": 135.2673041820526,
+                "creation_time": 1787591961.8971632,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-25999708.pt"
+                ]
+            },
+            {
+                "steps": 26499242,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-26499242.onnx",
+                "reward": 138.98220574855804,
+                "creation_time": 1787592359.9219284,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-26499242.pt"
+                ]
+            },
+            {
+                "steps": 26999040,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-26999040.onnx",
+                "reward": 131.73387026786804,
+                "creation_time": 1787592753.551823,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-26999040.pt"
+                ]
+            },
+            {
+                "steps": 27499483,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-27499483.onnx",
+                "reward": 73.17938935756683,
+                "creation_time": 1787593153.886327,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-27499483.pt"
+                ]
+            },
+            {
+                "steps": 27999024,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-27999024.onnx",
+                "reward": 66.17719602584839,
+                "creation_time": 1787593550.534088,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-27999024.pt"
+                ]
+            },
+            {
+                "steps": 28499731,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-28499731.onnx",
+                "reward": 135.97164392471313,
+                "creation_time": 1787593949.120067,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-28499731.pt"
+                ]
+            },
+            {
+                "steps": 28999829,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-28999829.onnx",
+                "reward": 76.4352308511734,
+                "creation_time": 1787594346.8049338,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-28999829.pt"
+                ]
+            },
+            {
+                "steps": 29499460,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-29499460.onnx",
+                "reward": 57.07327159245809,
+                "creation_time": 1787594743.8701034,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-29499460.pt"
+                ]
+            },
+            {
+                "steps": 29999015,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-29999015.onnx",
+                "reward": 52.042906840642296,
+                "creation_time": 1787595140.9342368,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-29999015.pt"
+                ]
+            },
+            {
+                "steps": 30000039,
+                "file_path": "results\\HoverTrackSimple3\\Rocket\\Rocket-30000039.onnx",
+                "reward": 52.042906840642296,
+                "creation_time": 1787595141.0247936,
+                "auxillary_file_paths": [
+                    "results\\HoverTrackSimple3\\Rocket\\Rocket-30000039.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 30000039,
+            "file_path": "results\\HoverTrackSimple3\\Rocket.onnx",
+            "reward": 52.042906840642296,
+            "creation_time": 1787595141.0247936,
+            "auxillary_file_paths": [
+                "results\\HoverTrackSimple3\\Rocket\\Rocket-30000039.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.1.0+cu121"
+    }
+}

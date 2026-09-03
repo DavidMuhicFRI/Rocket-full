@@ -1,0 +1,163 @@
+\chapter{Simulator Architecture}
+\label{ch:architecture}
+
+The prototype could afford to keep its state inside one agent because it represented one
+vehicle and one task. That stopped working as soon as the right-side configuration panel was
+introduced. A value could now exist in three forms: what the user was editing, what the
+simulator had accepted, and what an already running episode was using. Resolving that ambiguity
+became the central architectural problem. The final design follows the life of an experiment
+from an editable idea to a frozen result.
+
+\section{The simulator as an experimental product}
+
+The application is organized around one user journey. The user configures a vehicle and task,
+checks the derived policy interface, launches training or inference, and inspects the resulting
+telemetry and artifacts. Figure~\ref{fig:product-workflow} shows this path. The final arrow back
+to configuration is important: most useful changes in this project were responses to evidence
+from the previous run.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[node distance=0.32cm]
+    \node[rocketbox,text width=0.175\textwidth,minimum height=2.55cm] (configure) {
+      \textcolor{rocketBlue}{\Large\textbf{1}}\\[2pt]
+      \textbf{Configure}\\[3pt]
+      \footnotesize vehicle, task, rewards, environment, trainer, faults and telemetry};
+    \node[rocketbox,text width=0.175\textwidth,minimum height=2.55cm,right=of configure] (freeze) {
+      \textcolor{rocketBlue}{\Large\textbf{2}}\\[2pt]
+      \textbf{Check \& freeze}\\[3pt]
+      \footnotesize validate feasibility, derive the policy schema and create an immutable session};
+    \node[rocketbox,text width=0.175\textwidth,minimum height=2.55cm,right=of freeze] (execute) {
+      \textcolor{rocketTeal}{\Large\textbf{3}}\\[2pt]
+      \textbf{Execute}\\[3pt]
+      \footnotesize train with PPO, run ONNX inference, evaluate or perform component tests};
+    \node[rocketbox,text width=0.175\textwidth,minimum height=2.55cm,right=of execute] (inspect) {
+      \textcolor{rocketAmber}{\Large\textbf{4}}\\[2pt]
+      \textbf{Inspect}\\[3pt]
+      \footnotesize review trajectories, reward terms, outcomes, checkpoints and manifests};
+    \draw[rocketarrow] (configure) -- (freeze);
+    \draw[rocketarrow] (freeze) -- (execute);
+    \draw[rocketarrow] (execute) -- (inspect);
+    \draw[-{Latex[length=2.3mm]},thick,dashed,draw=rocketAmber]
+      ([yshift=-4mm]inspect.south) -- ++(0,-0.45) -| ([yshift=-4mm]configure.south)
+      node[pos=0.47,below,font=\footnotesize,text=rocketInk]{evidence informs the next revision};
+  \end{tikzpicture}
+  \caption{The experiment workflow. Editable settings become a validated, immutable session
+  before any simulation area or trainer consumes them.}
+  \label{fig:product-workflow}
+\end{figure}
+
+The configuration panel mirrors the decisions needed for an experiment: vehicle hardware,
+task and curriculum, rewards and termination, environment, learning, faults and telemetry.
+Built-in presets provide a usable starting point, but their values remain editable and a user
+can save new presets. The same path can therefore create a lightweight single-engine vehicle or
+a Falcon~9-inspired multi-engine vehicle without placing vehicle-specific logic inside a task.
+
+This workflow also separates four questions that the prototype used to blur together. Is the
+configuration syntactically valid? Is the requested manoeuvre physically feasible? Does a
+trained model still match the selected hardware? Does it actually succeed? Validation addresses
+the first, component tests support the second, schema checks protect the third, and only a
+frozen evaluation can answer the fourth.
+
+\section{From editable settings to immutable state}
+
+The first major redesign established a one-way configuration flow. The UI edits a
+\texttt{SimulationSessionDraft}. Starting a run validates that draft and converts it into an
+immutable \texttt{SimulationSessionSnapshot}. The \texttt{SimulationRunCoordinator} then creates
+the requested simulation areas, and each \texttt{SimulationAreaHost} receives its own runtime
+copy. From that point onward, the rocket and agent read the snapshot rather than the UI.
+
+This boundary was added after scripts began reading and changing shared component values
+directly. It was no longer clear whether a number on screen was a proposed value, a corrected
+value after validation, or the value already used by training. Snapshotting turns ``start'' into
+an explicit state transition. It also makes the accepted configuration serializable and gives
+the manifest a stable object to hash.
+
+The snapshot contains five main sections:
+
+\begin{description}
+  \item[Vehicle] geometry, mass, fuel, engine layout and actuator parameters;
+  \item[Environment] task, atmosphere, wind, curricula, inference mode, seeds and faults;
+  \item[Objective] task-specific rewards, shaping ranges and terminations;
+  \item[Learning] behaviour schema, PPO settings and resume policy; and
+  \item[Telemetry] enabled streams, sample rate and output location.
+\end{description}
+
+Validation derives dependent quantities and reports infeasible combinations before launch. A
+warning can still be overridden for an intentional sandbox experiment, but that override is
+stored in the session. It no longer disappears as an undocumented click.
+
+\section{Breaking apart the original agent}
+
+Once configuration had a clear owner, runtime behaviour needed the same treatment. The original
+\texttt{FalconAgent} handled observations, actions, actuation, rewards, spawning, termination and
+visual effects. It was convenient while the rocket was a cylinder; later, almost every change
+touched the same file and created side effects elsewhere.
+
+The current \texttt{RocketAssembly} builds the rigid body and selected components. Engines,
+grid fins, reaction-control thrusters and landing legs own their local state, central systems
+combine forces and mass properties, and the agent supplies normalized commands. Agent logic is
+split by responsibility into lifecycle, observations, actuators, guidance, spawning, rewards,
+telemetry and scenario-specific behaviour. Separate services own session lifecycle, area
+creation and trainer startup. Some large partial classes remain, but new task behaviour now has
+a defined location instead of another switch in a global script.
+
+\section{A policy interface that follows the vehicle}
+
+Modular hardware created the next problem: changing the vehicle also changes what the policy
+must observe and control. Manually updating ML-Agents behaviour parameters became both tedious
+and unsafe. The simulator now derives those dimensions from the accepted snapshot.
+
+The base observation vector contains 21 values describing relative target kinematics,
+orientation and global vehicle state. Engine timing adds five shared observations, followed by
+eight values for each independently controlled engine: throttle, two gimbal coordinates, four
+one-hot run states and a constraint timer. Leg landing adds four foot-contact values. Grid-fin,
+RCS and separate engine-enable control add further component-dependent observations or actions.
+
+For $N_e$ engine channels, $N_f$ fins and $N_r$ RCS channels, the continuous action size is
+\begin{equation}
+  n_a = (3+I_{\mathrm{enable}})N_e+N_f+N_r,
+  \label{eq:actions}
+\end{equation}
+where $I_{\mathrm{enable}}\in\{0,1\}$. Policy outputs are bounded and then mapped to throttle,
+gimbal or component-specific physical limits.
+
+Shape alone is not enough to guarantee compatibility. Two observation vectors can have the same
+length while assigning different meanings to their elements. The model artifact therefore
+stores the derived schema, and resume or inference checks compare observation count, action
+count, component layout, behaviour name, trainer type and network settings. This contract was
+added after simulator changes made older policies unsafe to reuse and, in some cases, corrupted
+the intended continuity of a run.
+
+\section{Versioned runs instead of overwritten experiments}
+
+The same problem appeared over time as well as across vehicles. A promising run often needed a
+longer step budget, but resuming it by overwriting the old configuration erased the conditions
+that had produced earlier checkpoints. The run format now keeps a top-level manifest and mutable
+runtime progress alongside numbered, immutable revision directories. Every revision stores its
+session JSON, launch manifest and trainer YAML; logs, checkpoints and the final ONNX model remain
+associated with the run ID.
+
+The launch manifest records the Python executable and package versions, GPU, seed, launch mode
+and SHA-256 digest of the session. Curriculum counters are stored separately in runtime state
+because they change while training proceeds. In this way a continuation can advance the same
+policy without rewriting the identity of the experiment that created it. The L10 and L11
+histories in Chapters~\ref{ch:development} and~\ref{ch:results} rely on this distinction.
+
+\section{Starting Unity and the trainer in the right order}
+
+The final architectural failure appeared before an episode had even begun. ML-Agents originally
+opened its connection as soon as Unity entered Play mode, while the configurable rocket prefabs
+had not yet been created. The trainer could therefore connect to an incomplete or unintended
+agent.
+
+The coordinator now validates the snapshot, creates every requested simulation area and only
+then enables the ML-Agents behaviour. Dummy prefabs satisfy Unity editor references without
+registering an agent; actual runtime prefabs are created after the configuration is known. The
+same coordinator derives the final policy schema before allowing the run to start.
+
+Physics advances every \SI{0.01}{s}. The standard decision period is three physics steps, so the
+policy supplies a new command every \SI{0.03}{s}, while actuator state, forces and the contact
+solver continue to update between decisions. This ordering keeps high-frequency physical
+dynamics independent of the neural-network inference frequency and completes the path from an
+editable experiment to a running, reproducible simulation.

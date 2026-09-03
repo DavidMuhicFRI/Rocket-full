@@ -1,0 +1,66 @@
+% The official FRI template enables PDF/A metadata here. It is temporarily disabled because
+% MiKTeX 25.12 currently ships mutually incompatible latex-lab/pdfmanagement package versions.
+% Re-enable after the local TeX distribution update is fixed:
+% \DocumentMetadata{pdfstandard=a-2b,pdfversion=1.7}
+\documentclass[a4paper,12pt,twoside,openany]{book}
+
+% -----------------------------------------------------------------------------
+% Editable metadata. Replace the TODO values before submission.
+% -----------------------------------------------------------------------------
+\newcommand{\tauthor}{David Muhič}
+\newcommand{\temail}{TODO@student.uni-lj.si}
+\newcommand{\tmentor}{Branko Šter} % add academic title
+\newcommand{\tsomentor}{Swarnendu Ghosh} % add academic title
+\newcommand{\tinst}{Fakulteta za računalništvo in informatiko}
+\newcommand{\tstopnja}{UNIVERZITETNI ŠTUDIJSKI PROGRAM PRVE STOPNJE\\RAČUNALNIŠTVO IN INFORMATIKA}
+\newcommand{\tvrsta}{Diplomsko delo}
+
+% The Slovene title is deliberately kept editable until it is approved.
+\newcommand{\ttitle}{Kompleksna navigacija na podlagi spodbujevalnega učenja}
+\newcommand{\ttitleEn}{Complex Navigation Based on Reinforcement Learning}
+\newcommand{\tkeywords}{spodbujevalno učenje, vodenje rakete, ponovna uporabnost, simulacija, Unity}
+\newcommand{\tkeywordsEn}{reinforcement learning, rocket control, reusable launch vehicle, simulation, Unity}
+
+\newcommand{\tdescription}{TODO: Vstavite uradni opis teme iz sistema STUDIS.}
+\newcommand{\tdescriptionEn}{TODO: Insert the approved English translation of the official STUDIS thesis description.}
+\newcommand{\tzahvala}{TODO: Add acknowledgements.}
+\newcommand{\tposvetilo}{}
+
+\newcommand{\tpovzetek}{TODO: Slovene translation will be written after the English draft is approved.}
+\newcommand{\tabstract}{%
+Reusable-booster control combines translation, rotation, actuator limits, hardware faults, changing mass and environmental forces into a single control problem. This thesis presents a configurable simulator as a tool for studying this problem through reinforcement learning, with Proximal Policy Optimization (PPO) as its primary training algorithm.
+The simulator gives users various controls over the experiment: they can configure their vehicle, set environmental conditions, select the task the vehicle should perform, customize the reward function and choose which telemetry to log for deeper analysis. They can then train a policy from scratch, initialize one from existing weights or evaluate a trained policy.
+Three tasks have been demonstrated: fixed hover, moving-target hover tracking and physical four-leg landing. All 250 fixed-hover trials reached the 60-second evaluation horizon and converged to low speed, tilt and vertical error, while retaining a 4.77-metre mean planar offset; because no binary hover criterion was declared, this is reported as continuous evidence rather than a success rate. The simulator also supports actuator faults, variable environmental conditions and tower-catch landing, but these capabilities have not yet been experimentally validated.}
+
+\input{podporno/preambula}
+
+% Long, visible placeholders make incompleteness impossible to mistake for a result.
+\newenvironment{thesistodo}{\begin{quote}\color{red!70!black}\textbf{TODO before submission:} }{\end{quote}}
+\newcommand{\projectname}{RocketSim}
+
+\begin{document}
+\input{podporno/naslovnestrani}
+
+\mainmatter
+\selectlanguage{american}
+\sisetup{output-decimal-marker={.}}
+\pagestyle{fancy}
+
+\include{chapters/01-introduction}
+\include{chapters/02-background}
+\include{chapters/03-scope-method}
+\include{chapters/04-architecture}
+\include{chapters/05-physical-model}
+\include{chapters/06-learning-system}
+\include{chapters/07-development}
+\include{chapters/08-evaluation}
+\include{chapters/09-results}
+\include{chapters/10-limitations}
+\include{chapters/11-conclusion}
+
+\appendix
+\include{chapters/a-reproducibility}
+\include{chapters/b-landing-placeholder}
+
+\printbibliography[heading=bibintoc,title={References}]
+\end{document}

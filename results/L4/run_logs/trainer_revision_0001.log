@@ -1,0 +1,137 @@
+[RocketSim] Trainer started at 2026-08-27T18:40:04.1282322Z
+[RocketSim] Working directory: C:\Users\dadii\Falcon9
+[RocketSim] Command: C:\Users\dadii\Anaconda3\envs\mlagents_gpu\python.exe -u -m mlagents.trainers.learn "C:\Users\dadii\Falcon9\results\L4\TrainingConfig.yaml" --run-id="L4" --force --torch-device "cuda" --seed 1
+
+
+	Unity Technologies
+
+ Version information:
+  ml-agents: 1.1.0,
+  ml-agents-envs: 1.1.0,
+  Communicator API: 1.5.0,
+  PyTorch: 2.1.0+cu121
+[INFO] Listening on port 5004. Start training by pressing the Play button in the Unity Editor.
+[INFO] Connected to Unity environment with package version 4.0.2 and communication version 1.5.0
+[INFO] Connected new brain: Rocket?team=0
+[INFO] Hyperparameters for behavior name Rocket: 
+	trainer_type:	ppo
+	hyperparameters:	
+	  batch_size:	4096
+	  buffer_size:	40960
+	  learning_rate:	0.0002
+	  beta:	0.01
+	  epsilon:	0.2
+	  lambd:	0.98
+	  num_epoch:	6
+	  shared_critic:	False
+	  learning_rate_schedule:	linear
+	  beta_schedule:	linear
+	  epsilon_schedule:	linear
+	checkpoint_interval:	500000
+	network_settings:	
+	  normalize:	True
+	  hidden_units:	512
+	  num_layers:	3
+	  vis_encode_type:	simple
+	  memory:	None
+	  goal_conditioning_type:	hyper
+	  deterministic:	False
+	reward_signals:	
+	  extrinsic:	
+	    gamma:	0.9995
+	    strength:	1.0
+	    network_settings:	
+	      normalize:	False
+	      hidden_units:	128
+	      num_layers:	2
+	      vis_encode_type:	simple
+	      memory:	None
+	      goal_conditioning_type:	hyper
+	      deterministic:	False
+	init_path:	None
+	keep_checkpoints:	60
+	even_checkpoints:	False
+	max_steps:	30000000
+	time_horizon:	1024
+	summary_freq:	20000
+	threaded:	True
+	self_play:	None
+	behavioral_cloning:	None
+[INFO] Rocket. Step: 20000. Time Elapsed: 20.232 s. Mean Reward: -54.672. Std of Reward: 1.018. Training.
+[INFO] Rocket. Step: 40000. Time Elapsed: 35.158 s. Mean Reward: -54.745. Std of Reward: 1.029. Training.
+[INFO] Rocket. Step: 60000. Time Elapsed: 55.485 s. Mean Reward: -54.492. Std of Reward: 1.070. Training.
+[INFO] Rocket. Step: 80000. Time Elapsed: 69.986 s. Mean Reward: -54.478. Std of Reward: 1.167. Training.
+[INFO] Rocket. Step: 100000. Time Elapsed: 91.680 s. Mean Reward: -54.418. Std of Reward: 0.867. Training.
+[INFO] Rocket. Step: 120000. Time Elapsed: 105.656 s. Mean Reward: -54.527. Std of Reward: 0.749. Training.
+[INFO] Rocket. Step: 140000. Time Elapsed: 126.914 s. Mean Reward: -54.582. Std of Reward: 1.149. Training.
+[INFO] Rocket. Step: 160000. Time Elapsed: 141.715 s. Mean Reward: -54.816. Std of Reward: 1.059. Training.
+[INFO] Rocket. Step: 180000. Time Elapsed: 162.497 s. Mean Reward: -54.461. Std of Reward: 0.899. Training.
+[INFO] Rocket. Step: 200000. Time Elapsed: 177.864 s. Mean Reward: -54.601. Std of Reward: 1.069. Training.
+[INFO] Rocket. Step: 220000. Time Elapsed: 198.234 s. Mean Reward: -54.527. Std of Reward: 0.783. Training.
+[INFO] Rocket. Step: 240000. Time Elapsed: 213.683 s. Mean Reward: -54.454. Std of Reward: 1.056. Training.
+[INFO] Rocket. Step: 260000. Time Elapsed: 234.621 s. Mean Reward: -54.333. Std of Reward: 1.066. Training.
+[INFO] Rocket. Step: 280000. Time Elapsed: 249.116 s. Mean Reward: -54.491. Std of Reward: 1.059. Training.
+[INFO] Rocket. Step: 300000. Time Elapsed: 270.054 s. Mean Reward: -54.669. Std of Reward: 1.015. Training.
+[INFO] Rocket. Step: 320000. Time Elapsed: 284.957 s. Mean Reward: -54.863. Std of Reward: 1.125. Training.
+[INFO] Rocket. Step: 340000. Time Elapsed: 305.645 s. Mean Reward: -54.591. Std of Reward: 1.077. Training.
+[INFO] Rocket. Step: 360000. Time Elapsed: 320.822 s. Mean Reward: -54.858. Std of Reward: 1.105. Training.
+[INFO] Rocket. Step: 380000. Time Elapsed: 341.888 s. Mean Reward: -54.703. Std of Reward: 1.413. Training.
+[INFO] Rocket. Step: 400000. Time Elapsed: 356.070 s. Mean Reward: -54.548. Std of Reward: 1.170. Training.
+[INFO] Rocket. Step: 420000. Time Elapsed: 377.581 s. Mean Reward: -54.517. Std of Reward: 1.150. Training.
+[INFO] Rocket. Step: 440000. Time Elapsed: 392.334 s. Mean Reward: -54.604. Std of Reward: 1.102. Training.
+[INFO] Rocket. Step: 460000. Time Elapsed: 412.961 s. Mean Reward: -54.384. Std of Reward: 1.092. Training.
+[INFO] Rocket. Step: 480000. Time Elapsed: 427.632 s. Mean Reward: -54.213. Std of Reward: 1.331. Training.
+[INFO] Rocket. Step: 500000. Time Elapsed: 448.757 s. Mean Reward: -54.161. Std of Reward: 1.023. Training.
+[INFO] Exported results\L4\Rocket\Rocket-499522.onnx
+[INFO] Rocket. Step: 520000. Time Elapsed: 464.313 s. Mean Reward: -54.513. Std of Reward: 0.937. Training.
+[INFO] Rocket. Step: 540000. Time Elapsed: 484.906 s. Mean Reward: -54.079. Std of Reward: 0.879. Training.
+[INFO] Rocket. Step: 560000. Time Elapsed: 500.601 s. Mean Reward: -54.253. Std of Reward: 1.213. Training.
+[INFO] Rocket. Step: 580000. Time Elapsed: 521.625 s. Mean Reward: -54.653. Std of Reward: 1.320. Training.
+[INFO] Rocket. Step: 600000. Time Elapsed: 535.337 s. Mean Reward: -53.945. Std of Reward: 1.407. Training.
+[INFO] Rocket. Step: 620000. Time Elapsed: 557.028 s. Mean Reward: -54.178. Std of Reward: 1.315. Training.
+[INFO] Rocket. Step: 640000. Time Elapsed: 572.393 s. Mean Reward: -54.323. Std of Reward: 1.165. Training.
+[INFO] Rocket. Step: 660000. Time Elapsed: 593.978 s. Mean Reward: -54.320. Std of Reward: 1.188. Training.
+[INFO] Rocket. Step: 680000. Time Elapsed: 607.338 s. Mean Reward: -54.668. Std of Reward: 1.506. Training.
+[INFO] Rocket. Step: 700000. Time Elapsed: 622.037 s. Mean Reward: -54.276. Std of Reward: 1.254. Training.
+[INFO] Rocket. Step: 720000. Time Elapsed: 643.495 s. Mean Reward: -54.546. Std of Reward: 1.267. Training.
+[INFO] Rocket. Step: 740000. Time Elapsed: 657.894 s. Mean Reward: -54.118. Std of Reward: 1.143. Training.
+[INFO] Rocket. Step: 760000. Time Elapsed: 678.880 s. Mean Reward: -54.556. Std of Reward: 1.193. Training.
+[INFO] Rocket. Step: 780000. Time Elapsed: 692.685 s. Mean Reward: -53.439. Std of Reward: 6.500. Training.
+[INFO] Rocket. Step: 800000. Time Elapsed: 715.480 s. Mean Reward: -53.577. Std of Reward: 6.397. Training.
+[INFO] Rocket. Step: 820000. Time Elapsed: 730.402 s. Mean Reward: -54.533. Std of Reward: 1.549. Training.
+[INFO] Rocket. Step: 840000. Time Elapsed: 751.201 s. Mean Reward: -53.243. Std of Reward: 7.184. Training.
+[INFO] Rocket. Step: 860000. Time Elapsed: 765.479 s. Mean Reward: -54.649. Std of Reward: 1.562. Training.
+[INFO] Rocket. Step: 880000. Time Elapsed: 785.919 s. Mean Reward: -50.517. Std of Reward: 11.012. Training.
+[INFO] Rocket. Step: 900000. Time Elapsed: 800.958 s. Mean Reward: -51.739. Std of Reward: 10.040. Training.
+[INFO] Rocket. Step: 920000. Time Elapsed: 823.211 s. Mean Reward: -52.088. Std of Reward: 9.692. Training.
+[INFO] Rocket. Step: 940000. Time Elapsed: 837.479 s. Mean Reward: -50.655. Std of Reward: 11.083. Training.
+[INFO] Rocket. Step: 960000. Time Elapsed: 858.458 s. Mean Reward: -49.716. Std of Reward: 12.008. Training.
+[INFO] Rocket. Step: 980000. Time Elapsed: 873.865 s. Mean Reward: -53.697. Std of Reward: 3.166. Training.
+[INFO] Rocket. Step: 1000000. Time Elapsed: 895.604 s. Mean Reward: -51.412. Std of Reward: 9.880. Training.
+[INFO] Exported results\L4\Rocket\Rocket-999804.onnx
+[INFO] Rocket. Step: 1020000. Time Elapsed: 909.174 s. Mean Reward: -51.540. Std of Reward: 10.045. Training.
+[INFO] Rocket. Step: 1040000. Time Elapsed: 929.408 s. Mean Reward: -49.854. Std of Reward: 12.101. Training.
+[INFO] Rocket. Step: 1060000. Time Elapsed: 946.193 s. Mean Reward: -47.552. Std of Reward: 13.453. Training.
+[INFO] Rocket. Step: 1080000. Time Elapsed: 968.069 s. Mean Reward: -45.047. Std of Reward: 15.616. Training.
+[INFO] Rocket. Step: 1100000. Time Elapsed: 983.730 s. Mean Reward: -44.506. Std of Reward: 15.400. Training.
+[INFO] Rocket. Step: 1120000. Time Elapsed: 1006.769 s. Mean Reward: -43.989. Std of Reward: 15.687. Training.
+[INFO] Rocket. Step: 1140000. Time Elapsed: 1021.683 s. Mean Reward: -40.193. Std of Reward: 16.718. Training.
+[INFO] Rocket. Step: 1160000. Time Elapsed: 1043.396 s. Mean Reward: -41.930. Std of Reward: 15.761. Training.
+[INFO] Rocket. Step: 1180000. Time Elapsed: 1059.741 s. Mean Reward: -41.306. Std of Reward: 16.360. Training.
+[INFO] Rocket. Step: 1200000. Time Elapsed: 1082.603 s. Mean Reward: -38.472. Std of Reward: 17.309. Training.
+[INFO] Rocket. Step: 1220000. Time Elapsed: 1096.740 s. Mean Reward: -41.491. Std of Reward: 16.365. Training.
+[INFO] Rocket. Step: 1240000. Time Elapsed: 1118.244 s. Mean Reward: -43.201. Std of Reward: 15.777. Training.
+[INFO] Rocket. Step: 1260000. Time Elapsed: 1134.685 s. Mean Reward: -33.372. Std of Reward: 16.716. Training.
+[INFO] Rocket. Step: 1280000. Time Elapsed: 1159.648 s. Mean Reward: -34.894. Std of Reward: 16.960. Training.
+[INFO] Rocket. Step: 1300000. Time Elapsed: 1174.239 s. Mean Reward: -30.249. Std of Reward: 15.295. Training.
+[INFO] Rocket. Step: 1320000. Time Elapsed: 1197.308 s. Mean Reward: -33.573. Std of Reward: 16.715. Training.
+[INFO] Rocket. Step: 1340000. Time Elapsed: 1212.779 s. Mean Reward: -28.751. Std of Reward: 15.282. Training.
+[INFO] Rocket. Step: 1360000. Time Elapsed: 1234.783 s. Mean Reward: -30.330. Std of Reward: 15.900. Training.
+[INFO] Rocket. Step: 1380000. Time Elapsed: 1247.842 s. Mean Reward: -29.037. Std of Reward: 15.042. Training.
+[INFO] Rocket. Step: 1400000. Time Elapsed: 1263.131 s. Mean Reward: -29.797. Std of Reward: 16.282. Training.
+[INFO] Rocket. Step: 1420000. Time Elapsed: 1283.755 s. Mean Reward: -28.295. Std of Reward: 14.686. Training.
+[INFO] Rocket. Step: 1440000. Time Elapsed: 1298.693 s. Mean Reward: -29.178. Std of Reward: 15.712. Training.
+[INFO] Rocket. Step: 1460000. Time Elapsed: 1319.565 s. Mean Reward: -26.770. Std of Reward: 13.175. Training.
+[INFO] Rocket. Step: 1480000. Time Elapsed: 1335.102 s. Mean Reward: -27.611. Std of Reward: 13.208. Training.
+[INFO] Rocket. Step: 1500000. Time Elapsed: 1357.001 s. Mean Reward: -25.774. Std of Reward: 12.264. Training.
+[INFO] Exported results\L4\Rocket\Rocket-1499992.onnx

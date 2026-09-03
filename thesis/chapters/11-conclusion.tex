@@ -1,0 +1,49 @@
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+This thesis began with a simple question: could reinforcement learning make a simulated booster
+land? The first cylinder showed that it could, but it also made the question less interesting.
+With an oversized engine, constant mass and no aerodynamics, a successful landing said little
+about how the controller would behave when the vehicle changed. The project therefore became an
+attempt to build the experiment around the policy, not only the policy itself.
+
+That change in focus explains the final simulator. Vehicle hardware, physical parameters,
+objectives, curricula, learning settings, faults and telemetry can all be configured through one
+workflow. Editable values become immutable sessions before training starts. Observation and
+action dimensions follow the selected hardware, incompatible models are rejected, and every
+continuation creates a traceable revision. These mechanisms grew out of practical failures: a
+configuration panel made shared state ambiguous, modular hardware broke manually maintained
+policy dimensions, and resumed runs needed to preserve rather than overwrite their history.
+
+The three tasks then tested the system at increasing levels of difficulty. The revised fixed-hover
+policy completed all 250 \SI{60}{s} horizons, reducing terminal speed to \SI{0.073}{m/s} and
+tilt to \SI{0.100}{\degree}, although its \SI{4.77}{m} mean planar offset and the absence of a
+binary criterion prevent a success-rate claim. Moving-target hover completed 191 of 250
+deterministic trials and remained reliable through $d=0.75$, before failing at the exact
+curriculum boundary. The final L11 landing policy completed 212 of 250 trials,
+including 18 of 50 at $d=1$. Compared with L10, it reduced mean engine restarts from 18.46 to
+1.56 and mean first-contact vertical speed from \SI{3.02}{m/s} to \SI{1.33}{m/s}. The policy
+learned navigation, braking, engine sequencing and stable four-foot support, although its 36\%
+full-difficulty success shows that the final boundary is not solved reliably.
+
+The L1--L11 campaign explains how that result was reached. A policy that appeared to fly away
+revealed a missing spawn velocity. A policy that reached the pad and crashed revealed a capped
+impact penalty. Frequent contact revealed that one foot was not a landing, and a policy that
+learned with easier actuators revealed excessive engine cycling. Each failure made the next
+question narrower. Telemetry and component tests were what turned surprising behaviour into a
+specific change to physics, reward, termination, actuation or software ownership.
+
+The central lesson is that an RL policy learns the environment it receives, including its
+mistakes. More reward terms do not necessarily express intent more accurately, and more physical
+detail does not automatically make an experiment trustworthy. The useful combination is an
+explicit model, rewards whose contributions can be inspected, clear ownership of state and an
+evaluation that remains separate from training.
+
+The final deterministic landing gap is therefore not an inconvenient result to hide; it is the
+next question exposed by the system. A matched stochastic-inference test can determine whether
+the continuous representation of binary engine-enable actions contributes to that gap. The
+hover task similarly turns its residual planar offset into a specific next test: freeze an
+acceptance radius and hold time, then change one suspected cause at a time. Later studies can add
+vehicle comparisons, wind and faults under the same discipline. The project has moved from
+making one object land to building a product in which the reason it landed---or failed to
+land---can be examined.

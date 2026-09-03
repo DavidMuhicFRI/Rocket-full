@@ -1,0 +1,120 @@
+\chapter{Background and Related Work}
+\label{ch:background}
+
+The decision to use reinforcement learning changed the problem rather than removing it. Instead
+of writing a complete controller by hand, I now had to build an environment in which useful
+control could be learned. Four ideas shaped that environment: the physical demands of powered
+descent, the reinforcement-learning formulation, the behaviour of PPO, and the distinction
+between progress during training and performance during evaluation.
+
+\section{Reusable-booster control}
+
+A Falcon-class booster has nine first-stage engines, four deployable landing legs and four grid
+fins, and burns liquid oxygen and rocket-grade kerosene \cite{spacex2025falcon}. These details
+provided a useful scale and suggested which components the simulator would eventually need.
+They did not make the implemented vehicle a certified Falcon~9 model or digital twin: public
+dimensions and propulsion data establish plausible proportions, while the controller learns
+only from the physical model defined in Chapter~\ref{ch:physics}.
+
+The landing problem is difficult because translation and rotation cannot be solved separately.
+Tilting the vehicle redirects thrust to correct a horizontal error, but simultaneously reduces
+the vertical component needed to slow the descent. The amount of available control then changes
+with throttle limits, actuator delay, fuel consumption, atmosphere and contact with the ground.
+What appears visually to be one smooth manoeuvre is therefore a sequence of tightly coupled
+decisions made under a shrinking margin for error.
+
+Powered-descent guidance is often formulated as an optimal-control problem. Convexification can
+transform relevant constraints into a form suitable for onboard optimization
+\cite{acikmese2007convex}. Neural methods can instead approximate a control law after observing
+many solved or sampled trajectories \cite{sanchez2018dnncontrol}, while deep reinforcement
+learning has been applied directly to six-degree-of-freedom planetary landing with continuous
+actions and randomized initial conditions \cite{gaudet2020landing}. This thesis shares the
+control objective of that work, but asks a different engineering question: how can an
+interactive Unity environment remain configurable and reproducible while the vehicle, task and
+reward are still evolving?
+
+\section{Reinforcement learning model}
+
+An episodic Markov decision process is described by states $s_t$, actions $a_t$, transition
+dynamics, rewards $r_t$ and a discount factor $\gamma$. A policy
+$\pi_\theta(a_t\mid s_t)$ with parameters $\theta$ selects actions so as to maximize the expected
+discounted return
+\begin{equation}
+  J(\theta)=\mathbb{E}_{\pi_\theta}\!\left[\sum_{t=0}^{T-1}\gamma^t r_t\right].
+  \label{eq:return}
+\end{equation}
+The simulator does not provide the policy with a perfect physical state. It constructs an
+observation vector $o_t$ from normalized relative kinematics, attitude and actuator state, so
+the learned controller is more precisely written $\pi_\theta(a_t\mid o_t)$.
+
+This formulation makes the reward function especially important. A human description such as
+``land softly near the centre'' is not available to the optimizer; only the numerical reward
+and termination rules are. A collection of individually sensible terms can therefore describe
+an unintended strategy more profitably than the intended one. Potential-based shaping can
+preserve an optimal policy under specific conditions \cite{ng1999policy}, but this project also
+uses bounded physical costs, event rewards and terminal outcomes. Those terms have to be audited
+empirically. The early policy that hovered just above the ground illustrates why: a small reward
+paid repeatedly eventually outweighed the one-off value of actually landing.
+
+\section{Proximal Policy Optimization}
+
+PPO was selected because Unity ML-Agents supports it directly and because the rocket primarily
+uses continuous control. PPO alternates between collecting trajectories under an existing
+policy and improving that policy through a clipped surrogate objective
+\cite{schulman2017ppo}. With probability ratio
+\begin{equation}
+  r_t(\theta)=\frac{\pi_\theta(a_t\mid o_t)}
+  {\pi_{\theta_{\mathrm{old}}}(a_t\mid o_t)},
+\end{equation}
+the clipped objective is
+\begin{equation}
+  L^{\mathrm{CLIP}}(\theta)=
+  \mathbb{E}_t\left[\min\left(r_t(\theta)\hat A_t,
+  \operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t\right)\right],
+  \label{eq:ppo}
+\end{equation}
+where $\hat A_t$ estimates the advantage of an action. Clipping limits the incentive for one
+update to move too far from the policy that produced the data.
+
+That stability is useful, but it does not protect the experiment from a missing observation, an
+incorrect force or a reward loophole. PPO will optimize the task it is given, including any
+mistake in that task. The experiments therefore use it as a consistent way to validate the
+simulator rather than as a claim that PPO is the best algorithm for rocket landing. Unity
+ML-Agents exchanges trajectories with the Python trainer, and the resulting multilayer
+perceptron is exported to ONNX for inference inside Unity. No camera input is used; all policy
+inputs are numerical observations derived from the simulated state.
+
+\section{Curricula and evaluation}
+
+The complete landing and tracking tasks were too broad to present to an untrained policy at
+once. The simulator therefore represents difficulty with a scalar $d\in[0,1]$ and interpolates
+between initial and final parameter ranges,
+\begin{equation}
+  x(d)=(1-d)x_{\mathrm{initial}}+d x_{\mathrm{full}}.
+  \label{eq:curriculum-interpolation}
+\end{equation}
+As performance improves, the curriculum increases spawn distances, initial velocities or the
+strictness of success thresholds. The sampled difficulty is frozen for the duration of an
+episode, or for one target in the tracking task, so that the rules cannot change midway through
+an attempt. Easier replay episodes remain in the distribution to reduce forgetting.
+
+Curriculum progress answers whether the trainer is making the task harder; it does not answer
+how reliable the exported policy is. Progress depends on recent training samples, adaptive
+counters and stochastic actions. This became important in L11, where exact-full-difficulty
+training success was much higher than deterministic evaluation success. For that reason,
+evaluation fixes the seed, tests explicit difficulty bands and records every episode separately.
+
+Binary success is reported with a Wilson score interval. For $n$ trials, observed proportion
+$\hat p$ and normal quantile $z=1.96$, the interval is
+\begin{equation}
+\frac{\hat p+z^2/(2n)\ \pm\ z\sqrt{\hat p(1-\hat p)/n+z^2/(4n^2)}}
+     {1+z^2/n}.
+\label{eq:wilson}
+\end{equation}
+It remains well behaved near zero and one, where a symmetric normal approximation is misleading.
+
+Deep-RL results can also vary across training seeds and implementation details
+\cite{henderson2018matters,agarwal2021precipice}. Because the available computation and schedule
+allowed only one principal training seed per task, the numerical results in this thesis validate
+the simulator workflow and describe these particular policies. They are not a statistically
+general comparison between algorithms.

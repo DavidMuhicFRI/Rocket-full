@@ -119,7 +119,7 @@ closure, so passive falling cannot masquerade as navigation, and adds a global
 angular-rate cost plus body-axis spin control. Its Balanced objective has no
 per-second time cost, while upward velocity retains its own bounded `0.30/s`
 cost. A successful leg touchdown is worth up to `+30`
-from contact/center quality, plus up to `+4` success-only mission efficiency at
+from contact/center quality, plus up to `+6` success-only mission efficiency at
 every difficulty. Mission efficiency combines actual fuel used with a much
 larger equivalent-fuel cost for relights than for the first ignition of an
 additional engine channel. It rewards economical successful trajectories

@@ -1,0 +1,61 @@
+\chapter{Introduction}
+\label{ch:introduction}
+
+The idea for this project came from watching a reusable booster land safely on a small landing pad. I could not help but be impressed by the precision and elegance with which such a powerful vehicle could maneuver. I immediately began thinking about how I might approach the design of such a complex system.
+
+My first ideas were crude: manually encoding a collection of conditional rules, building a controller based on altitude, attitude and velocity, or even attempting to control the vehicle manually. A possible approach emerged during an artificial-intelligence class taught by Dr Bosnič, who presented a student project in which an agent trained using reinforcement learning controlled a swordsman in combat. This was a turning point: the control problem did not necessarily have to be solved by hand. I began to suspect that a machine could discover a more precise control strategy than I could design manually.
+
+To test this idea, I chose Unity, an engine with which I already had experience, and used Unity ML-Agents to connect the simulation to a Python trainer
+\cite{juliani2020mlagents,unitymlagentsrepo}. In April 2026, I built an initial prototype: a cylinder driven by one oversized, instantly responding engine. It consumed no fuel, had no drag or wind, and ignored other aerodynamic forces. It handled observations, actions, rewards, termination logic and visual effects in a single \texttt{FalconAgent} script. Its purpose was narrow: to determine whether the training loop could produce a policy capable of controlling a simplified booster. Although training was not straightforward, the prototype ultimately succeeded at a basic landing task, providing initial evidence that the approach was viable.
+
+That initial success was encouraging, but it solved only a simplified version of the landing problem with an unrealistically capable vehicle. A realistic reusable-booster landing would require the controller to manage several additional layers of complexity. From a distance, the maneuver looks simple: descend towards the landing spot, remain upright and arrive at near-zero velocity. In practice, these objectives compete. The vehicle must simultaneously regulate position, velocity and attitude while thrust is limited, actuators respond with delay, fuel consumption changes the mass properties and aerodynamic forces vary with wind.
+
+As these constraints were introduced, the experiment became increasingly tangled. Each new feature created dependencies between the policy, vehicle configuration, task logic and simulator state. It became difficult to modify one part without affecting another or to distinguish policy failures from simulator defects. The system therefore had to be restructured and modularized, with its components separated so that they could evolve independently and remain observable.
+
+The original plan was to train separate controllers for several mission phases, but this scope proved too broad. The work therefore narrowed to landing while the software around it became more ambitious: the single-purpose prototype evolved towards a configurable platform for defining vehicles, tasks, training settings and evaluation conditions.
+
+The thesis therefore focuses on the development of a configurable rocket-control simulator rather than solely on a single landing policy. Proximal Policy Optimization (PPO) is used as the primary training algorithm to validate the system; it is not intended as a comparison of learning algorithms. Three tasks have been demonstrated in the current system: fixed hover, moving-target hover tracking and physical four-leg landing. Support for actuator faults, variable environmental conditions, alternative vehicle configurations and tower-catch landing is also implemented, but these capabilities have not yet been experimentally validated.
+
+\section{Problem statement}
+
+The practical problem is not merely to make one policy land. It is to construct an experimental platform in which vehicle, atmosphere, task, learning and telemetry settings can be changed without silently invalidating the results. An RL policy can exploit reward definitions and simulator defects just as readily as it can learn the intended behaviour. Consequently, the simulator must make its assumptions explicit, preserve the exact configuration used for each run, and provide an evaluation path that is independent of the trainer's own progress signal.
+
+The work addresses three research questions:
+
+\begin{description}
+	\item[RQ1] How can a Unity-based rocket-control simulator be structured so that configurable
+	RL experiments remain modular and reproducible?
+	\item[RQ2] Can PPO policies trained in the simulator perform fixed hover, moving-target hover
+	tracking and physical four-leg landing under a predefined deterministic evaluation protocol?
+	\item[RQ3] Which reward, physical-modeling and software-integration failures arise during
+	development, and which design changes make them observable or prevent their recurrence?
+\end{description}
+
+\section{Contributions}
+
+The principal contributions are:
+
+\begin{enumerate}
+	\item a configurable six-degree-of-freedom rigid-body simulation with modular engines, grid
+	fins, reaction-control thrusters, landing legs, fuel-dependent mass properties, atmosphere
+	and wind;
+	\item immutable session snapshots that separate editable UI state from the configuration
+	consumed by running simulation areas;
+	\item task-owned observation, reward, termination and curriculum definitions for fixed hover,
+	moving-target hover tracking and physical four-leg landing;
+	\item versioned training artifacts, compatibility checks, telemetry and deterministic
+	evaluation under fixed curriculum bands; and
+	\item empirical case studies showing measurable learning across most of the moving-target
+	hover-tracking curriculum and the complete physical four-leg landing curriculum, including
+	the remaining deterministic deployment boundary and the sequence of simulator and reward
+	changes that made physical landing learnable.
+\end{enumerate}
+
+\section{Thesis structure}
+
+Chapter~\ref{ch:background} introduces the control and RL concepts. Chapters~\ref{ch:scope}
+and~\ref{ch:architecture} define the method and software design. Chapters~\ref{ch:physics}
+and~\ref{ch:learning} describe the physical and learning models. Chapter~\ref{ch:development}
+records the main engineering challenges. Chapters~\ref{ch:evaluation} and~\ref{ch:results}
+specify the evaluation and report available results. Chapter~\ref{ch:limitations} discusses the
+validity limits and future work, and Chapter~\ref{ch:conclusion} concludes the thesis.

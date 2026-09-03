@@ -1,0 +1,42 @@
+{
+    "name": "root",
+    "metadata": {
+        "timer_format_version": "0.1.0",
+        "start_time_seconds": "1787811543",
+        "python_version": "3.10.12 | packaged by Anaconda, Inc. | (main, Jul  5 2023, 19:01:18) [MSC v.1916 64 bit (AMD64)]",
+        "command_line_arguments": "C:\\Users\\dadii\\Anaconda3\\envs\\mlagents_gpu\\lib\\site-packages\\mlagents\\trainers\\learn.py C:\\Users\\dadii\\Falcon9\\results\\L1\\TrainingConfig.yaml --run-id=L1 --force --torch-device cuda --seed 1",
+        "mlagents_version": "1.1.0",
+        "mlagents_envs_version": "1.1.0",
+        "communication_protocol_version": "1.5.0",
+        "pytorch_version": "2.1.0+cu121",
+        "numpy_version": "1.23.5",
+        "end_time_seconds": "1787811546"
+    },
+    "total": 2.539616600000045,
+    "count": 1,
+    "self": 0.003799500000241096,
+    "children": {
+        "run_training.setup": {
+            "total": 0.08040699999992285,
+            "count": 1,
+            "self": 0.08040699999992285
+        },
+        "TrainerController.start_learning": {
+            "total": 2.455410099999881,
+            "count": 1,
+            "self": 7.599999980811845e-05,
+            "children": {
+                "TrainerController._reset_env": {
+                    "total": 2.455321500000082,
+                    "count": 1,
+                    "self": 2.455321500000082
+                },
+                "TrainerController._save_models": {
+                    "total": 1.2599999990925426e-05,
+                    "count": 1,
+                    "self": 1.2599999990925426e-05
+                }
+            }
+        }
+    }
+}

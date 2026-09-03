@@ -308,11 +308,15 @@ namespace RocketSim
                     shaping.legFuelEfficiencyFullDifficulty = 0f;
                     shaping.legFuelEfficiencyBudgetFraction = 0.20f;
                     shaping.legMissionEfficiencyBudgetFullFraction = 0.28f;
-                    shaping.legRestartEquivalentFuelFraction = 0.003f;
+                    // One actual relight now represents 0.6% of starting fuel.
+                    // Lighting another braking engine for the first time stays
+                    // cheap, so the policy can discover a one-engine approach
+                    // and a three-engine braking burn without an engine-ID rule.
+                    shaping.legRestartEquivalentFuelFraction = 0.006f;
                     shaping.legAdditionalEngineIgnitionEquivalentFuelFraction = 0.0005f;
-                    // A legal boundary landing retains 25% of the success
-                    // reward; the remaining 75% grades smoothness and center.
-                    shaping.legTouchdownQualityRewardFraction = 0.75f;
+                    // A legal boundary landing retains 15% of the success
+                    // reward; the remaining 85% grades smoothness and center.
+                    shaping.legTouchdownQualityRewardFraction = 0.85f;
                     shaping.landingYawSpinScaleDegS = 20f;
                 }
                 return;

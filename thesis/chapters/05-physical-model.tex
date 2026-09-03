@@ -1,0 +1,146 @@
+\chapter{Physical and Actuator Model}
+\label{ch:physics}
+
+The first prototype needed only gravity and thrust. That was enough to test the learning loop,
+but every step toward a reusable-booster-shaped vehicle exposed another missing interaction.
+Fuel changed the mass, grid fins required airflow, airflow required atmosphere and wind, and a
+landing could not be judged without modelling individual feet and post-contact motion. The
+physical model grew in that order. Its purpose is to create a coherent control problem, not to
+claim flight-level fidelity.
+
+\section{Rigid-body foundation and changing mass}
+
+Unity integrates a six-degree-of-freedom rigid body. Let position be $\mathbf p$, velocity
+$\mathbf v$, body angular velocity $\boldsymbol\omega$, mass $m$ and inertia tensor
+$\mathbf I$. Translational and rotational motion conceptually follow
+\begin{align}
+  m\dot{\mathbf v} &= \mathbf F_T+\mathbf F_A+m\mathbf g, \\
+  \mathbf I\dot{\boldsymbol\omega}+
+  \boldsymbol\omega\times(\mathbf I\boldsymbol\omega) &=
+  \boldsymbol\tau_T+\boldsymbol\tau_A+\boldsymbol\tau_R,
+\end{align}
+where the subscripts denote thrust, aerodynamic and RCS contributions. The simulator calculates
+forces, application points, mass and inertia; Unity performs numerical integration and contact
+resolution.
+
+The Falcon-inspired reference body uses radius \SI{1.83}{m}, height \SI{41.2}{m}, dry mass
+\SI{22200}{kg} and maximum propellant mass \SI{400000}{kg}. These are configurable nominal
+values rather than a complete accounting of real vehicle hardware. The early cylinder kept a
+constant mass, which meant the same throttle always produced the same acceleration. Once fuel
+consumption was introduced, the combined centre of mass became
+\begin{equation}
+  \mathbf r_{\mathrm{cm}}=\frac{\sum_i m_i\mathbf r_i}{\sum_i m_i}.
+\end{equation}
+Approximate component inertias are combined with the parallel-axis theorem. Propellant behaves
+as a changing rigid mass; liquid slosh is outside the model.
+
+\section{From still air to a repeatable environment}
+
+Grid fins made airflow unavoidable. The simulator first needed density and air-relative
+velocity before it could calculate any useful aerodynamic control. Air density follows the
+exponential approximation
+\begin{equation}
+  \rho(h)=\rho_0 k_\rho \exp\!\left(-\frac{h}{H}\right),
+  \label{eq:density}
+\end{equation}
+where $h$ is altitude, $H$ is a scale height and $k_\rho$ is a user-selected multiplier. A
+configurable horizontal wind vector is subtracted from vehicle velocity,
+$\mathbf v_a=\mathbf v-\mathbf v_{\mathrm{wind}}$, and an optional low-order gust varies that
+vector over time.
+
+The intention is controlled disturbance, not weather simulation. Direction randomization and a
+fixed seed make wind experiments repeatable, but the model has no altitude profile, turbulence
+spectrum or correlated three-dimensional gust field. A wind setting therefore proves that the
+force path exists; it does not by itself prove that a policy is wind-robust.
+
+\section{Discovering that drag must work in both directions}
+
+The first drag implementation looked plausible during descent but behaved incorrectly when the
+rocket moved upward. The error came from losing the sign of axial velocity. The current model
+decomposes air-relative velocity into axial and lateral components and writes axial drag as
+\begin{equation}
+  \mathbf F_{D,a}=-\tfrac12\rho C_{D,a}A_a
+  v_a\lvert v_a\rvert\,\hat{\mathbf e}_a,
+  \label{eq:axialdrag}
+\end{equation}
+with nominal $C_{D,a}=0.30$. The product $v_a\lvert v_a\rvert$ preserves direction, so the force
+opposes both upward and downward motion.
+
+Broadside drag uses nominal coefficient $C_{D,s}=1.0$, projected side area and lateral velocity.
+It is applied at an approximate centre of pressure and therefore also produces torque. A small
+base-drag term acts during tail-first descent. Separating these components made sign and scale
+errors easier to test than a single global drag coefficient, although the result remains a
+low-order model without Mach-dependent tables, compressibility or plume interaction.
+
+\section{Grid fins and the limits of visual geometry}
+
+Once body drag behaved consistently, the grid fins could contribute control forces. Their
+response scales with dynamic pressure
+\begin{equation}
+  q=\tfrac12\rho\lVert\mathbf v_a\rVert^2.
+\end{equation}
+Each fin has a configurable envelope, deflection limit and slew rate. The nominal envelope is
+\SI{1.59}{m} by \SI{1.23}{m}, with \SI{0.30}{m} thickness and an effective lift scale of 0.5.
+
+An early version treated too much of that envelope as a solid aerodynamic plate. A real grid fin
+contains open lattice, but resolving that flow is beyond the simulator. The model instead uses
+the visible envelope for geometry and reduces its idealized response with the lift scale. This
+does not reproduce lattice aerodynamics; it records the approximation explicitly and lets the
+user vary it.
+
+\section{Propulsion, fuel and actuator timing}
+
+Adding more realistic engines changed the problem more than simply changing maximum thrust. An
+engine command contains throttle and two gimbal coordinates. For each active engine,
+\begin{equation}
+  \mathbf F_T=T_{\max}\,k_T(h)\,u_T\,\hat{\mathbf e}_{\mathrm{gimbal}},
+\end{equation}
+where $u_T$ respects the configured minimum throttle and $k_T(h)$ approximates the change from
+sea-level to vacuum thrust using the pressure ratio from Equation~\eqref{eq:density}. A sandbox
+preset, for example, uses maximum sea-level thrust \SI{845}{kN}, specific impulse \SI{282}{s},
+minimum throttle 0.39 and maximum gimbal angle \SI{7}{\degree}.
+
+Fuel flow is calculated from
+\begin{equation}
+  \dot m_f=-\frac{T}{I_{\mathrm{sp}}g_0}.
+  \label{eq:massflow}
+\end{equation}
+The effective $I_{\mathrm{sp}}$ is adjusted approximately with pressure. Neither this adjustment
+nor the thrust interpolation is presented as a proprietary engine model.
+
+The first engine responded instantly, allowing the policy to create control strategies that no
+physical actuator could follow. Throttle spool, gimbal slew, startup delay, shutdown transient,
+minimum run time and restart cooldown were introduced to close that gap. These constraints later
+became part of the learning story themselves: strict timing made useful behaviour difficult to
+discover in L8, while relaxed timing exposed excessive cycling and motivated L9--L11.
+
+\section{From contact to a stable landing}
+
+Touching the ground was initially enough to end an episode. That definition allowed one-foot
+contacts, hard impacts and unstable rocking to appear successful. The final landing model exposes
+four individual foot contacts and records first-contact velocity, tilt, angular rate, maximum
+impulse, rebound height, stable-hold time, feet outside the pad and structural strikes. The
+episode can therefore distinguish reaching the ground from completing a stable landing.
+
+RCS channels follow the same modular pattern: they apply bounded forces and consume a separate
+propellant budget using Equation~\eqref{eq:massflow}. The nominal thruster provides
+\SI{750}{N}, has \SI{70}{s} specific impulse and respects a minimum \SI{0.10}{s} pulse.
+
+Ground response still comes from Unity colliders and a general-purpose contact solver. The
+simulator does not model crushing, detailed leg compliance, soil, structural deformation or
+plume--ground interaction. A successful landing in this thesis therefore means success under
+the documented collider geometry and thresholds, not proof that a real vehicle would survive.
+
+\section{Verifying one layer before training the next}
+
+Each addition created a new opportunity for motion that looked believable while being wrong. I
+therefore used component-level tests for zero-wind drag direction, upward and downward motion,
+vacuum and sea-level thrust scaling, fuel depletion, gimbal and throttle rates, RCS pulse timing,
+centre-of-mass movement and leg-contact classification. These tests checked deterministic
+properties before a policy was trained against them.
+
+Training then acted as a second form of pressure testing. A policy repeats any profitable defect
+far more consistently than a manual user. When a learned strategy violated the intended physics,
+the behaviour was reduced to a component test and corrected there. This sequence---implement,
+isolate, train and inspect---connected the physical model back to the development method in
+Chapter~\ref{ch:scope}.

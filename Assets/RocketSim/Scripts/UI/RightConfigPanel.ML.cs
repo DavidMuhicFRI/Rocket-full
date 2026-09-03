@@ -159,8 +159,13 @@ namespace RocketSim
         {
             root.Add(UIHelper.SectionLabel("Run Settings"));
 
-            root.Add(UIHelper.IntSlider("max_steps (x1k)", mlConfig.maxSteps / 1000, 100, 50000, v => mlConfig.maxSteps = v * 1000,
-                "Sets the total environment steps before training ends."));
+            root.Add(UIHelper.IntSlider(
+                "max_steps (x1k)",
+                mlConfig.maxSteps / 1000,
+                MLAgentsConfig.MinimumSupportedMaxSteps / 1000,
+                MLAgentsConfig.MaximumSupportedMaxSteps / 1000,
+                v => mlConfig.maxSteps = v * 1000,
+                "Sets the total environment-step ceiling, including steps already completed by a resumed run."));
 
             root.Add(UIHelper.IntSlider("time_horizon", mlConfig.timeHorizon, 64, 2048, v => mlConfig.timeHorizon = v,
                 "Maximum per-agent rollout chunk before critic bootstrapping. 1024 decisions equal 30.72 simulated seconds; this does not end the episode."));
@@ -171,7 +176,7 @@ namespace RocketSim
             root.Add(UIHelper.IntSlider("checkpoint (x1k)", mlConfig.checkpointInterval / 1000, 10, 5000,
                 v => mlConfig.checkpointInterval = v * 1000,
                 "Sets the number of steps between saved model checkpoints."));
-            root.Add(UIHelper.IntSlider("keep checkpoints", mlConfig.keepCheckpoints, 1, 100, v => mlConfig.keepCheckpoints = v,
+            root.Add(UIHelper.IntSlider("keep checkpoints", mlConfig.keepCheckpoints, 1, MLAgentsConfig.MaximumSupportedKeepCheckpoints, v => mlConfig.keepCheckpoints = v,
                 "Sets how many checkpoints remain on disk. Keep at least max_steps / checkpoint_interval to preserve the complete learning curve."));
             root.Add(UIHelper.IntSlider("trainer seed", mlConfig.trainerSeed, 0, 100000, v => mlConfig.trainerSeed = v,
                 "Sets ML-Agents' random seed for repeatable experiments."));

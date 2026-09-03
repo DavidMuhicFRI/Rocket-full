@@ -1,0 +1,20 @@
+{
+    "schemaVersion": 1,
+    "completedEpisodes": 10696,
+    "landingCurriculumProgress": 0.0,
+    "landingCurriculumPeakProgress": 0.0,
+    "landingCurriculumAttempts": 0,
+    "landingCurriculumSuccesses": 0,
+    "legLandingCurriculumProgress": 0.0,
+    "legLandingCurriculumPeakProgress": 0.0,
+    "legLandingCurriculumAttempts": 0,
+    "legLandingCurriculumSuccesses": 0,
+    "hoverTrackingCurriculumProgress": 0.9756540060043335,
+    "hoverTrackingCurriculumDetailsCaptured": true,
+    "hoverTrackingCurriculumUsesTargetAttempts": true,
+    "hoverTrackingCurriculumLinearProgress": 0.9069847464561462,
+    "hoverTrackingCurriculumRecentSuccessRate": 0.4293133318424225,
+    "hoverTrackingCurriculumAttempts": 20119,
+    "hoverTrackingCurriculumSuccessfulEpisodes": 8609,
+    "hoverTrackingCurriculumSuccesses": 16185
+}

@@ -1,0 +1,106 @@
+\chapter{Limitations and Future Work}
+\label{ch:limitations}
+
+Each successful stage of the project narrowed the remaining uncertainty. The simulator can now
+configure, train, replay and evaluate substantially different control tasks, and the evaluated
+policies have measurable operating ranges. The results do not establish a flight-ready
+controller, superiority of PPO or robustness to every option visible in the UI. The remaining
+work follows from three boundaries: the world being simulated, the experiments performed inside
+it, and the software used to preserve them.
+
+\section{Boundary of the physical model}
+
+The physical model became more complete as new components required it, but it remains a
+six-degree-of-freedom rigid body with configurable low-order forces. It does not include
+propellant slosh, elastic structure, detailed engine transients, plume--ground interaction,
+compressible or transonic aerodynamics, resolved grid-fin lattice flow, sensor noise or
+realistic turbulent wind. Pressure-dependent thrust and specific impulse are approximations,
+and landing contact is resolved by Unity colliders and a general-purpose solver. No flight data
+or independent high-fidelity simulator validates the trajectory as a whole.
+
+The measured policy performance is consequently valid inside the documented simulator. The
+next useful physics step is not to add every missing effect at once. It is to determine which
+current approximation changes the control outcome. Analytical force cases, published
+aerodynamic data and comparison with a higher-fidelity tool could quantify coefficient
+sensitivity before additional complexity is introduced.
+
+\section{Boundary of the experiments}
+
+Every completed result uses one principal training seed, one network architecture and one PPO
+configuration. Wilson intervals describe repeated episodes for a fixed model; they do not
+measure how much performance would vary across independently trained policies. Using one common
+evaluation seed makes the five-band studies repeatable, but still samples only one deterministic
+set of initial conditions.
+
+The two curriculum tasks also fail differently at their hardest boundary. Tracking falls from
+84\% success at $d=0.75$ to zero at $d=1$ after training stopped short of a stable full-difficulty
+distribution. L11 landing trained at $d=1$ but achieved only 36\% there during deterministic
+evaluation. These results lead to different next experiments. Tracking should be evaluated more
+densely between $d=0.75$ and $d=1$ and trained with explicit probability mass at the boundary.
+Landing should keep the final checkpoint and seeds fixed while changing only deterministic
+versus stochastic inference.
+
+If that landing comparison reproduces the training--evaluation gap, the next design change
+should target the action interface rather than the reward. Engine enable is physically binary
+but is currently produced by a thresholded continuous output. A discrete branch, or a deliberate
+hybrid action space, would remove the dead band between the on and off thresholds. Only after
+that isolated test should the main runs be repeated across several trainer and evaluator seeds.
+
+Fixed hover now has a complete 250-episode evaluation, but still lacks a predeclared binary
+criterion. The new policy corrects the earlier vertical drift and consistently damps velocity
+and attitude, yet converges to a mean final planar offset of \SI{4.77}{m}. The next hover
+experiment should define its acceptance radius and hold time before execution, then determine
+whether the offset comes from reward balance, observations or the learned equilibrium.
+
+The reward system has a related boundary. Configurability makes a specification inspectable but
+does not make it correct. A future validator could estimate the maximum cumulative contribution
+of every continuous term and warn when waiting can dominate a terminal outcome. Scripted
+adversarial policies---prolonged hovering, engine-off descent and deliberate early
+termination---could test these economics before an expensive training run begins.
+
+\section{Boundary of the software product}
+
+Architecture had to evolve while scenes, prefabs, sessions and ONNX policies already existed.
+The current schema checks protect known interfaces, but they cannot guarantee migration of every
+legacy artifact. Some agent partial classes remain large, not every UI path has an automated
+test, and the final public commit is not yet frozen.
+
+A command-line experiment runner would be the most useful complement to the interactive UI. It
+could queue matrices of seeds and configurations without manual setup and make larger comparisons
+less error-prone. Automated edit- and play-mode tests, a dependency lock, a small known-answer
+evaluation and an explicit artifact migration tool would then make the public release easier to
+verify and maintain.
+
+\section{A deliberate order for future experiments}
+
+The simulator exposes many possible extensions, but repeating the original scope problem would
+make their results difficult to interpret. The next work should therefore proceed in the order
+in which each experiment unlocks the next:
+
+\begin{enumerate}
+  \item define fixed-hover acceptance limits, diagnose its planar offset and isolate the L11
+  deterministic-inference gap;
+  \item repeat the principal policies across several seeds once their protocols are stable;
+  \item compare selected vehicle configurations on one frozen task, retraining whenever the
+  policy interface changes;
+  \item measure a no-wind policy under controlled wind, then compare it with a policy trained
+  through domain randomization;
+  \item inject one actuator fault at a time with fixed onset, duration and severity before
+  attempting combined faults; and
+  \item treat tower-arm capture as a separate task with its own contact model and evaluation.
+\end{enumerate}
+
+This order keeps the core claim modest: the current thesis demonstrates the configurable
+workflow and three control tasks. Wind, faults, vehicle comparisons and tower capture remain the
+next chapters of the product rather than unevaluated additions to the present result.
+
+\section{Final thesis completion checklist}
+
+\begin{thesistodo}
+  Run the deterministic/stochastic L11 inference diagnostic; declare hover acceptance limits
+  and diagnose its planar offset;
+  freeze and publish the repository revision; add UI/task screenshots and seed-labelled videos;
+  translate the approved text to Slovene; insert the official STUDIS description, mentor titles,
+  acknowledgements and student email; update both abstracts after the final accepted results;
+  and have the mentor approve the final title and scope.
+\end{thesistodo}

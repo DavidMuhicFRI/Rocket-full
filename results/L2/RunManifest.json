@@ -1,0 +1,19 @@
+{
+    "schemaVersion": 1,
+    "runId": "L2",
+    "createdUtc": "2026-08-27T06:22:30.7399634Z",
+    "lastLaunchedUtc": "2026-08-27T06:22:30.7399634Z",
+    "currentRevision": 1,
+    "currentSessionSha256": "a30e6685a8e0db0256bf7762abea97731e2d23d6aeb77f436cb962d290e7805c",
+    "scenario": "LegLanding",
+    "vectorObservationSize": 52,
+    "continuousActionSize": 12,
+    "engineControlChannels": 3,
+    "finCount": 0,
+    "rcsJetCount": 0,
+    "trainerType": "PPO",
+    "behaviorName": "Rocket",
+    "hiddenUnits": 512,
+    "numLayers": 3,
+    "normalize": true
+}

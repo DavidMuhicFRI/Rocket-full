@@ -158,8 +158,8 @@ Balanced terminal magnitudes are:
 
 | Outcome | Reward or cost |
 |---|---:|
-| Successful touchdown | +7.5 to +30 from impact/center quality |
-| Successful mission efficiency | up to +4 at every difficulty; failed attempts receive zero |
+| Successful touchdown | +4.5 to +30 from impact/center quality |
+| Successful mission efficiency | up to +6 at every difficulty; failed attempts receive zero |
 | Hard touchdown, structural strike, excessive rebound | -25 to -45 by impact severity |
 | Flyaway, fuel depletion, altitude escape, missed pad | -50 |
 | Timeout | -50 |
@@ -169,8 +169,8 @@ Balanced terminal magnitudes are:
 For a legal stable touchdown, first-contact quality combines translational
 speed, tilt, and angular rate inside the current curriculum envelope. Center
 quality falls smoothly from 1 at the pad center to 0 at the current success
-radius. Their geometric mean controls 75% of the `+30` reward; the remaining
-25% keeps a marginal but legal landing positive. Mission efficiency is a
+radius. Their geometric mean controls 85% of the `+30` reward; the remaining
+15% keeps a marginal but legal landing positive. Mission efficiency is a
 separate success-only tie-breaker and does not constrain which engines the
 policy may use:
 
@@ -190,7 +190,7 @@ success_bonus = successfulMissionEfficiencyReward
                 * efficiencyCurriculumGate
 ```
 
-Balanced uses cost scales `0.20 -> 0.28`, a `0.003` equivalent-fuel charge per
+Balanced uses cost scales `0.20 -> 0.28`, a `0.006` equivalent-fuel charge per
 restart, and only `0.0005` for each additional engine channel's first ignition.
 Fuel therefore dominates, a one-to-three-engine braking transition is cheap,
 and repeated shutdown/relight PWM is appreciably worse. The exponential does
@@ -212,16 +212,27 @@ how many engines may fire.
 Fixed hover and moving-target hover share:
 
 ```text
-+ hoverAltitudeProximityRewardRate * Exp01(verticalError, hoverAltitudeFalloffM)
-+ hoverPlanarProximityRewardRate   * Exp01(planarDistance, hoverPlanarFalloffM)
-+ hoverUprightRewardRate           * upright01
-+ hoverSpeedCalmRewardRate         * Exp01(speed, hoverSpeedFalloffMps)
-+ hoverRotationCalmRewardRate      * Exp01(angularRateDegS,
-                                           hoverAngularRateFalloffDegS)
+altitudeProximity01 = Exp01(verticalError, hoverAltitudeFalloffM)
+planarProximity01   = Exp01(planarDistance, hoverPlanarFalloffM)
+targetProximity01   = sqrt(altitudeProximity01 * planarProximity01)
+
+targetProximity01 * (
+    + hoverAltitudeProximityRewardRate * altitudeProximity01
+    + hoverPlanarProximityRewardRate   * planarProximity01
+    + hoverUprightRewardRate           * upright01
+    + hoverSpeedCalmRewardRate         * Exp01(speed, hoverSpeedFalloffMps)
+    + hoverRotationCalmRewardRate      * Exp01(angularRateDegS,
+                                               hoverAngularRateFalloffDegS)
+)
 - hoverLinearSpeedCostRate         * speed
 - hoverAngularRateCostRate         * angularRateDegS
 - controlEffortCostRate            * controlEffort
 ```
+
+The joint target-proximity gate prevents a calm, upright vehicle from farming
+positive reward while satisfying only one position axis or hovering at the
+wrong altitude. Motion and control costs remain ungated, so moving away from the
+target never becomes a way to hide control errors.
 
 Each ignition after a previous shutdown emits:
 

@@ -1,0 +1,373 @@
+\chapter{Results}
+\label{ch:results}
+
+The results follow the same progression as the tasks themselves. Fixed hover first asks whether
+the vehicle can remain calm around one point. Moving-target hover then asks it to travel and
+settle repeatedly. Physical landing adds a shrinking time margin, actuator sequencing and
+irreversible ground contact. Figure~\ref{fig:result-summary} gives the headline evaluation
+outcomes, while the sections that follow show what those aggregates hide.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[node distance=0.38cm]
+    \node[rocketbox,text width=0.19\textwidth,minimum height=1.95cm] (hover) {
+      \textcolor{rocketTeal}{\LARGE\textbf{250/250}}\\[-1pt]
+      \small hover horizons\\[2pt]
+      \footnotesize completed for \SI{60}{s}};
+    \node[rocketbox,text width=0.19\textwidth,minimum height=1.95cm,right=of hover] (track) {
+      \textcolor{rocketTeal}{\LARGE\textbf{76.4\%}}\\[-1pt]
+      \small tracking success\\[2pt]
+      \footnotesize 191 / 250 trials};
+    \node[rocketbox,text width=0.19\textwidth,minimum height=1.95cm,right=of track] (land) {
+      \textcolor{rocketBlue}{\LARGE\textbf{84.8\%}}\\[-1pt]
+      \small landing success\\[2pt]
+      \footnotesize 212 / 250 trials};
+    \node[rocketbox,text width=0.19\textwidth,minimum height=1.95cm,right=of land] (feet) {
+      \textcolor{rocketAmber}{\LARGE\textbf{36\%}}\\[-1pt]
+      \small full-difficulty landing\\[2pt]
+      \footnotesize 18 / 50 trials};
+  \end{tikzpicture}
+  \caption{Evidence summary for the completed deterministic evaluations. The hover count is
+  horizon completion, not a success rate, because that task has no binary criterion. Tracking
+  and overall landing rates include all five difficulty bands; the last card isolates the
+  landing policy's hardest band.}
+  \label{fig:result-summary}
+\end{figure}
+
+\section{Fixed hover: correcting the vertical failure}
+
+The earlier \texttt{HoverSimple2} run showed why a long, calm-looking episode is not enough: it
+stabilized horizontally while slowly climbing away from the requested altitude. The replacement
+run, \texttt{HoverFixed}, changed the actuation envelope rather than hiding that result. Minimum
+throttle was reduced from 39\% to 25\%, and the unnecessary separate enable action was removed
+from the single-engine controller. The derived policy interface consequently changed from four
+to three continuous actions and from 30 to 29 observations, so the new run started from fresh
+weights.
+
+Figure~\ref{fig:hover-training} follows the resulting 20.08M-step run. Most early episodes still
+end in ground impact, but survival then lengthens until the final policy repeatedly reaches the
+roughly \SI{300}{s} fuel-depletion boundary. Over the same progression, median vertical error
+falls from about \SI{13}{m} to below \SI{1}{m}, vertical speed approaches zero and tilt settles
+near \SI{0.3}{\degree}. Horizontal error is less monotonic: it first increases, then falls to
+approximately \SIrange{3}{4}{m} near the end. This is the first run in which the physical
+quantities jointly describe bounded powered flight near the target altitude.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/training-hover.pdf}
+  \caption{Physical learning curves for \texttt{HoverFixed}. Completed episodes from both
+  revisions are ordered chronologically and grouped into 0.5-million-decision-step bins. Lines
+  show medians and shading the interquartile range. The final plateau in survival and propellant
+  use corresponds to reaching fuel depletion rather than a binary hover-success event.}
+  \label{fig:hover-training}
+\end{figure}
+
+The complete evaluation confirms the vertical fix under a broader set of initial conditions.
+All 250 deterministic trials reached the \SI{60}{s} horizon. They began \SIrange{0.12}{6.61}{m}
+from the horizontal target with up to \SI{2.61}{m/s} horizontal speed and
+\SI{1.40}{\degree} tilt. Figure~\ref{fig:hover-evaluation} shows the median response and its
+interquartile envelope. The commanded descent briefly raises median speed to approximately
+\SI{7.5}{m/s}, but vertical error falls from \SI{20}{m} to below \SI{1}{m} and the policy then
+damps both translation and attitude. At \SI{60}{s}, median speed is \SI{0.077}{m/s}, median tilt
+is \SI{0.105}{\degree} and median vertical error is \SI{0.902}{m}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/hover-evaluation.pdf}
+  \caption{Time-aligned profiles from all 250 \texttt{HoverFixed} evaluation episodes. Lines are
+  medians, shaded areas are interquartile ranges and orange markers show the \SI{60}{s}
+  endpoints. The policy corrects the initial \SI{20}{m} altitude error and damps motion, but
+  converges to a residual horizontal offset.}
+  \label{fig:hover-evaluation}
+\end{figure}
+
+The terminal means tell the same story: speed \SI{0.073}{m/s}, horizontal speed
+\SI{0.066}{m/s}, vertical speed \SI{0.021}{m/s}, tilt \SI{0.100}{\degree} and angular rate
+\SI{0.082}{\degree\per\second}. Mean fuel use was \SI{11724.7}{kg}, and only one episode
+recorded an engine restart. The remaining weakness is position rather than stability. Horizontal
+error first rises, then converges tightly to a median of \SI{4.76}{m}; only 77 of 250 trials end
+closer to the target than they began.
+
+These 250 horizon completions are substantially stronger evidence than the previous four-trial
+diagnostic, but they are not a 100\% success rate. The evaluator explicitly records that no
+binary hover metric is defined. \texttt{HoverFixed} therefore demonstrates repeatable altitude,
+velocity and attitude stabilization with a residual planar offset; declaring a solved hover
+task requires an acceptance radius chosen before the next evaluation.
+
+\section{Moving-target hover tracking}
+
+Tracking begins where fixed hover ends. The policy must leave a stable state, travel to a new
+point and become stable again before the timeout. This makes raw target distance a misleading
+learning curve: the relocation radius expands while the policy improves. Figure~\ref{fig:tracking-training}
+therefore pairs curriculum progress and success with direction efficiency and settling quality.
+Progress rose to 97.6\%, and the binned training-success rate stayed mostly above 80\% after the
+initial learning phase. The policy was learning to travel and settle under increasingly difficult
+conditions, although none of these training signals is a held-out probability.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/training-hover-track.pdf}
+  \caption{Training progression for \texttt{HoverTrackSimple3}. Completed episodes are ordered
+  chronologically and grouped into 0.5-million-decision-step bins. Lines show the median and
+  shading the interquartile range, except that training success is the bin mean. This view avoids
+  mixing repeated episode indices from the three trainer revisions.}
+  \label{fig:tracking-training}
+\end{figure}
+
+The physical quantities in Figure~\ref{fig:tracking-training-physical} supply the missing
+context. Episode duration and propellant use rise as the target moves farther away and the
+policy must complete more difficult transfers. Mean horizontal error therefore does not fall in
+the same way as it did in fixed hover; after the curriculum expands, it stabilizes despite a
+larger task envelope. Horizontal speed peaks during the first attempt to move aggressively, then
+settles near \SI{1}{m/s}. Read together with the improving success curve, these are signs of a
+controller adapting to a growing problem rather than a stationary metric simply getting worse.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/tracking-training-physical.pdf}
+  \caption{Physical cost of the expanding \texttt{HoverTrackSimple3} curriculum. Lines are
+  binned medians and shaded areas are interquartile ranges. Longer episodes and greater fuel use
+  accompany farther target relocations, while speed and horizontal error settle after the early
+  learning transient.}
+  \label{fig:tracking-training-physical}
+\end{figure}
+
+The completed evaluation produced 191 successful episodes out of 250, or 76.4\% with a 95\%
+Wilson interval of 70.8--81.2\%. Table~\ref{tab:tracking-bands} gives the exact counts, while
+Figure~\ref{fig:tracking-success} shows how the failure appears in time, captures and fuel. The
+aggregate number hides a sharp boundary effect: performance was perfect at difficulties 0 and
+0.25, 98\% at 0.5, 84\% at 0.75, and 0\% at 1.0.
+
+\begin{table}[htbp]
+  \centering
+  \caption{\texttt{HoverTrackSimple3} evaluation by curriculum band. Intervals are 95\% Wilson
+  intervals; each band contains 50 episodes.}
+  \label{tab:tracking-bands}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{rrrrrr}
+    \toprule
+    Difficulty & Successes & Rate & 95\% interval & Mean duration (s) & Mean captures \\
+    \midrule
+    0.00 & 50/50 & 100\% & 92.9--100\% & 31.60 & 3.00 \\
+    0.25 & 50/50 & 100\% & 92.9--100\% & 41.43 & 3.00 \\
+    0.50 & 49/50 & 98\%  & 89.5--99.6\% & 53.76 & 2.98 \\
+    0.75 & 42/50 & 84\%  & 71.5--91.7\% & 74.06 & 2.76 \\
+    1.00 & 0/50  & 0\%   & 0.0--7.1\%   & 35.00 & 0.00 \\
+    \midrule
+    Overall & 191/250 & 76.4\% & 70.8--81.2\% & 47.17 & 2.35 \\
+    \bottomrule
+  \end{tabular}
+  }
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{training/tracking-evaluation.pdf}
+  \caption{Fixed-band tracking evaluation. Panel A shows success with 95\% Wilson intervals and
+  Panel B the number of completed captures. In Panels C and D, boxes span the interquartile
+  range, centre lines are medians, diamonds are means and whiskers extend to \(1.5\) times the
+  interquartile range. The exact \(d=1\) boundary produces no captures and a uniform
+  \SI{35}{s} timeout.}
+  \label{fig:tracking-success}
+\end{figure}
+
+Across all bands, mean fuel use was \SI{8759.76}{kg}. Mean final planar distance was
+\SI{5.64}{m}; mean final speed was \SI{0.877}{m/s}, composed of
+\SI{-0.047}{m/s} vertical and \SI{0.870}{m/s} horizontal velocity. Mean final tilt was
+\SI{0.709}{\degree} and angular rate \SI{0.171}{\degree\per\second}. These terminal means mix
+successful captures with timeout states and must not be read as capture thresholds.
+
+The full-difficulty failures all ended by target timeout after \SI{35}{s}, with zero captures.
+The policy had reached a recorded nonlinear training progress of 97.6\%, but had not actually
+trained at an exact, stable 100\% boundary. The abrupt change suggests a curriculum-boundary or
+generalization problem. The evidence does not isolate whether the dominant cause is relocation
+radius, tightened thresholds, state distribution, insufficient exposure or their interaction;
+claiming a specific cause would require controlled evaluations around $d=1$.
+
+The tracking policy therefore learned the complete travel--settle sequence over most of the
+tested curriculum, including 84\% success at $d=0.75$, but not at its exact final boundary. This
+was the first clear example of training progress and frozen evaluation telling different stories.
+Landing keeps the same need to travel and settle, then adds the requirement to do so before
+physical contact.
+
+\section{Physical leg landing}
+
+\subsection{Why L10 had to become L11}
+
+L10 established that PPO could learn navigation, braking and stable four-foot support, but its
+solution still depended on rapid engine cycling. As that run was continued from 30M to 79.63M
+steps, effective curriculum difficulty rose from 12.3\% to 60.2\% while late-window restart count
+rose from 10.1 to 23.7. Its fixed-band evaluation then produced 151 successes in 250 episodes and
+none at $d=1$. This combination motivated L11: preserve outcome-based rewards, make continuous
+one-engine descent physically feasible, and constrain rapid switching.
+
+L11 started from fresh weights and reached the complete curriculum. Figure~\ref{fig:l11-training-progress}
+places its learning history beside L10 instead of showing the final run in isolation. Both runs
+first learn basic touchdown, but their actuator strategies then separate: L10's median restart
+count climbs as its curriculum becomes harder, whereas L11 spends most of training near zero or
+one restart while continuing to reduce contact speed. L11 reaches 100\% effective difficulty and
+continues improving after the 90M-step resume. In the final 1,000 completed, non-replay episodes
+at exact $d=1$, training success was 90.1\%; the saved runtime state's recent counter was 92.9\%.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/training-leg-landing.pdf}
+  \caption{Chronological comparison of L10 and L11, grouped into
+  one-million-decision-step bins. Lines are medians with interquartile bands, except that
+  training success is a bin mean. Contact speed uses only episodes that reached touchdown. L10
+  ends at 79.63M steps; the dotted line marks the L11 resume at 90M. Manifest times isolate the
+  intended runs and incomplete shutdown rows are excluded.}
+  \label{fig:l11-training-progress}
+\end{figure}
+
+The redesign changed more than the success count. Table~\ref{tab:landing-run-comparison} shows
+that L11 increased
+overall evaluation success by 24.4 percentage points, produced measurable success at exact full
+difficulty, and reduced impact and cycling at approximately the same mean fuel use. The restart
+reduction is especially large: 18.46 to 1.56 per episode.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Completed fixed-band landing evaluations. Contact quantities are means over episodes
+  that reached touchdown; both evaluations used seed 20257 and 250 episodes.}
+  \label{tab:landing-run-comparison}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{lrr}
+    \toprule
+    Metric & L10 baseline & L11 final \\
+    \midrule
+    Final effective curriculum difficulty & 60.25\% & 100\% \\
+    Overall success & 151/250 (60.4\%) & 212/250 (84.8\%) \\
+    Full-difficulty success & 0/50 (0\%) & 18/50 (36\%) \\
+    Mean first-contact vertical speed & \SI{3.02}{m/s} & \SI{1.33}{m/s} \\
+    Mean first-contact horizontal speed & \SI{0.70}{m/s} & \SI{0.279}{m/s} \\
+    Mean first-contact tilt & \SI{1.54}{\degree} & \SI{0.637}{\degree} \\
+    Mean maximum contact impulse & \SI{97.0}{\kilo\newton\second} & \SI{39.1}{\kilo\newton\second} \\
+    Mean engine restarts & 18.46 & 1.56 \\
+    Mean fuel used & \SI{4590}{kg} & \SI{4529}{kg} \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+Figure~\ref{fig:landing-evaluation-comparison} shows that this was not merely an easier set of
+random trials. L10 and L11 used the same seed and the same 50 cases in each band. L11's advantage
+widens with difficulty, while its median restart count, vertical contact speed and impact remain
+below L10 in every band. The redesign therefore improved both mission completion and the physical
+quality of the solution.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/landing-evaluation-comparison.pdf}
+  \caption{L10--L11 comparison over the same fixed-band evaluation protocol. Success whiskers
+  are 95\% Wilson intervals. The other panels show band medians with interquartile whiskers;
+  contact quantities include only episodes that reached touchdown. Lines connect band summaries
+  for readability and do not imply interpolation between curriculum levels.}
+  \label{fig:landing-evaluation-comparison}
+\end{figure}
+
+The final ten million steps produced a smaller net quality gain. Against the same
+seeded episode set, overall success rose from 82.8\% at 90M to 84.8\% at 100M, success at
+$d=0.75$ rose from 90\% to 92\%, and success at $d=1$ rose from 30\% to 36\%. Mean first-contact
+vertical speed fell from \SI{1.68}{m/s} to \SI{1.33}{m/s}, successful-landing planar distance
+from \SI{0.97}{m} to \SI{0.63}{m}, and mean maximum impulse from
+\SI{52.4}{\kilo\newton\second} to \SI{39.1}{\kilo\newton\second}. At $d=1$, six previously
+failing seeded cases succeeded, while three previous
+successes regressed. The net gain is real for this fixed set, but the 36\% Wilson interval remains
+wide at 24.1--49.9\%.
+
+\subsection{Fixed-band evaluation}
+
+The final evaluation completed all 250 episodes and produced 212 stable four-foot touchdowns:
+84.8\% with a 95\% Wilson interval of 79.8--88.7\%. Table~\ref{tab:landing-bands} shows perfect
+performance in the first two bands, 96\% at $d=0.5$, 92\% at $d=0.75$, and 36\% at $d=1$.
+Figure~\ref{fig:landing-evaluation-comparison} makes the improvement over L10 visible across the
+entire range and shows that the gain is accompanied by gentler contact and less switching.
+
+\begin{table}[htbp]
+  \centering
+  \caption{L11 landing evaluation by fixed curriculum band. Each band contains 50 episodes;
+  intervals are 95\% Wilson intervals.}
+  \label{tab:landing-bands}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{rrrrllll}
+    \toprule
+    Difficulty & Successes & Rate & 95\% interval & Hard touchdown & Missed pad & Too far \\
+    \midrule
+    0.00 & 50/50 & 100\% & 92.9--100\% & 0 & 0 & 0 \\
+    0.25 & 50/50 & 100\% & 92.9--100\% & 0 & 0 & 0 \\
+    0.50 & 48/50 & 96\% & 86.5--98.9\% & 1 & 0 & 1 \\
+    0.75 & 46/50 & 92\% & 81.2--96.8\% & 2 & 2 & 0 \\
+    1.00 & 18/50 & 36\% & 24.1--49.9\% & 30 & 1 & 1 \\
+    \midrule
+    Overall & 212/250 & 84.8\% & 79.8--88.7\% & 33 & 3 & 2 \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+Across all bands, 248 episodes reached touchdown. Their mean first-contact speed was
+\SI{1.38}{m/s}, consisting of \SI{1.33}{m/s} vertical and \SI{0.279}{m/s} horizontal speed;
+mean contact tilt was \SI{0.637}{\degree} and angular rate
+\SI{1.72}{\degree\per\second}. Mean maximum contact impulse was
+\SI{39146}{N.s}, mean rebound was approximately \SI{6.5}{\micro\metre}, and mean recorded stable
+hold was \SI{0.566}{s}. No episode recorded a structural strike, one recorded a foot outside the
+pad, and every successful episode had all four feet supported. Mean fuel use was \SI{4529}{kg}.
+
+\subsection{Remaining failure and deployment gap}
+
+At full difficulty, 30 of the 32 failures were hard touchdowns; every one exceeded the
+\SI{1.5}{m/s} vertical-speed limit. In 25 of those 30 cases, vertical speed was the only failed
+first-contact condition, and ten were within \SI{0.2}{m/s} of passing. Median touchdown vertical
+speed improved from \SI{1.745}{m/s} at 90M to \SI{1.612}{m/s} at 100M. The remaining problem is
+therefore usually a narrow final-braking margin rather than the broad navigation failure seen in
+L3--L7. Figure~\ref{fig:landing-full-difficulty} shows both that concentration near the vertical
+threshold and the two rare, much larger excursions.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{training/landing-full-difficulty.pdf}
+  \caption{Diagnostics at exact full difficulty. Panel A separates the 50 outcomes per run;
+  Panel B gives empirical cumulative distributions of contact vertical speed, zoomed to
+  \SIrange{0}{6}{m/s}; Panel C zooms into L11's touchdown threshold region, with two hard
+  contacts outside the displayed range; and Panel D pairs the same 50 seeds at 90M and 100M.
+  The dashed red lines mark the \SI{1.5}{m/s} vertical limit and the dotted amber line marks the
+  \SI{0.75}{m/s} horizontal limit.}
+  \label{fig:landing-full-difficulty}
+\end{figure}
+
+The larger unresolved issue is the difference between training and deployment. Exact-$d=1$
+training success was 89.6\% over the final 5,000 completed non-replay episodes and 90.1\% over the
+final 1,000, yet deterministic evaluation succeeded in only 36\%. Incomplete curriculum exposure
+cannot explain this gap because L11 reached and remained at full difficulty.
+
+The action interface is a plausible, but not yet proven, cause. PPO explores with stochastic
+continuous actions during training, whereas the evaluator requests deterministic inference. The
+three engine-enable commands are nevertheless encoded as continuous outputs and converted to
+binary state through on/off thresholds of $+0.35$ and $-0.35$. A deterministic mean action can
+therefore occupy the dead band or switch differently from sampled training actions. Consistent
+with that hypothesis, mean restarts rose from 1.32 to 1.56 overall and from 2.02 to 2.46 at
+$d=1$ between 90M and 100M, even as touchdown quality improved. The decisive follow-up is an
+A/B evaluation of the same checkpoint and seeds with deterministic inference enabled and
+disabled, followed by a discrete or hybrid engine-enable action if the gap persists.
+
+The bounded result is still substantial: L11 controls navigation, descent, final flare and
+stable support reliably through $d=0.75$, and it completes more than one third of trials at the
+full trained boundary. It is not a flight controller or a solved full-difficulty policy.
+
+\section{Answers to the research questions}
+
+Taken together, the three tasks answer the research questions at different levels. For RQ1, the
+snapshot, derived policy schema, immutable revisions, telemetry and evaluator form a complete
+path from a configurable Unity experiment to an identifiable result.
+
+For RQ2, PPO produced repeatable fixed-hover stabilization across 250 trials, although a
+predeclared success rule and tighter planar position hold are still missing. It completed
+moving-target tracking reliably through $d=0.75$ and learned physical four-leg landing across
+the complete curriculum. The final landing policy still fell to 36\% success at $d=1$, so
+reaching full training difficulty did not make the controller uniformly reliable.
+
+For RQ3, the decisive failures formed the same chain as the simulator's development: reward
+accumulation encouraged delay or cheap termination; a spawn-order bug removed the requested
+initial velocity; incorrectly balanced terms made crashing cheaper than missing; approximate
+aerodynamics produced wrong or excessive forces; and implicit UI and policy contracts made
+changes difficult to trace. The architecture is largely the record of how those failures were
+made observable and prevented from recurring.

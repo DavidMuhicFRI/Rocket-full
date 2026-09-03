@@ -1,0 +1,250 @@
+\chapter{Development and Engineering Challenges}
+\label{ch:development}
+
+\section{From prototype to simulator}
+
+Development began in early April 2026 with the smallest experiment that could fail usefully: a
+cylinder, one oversized engine and a policy asked to reach the ground slowly. By the middle of
+April it could perform a basic landing. That result justified continuing, but every simplifying
+assumption was still visible. The engine had no realistic minimum throttle, vehicle mass never
+changed, and one \texttt{FalconAgent} script owned nearly the entire simulation.
+
+The next step was not one large jump to realism. I replaced assumptions one at a time and let
+each addition reveal the next missing layer. Moving to Falcon-class dimensions led to multiple
+engines, grid fins and RCS. Grid fins were meaningless without airflow, so drag and atmosphere
+followed. Wind then required air-relative velocity, while fuel consumption required changing
+mass and inertia. Finally, spool, slew and engine timing prevented the policy from treating the
+actuators as instantaneous mathematical commands.
+
+Those physical additions also changed the policy interface. Manually maintaining ML-Agents
+observation and action sizes became error-prone, so a launch manager began deriving the schema
+and creating parallel areas. That exposed a startup-order bug: ML-Agents connected before valid
+runtime rockets existed. Solving it produced the dummy/actual-prefab sequence described in
+Chapter~\ref{ch:architecture}.
+
+The largest transition came with the right-side configuration panel. Parameters that had lived
+beside the code using them now had to travel from an editable UI into a running experiment. This
+forced the snapshot architecture. Adding hover, tracking and landing then forced a second split,
+because spawn distributions, rewards, curricula, terminations and evaluation criteria could no
+longer remain global switches inside one agent. By this point, the project had changed from a
+landing demonstration into the configurable experiment system described in the previous three
+chapters.
+
+\section{Challenge 1: reward loopholes}
+
+Reward development produced the clearest examples of why the simulator had to become observable.
+A coefficient could look reasonable during manual testing and remain apparently successful for
+millions of steps, until the policy discovered a repeated action sequence with a better return.
+The most important behaviours were:
+
+\begin{itemize}
+  \item hovering near the ground instead of landing because proximity rewards continued to
+  accrue;
+  \item touching down with only one foot while satisfying an overly broad contact condition;
+  \item switching off thrust and dropping when future return appeared worse than termination;
+  \item remaining nearly inactive when movement costs outweighed progress; and
+  \item flipping or forcing a collision to end an unfavourable episode early.
+\end{itemize}
+
+At first I responded by changing coefficients or adding special cases. That worked for one
+behaviour and usually created another. The more useful interpretation was that each policy had
+found a counterexample to the written reward specification. The long-term response was to expose
+rates, events, terminal values, scales and thresholds in the scenario configuration, log their
+individual contributions, and make termination order explicit. This does not prevent a poor
+reward, but it makes the reason for a high return inspectable and allows controlled changes
+without rewriting task code.
+
+\section{Leg-landing problem-solving campaign}
+\label{sec:landing-iterations}
+
+The numbered L1--L11 series turned that lesson into a repeatable process. I started a new
+iteration only after inspecting the previous policy in the simulator and in episode- and
+step-level telemetry. Each run therefore begins with a concrete question left by the one before
+it. Because duration, reward scale, actuator timing and curriculum difficulty changed, their raw
+returns are not a controlled algorithm benchmark. Their value lies in the chain of evidence:
+what failed, how the cause was isolated, and whether the next intervention removed it.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=0.35cm,
+      phase/.style={draw=rocketNavy!35,rounded corners=3pt,align=center,text width=0.198\textwidth,
+        minimum height=2.2cm,inner sep=5pt,font=\small,text=rocketInk},
+      arrow/.style={-{Latex[length=2.2mm]},thick,draw=rocketBlue}]
+    \node[phase,fill=rocketRed!7] (p1) {\textbf{L1--L4}\\Infrastructure, spawn physics and termination\\
+      \emph{Make a physical attempt preferable to a cheap reset}};
+    \node[phase,fill=rocketAmber!10,right=of p1] (p2) {\textbf{L5--L7}\\Contact quality and reward economics\\
+      \emph{Make a soft, centred touchdown preferable to a crash}};
+    \node[phase,fill=rocketTeal!9,right=of p2] (p3) {\textbf{L8--L9}\\Learnability and actuator timing\\
+      \emph{Bootstrap landing, then restore constraints}};
+    \node[phase,fill=rocketBlue!8,right=of p3] (p4) {\textbf{L10--L11}\\Efficiency and generalization\\
+      \emph{Reward the outcome and test the full range}};
+    \draw[arrow] (p1) -- (p2);
+    \draw[arrow] (p2) -- (p3);
+    \draw[arrow] (p3) -- (p4);
+  \end{tikzpicture}
+  \caption{The four phases of the L1--L11 landing campaign. Each phase begins with a policy or
+  infrastructure failure and ends with a narrower unsolved problem.}
+  \label{fig:landing-phases}
+\end{figure}
+
+\footnotesize
+\begin{longtable}{p{0.055\textwidth}p{0.245\textwidth}p{0.27\textwidth}p{0.30\textwidth}}
+  \caption{Landing campaign at a glance. The table gives the decision made after each run; the
+  evidence and comparisons are developed in the phase narratives below.}
+  \label{tab:landing-iterations}\\
+  \toprule
+  Run & Failure exposed & Decisive change & Result or next question \\
+  \midrule
+  \endfirsthead
+  \toprule
+  Run & Failure exposed & Decisive change & Result or next question \\
+  \midrule
+  \endhead
+  L1 & Trainer never connected. & Clear the occupied Unity worker. & Infrastructure failure;
+  no policy was tested. \\
+  L2 & The rocket spawned without its prescribed downward velocity. & Apply velocity only after
+  the rigid body becomes dynamic. & Escape disappeared as an easy interpretation of the task. \\
+  L3 & The policy reached the pad, then crashed at about \SI{40}{m/s}. & Remove time pressure and
+  extend impact severity beyond its low cap. & Touchdown became preferable to a fast reset. \\
+  L4 & A vehicle could approach the pad and then leave after an off-pad collision. & Lock
+  propulsion and classify the first external collision immediately. & The surface could no
+  longer be used as a powered recovery manoeuvre. \\
+  L5 & Almost every episode touched down, but most were hard or waited off-centre. & Add settled
+  off-centre termination and stronger stability shaping. & The next problem became reward
+  ordering, not contact frequency. \\
+  L6 & A hard crash was cheaper than a careful miss. & Rebalance terminal outcomes and expose
+  additive readiness components. & The economics improved, but navigation progress still leaked. \\
+  L7 & Descending increased ``readiness'' even while lateral error grew. & Remove the altitude
+  gate derivative from navigation progress. & The reward finally measured motion toward the
+  centre. \\
+  L8 & The full actuator delay made useful landing behaviour difficult to discover. & Temporarily
+  ease startup, minimum-run and cooldown timing. & Robust landing emerged, together with roughly
+  30 ignitions per success. \\
+  L9 & Rapid engine cycling synthesized thrust below the minimum. & Restore part of the timing
+  constraint and warm-start from L8. & Cycling fell, but efficiency and engine choice remained
+  weak. \\
+  L10 & Directly prescribing an engine would overfit the solution. & Start fresh and reward
+  efficiency only after successful touchdown. & 151/250 fixed-band successes; full difficulty
+  and cycling remained unsolved. \\
+  L11 & One-engine continuous descent was still physically awkward. & Lower minimum throttle and
+  strengthen success-only cycling cost. & 212/250 successes, including 18/50 at full difficulty;
+  mean restarts fell to 1.56. \\
+  \bottomrule
+\end{longtable}
+\normalsize
+
+\subsection{L1--L4: make the episode physically meaningful}
+
+The first phase prevented the policy from optimizing simulator and termination defects. L1
+never began because the communication worker was occupied. L2 then appeared to learn quickly:
+mean return improved from about $-18.7$ to $-17.2$, the vehicle centred to roughly
+\SI{0.64}{m}, ignited all three engines and climbed out of the episode in about \SI{3.6}{s}.
+This was not landing progress. The policy had found the cheapest reset, and the simulator had
+silently removed the prescribed 10--\SI{18}{m/s} initial downward velocity.
+
+After staged velocity application in L3, the policy could no longer begin from rest. It learned
+to navigate near the pad and remain upright, but then converted the next reward defect into a
+fast vertical crash. The hard-touchdown severity term had a low cap, while every additional
+second still incurred cost. Removing that time pressure and extending severity in L4 made
+physical contact more attractive. Inspection then revealed a different safety gap: vehicles
+that lost control after approaching the pad could continue thrusting after an off-pad impact.
+The response was a physical propulsion lockout and immediate classification on every first
+external collision.
+
+\subsection{L5--L7: make safe touchdown cheaper than failure}
+
+Once almost every trajectory reached the surface, the target moved from contact quantity to
+contact quality. L5 exposed two post-contact loopholes. A rocket could rock between feet for
+several seconds before becoming stable, or remain calm just outside the success radius until a
+discounted timeout. The settled off-centre termination added for L6 removed the second behaviour,
+but L6 regressed to 1.6\% late-window success because the reward ordering was wrong: a fast hard
+contact was much cheaper than a carefully controlled miss.
+
+L7 corrected the ordering and made readiness additive rather than a product that became zero if
+one component was poor. At equal 10--13M budgets, success rose from 1.23\% in L6 to 8.81\% in L7.
+Near-ground tilt fell from \SI{5.89}{\degree} to \SI{2.98}{\degree}, angular rate from
+\SI{25.2}{\degree\per\second} to \SI{9}{\degree\per\second}, and vertical contact speed from
+\SI{8.88}{m/s} to \SI{7.50}{m/s}. Yet only 34\% of sampled trajectories moved toward the pad
+centre. Step telemetry finally identified the cause: positive ``readiness'' was recorded on
+about 78\% of steps because descending increased the altitude gate even when lateral error grew.
+
+\subsection{L8--L9: separate learnability from realism}
+
+L8 removed the altitude derivative from the potential and temporarily shortened engine startup,
+minimum-run and cooldown delays. This was a deliberate curriculum over actuator dynamics: the
+goal was first to make navigation, braking and four-foot contact discoverable. At the same
+10--13M budget, L8 achieved 82.4\% success versus L7's 8.8\%. Recent successful L8 landings
+reduced an initial \SI{20.1}{m} pad distance to \SI{1.41}{m}, contacted at \SI{2.26}{m/s} and
+\SI{1.13}{\degree} tilt, and shut down propulsion correctly after impact.
+
+The easier actuator also exposed a new strategy: nearly 30 ignitions per success. L9 restored
+part of the timing constraint while initializing from L8. At matched 55--65\% difficulty, L9
+slightly improved non-replay success and reduced hard touchdowns and restarts, but used more
+fuel and missed the centre more often. Above \SI{50}{m}, more than 77\% of powered samples still
+used all three engines. Thus timing continuation reduced cycling without producing the desired
+single-engine navigation mode.
+
+\subsection{L10--L11: reward the mission, then test its boundary}
+
+L10 deliberately did not prescribe which engine to use. It started from fresh weights and paid
+an efficiency term only after successful touchdown. Fuel, restart-equivalent fuel and additional
+first ignitions affected this outcome term, while failures could not improve return by shutting
+down early. Training was extended from 30M to 50M and finally 79.63M steps as the curriculum
+continued to advance. Chapter~\ref{ch:results} shows that the same policy improved its landing
+quality under increasingly difficult starts, although full-difficulty evaluation remained
+outside the learned distribution.
+
+L11 tested that hypothesis in a fresh 100M-step run. Minimum throttle was lowered from 57\% to
+49.9\%, while startup delay, shutdown transient, minimum run and restart cooldown were set to
+\SI{0.45}{s}, \SI{0.20}{s}, \SI{1.5}{s} and \SI{2.0}{s}. The lower minimum thrust made a longer
+single-engine descent feasible; the timing constraints and larger success-only restart
+equivalent made rapid cycling unattractive without rewarding failures for switching off.
+
+The curriculum reached 100\% and stayed there. In the frozen 250-episode evaluation, L11
+completed 212 stable landings, including 18 of 50 at exact full difficulty. Mean engine restarts
+fell from L10's 18.46 to 1.56 per episode and mean first-contact vertical speed fell from
+\SI{3.02}{m/s} to \SI{1.33}{m/s}. Extending the same run from 90M to 100M steps produced a
+smaller but measurable final improvement: overall success rose from 82.8\% to 84.8\% and
+full-difficulty success from 30\% to 36\%. The final policy therefore resolved most of the
+cycling problem and produced the first successes at the previously unsolved boundary, while
+leaving a narrower
+vertical-braking and deployment-consistency problem for future work.
+
+\section{Challenge 2: aerodynamics and physics}
+
+The landing campaign was not only a reward-design exercise. Some policies exposed mistakes in
+the world they were learning from. I had no previous experience building a rocket-physics system,
+and the most dangerous errors were not spectacular failures but plausible-looking forces with
+the wrong meaning. Axial drag worked during descent but pointed incorrectly during upward motion;
+the first grid-fin model gave too much authority because it treated an open lattice too much like
+a solid surface.
+
+Watching training revealed the symptoms, but component tests made them reproducible. That led to
+the layered model in Chapter~\ref{ch:physics}: force components are separated, dimensional
+quantities and coefficients are exposed, and tests check direction and bounds where practical.
+Where high-fidelity data was unavailable, I chose an explicit approximation rather than hidden
+precision. The simulator remains an experimental learning environment, not a flight-qualified
+predictor.
+
+\section{Challenge 3: system integration}
+
+As the physical and learning models grew, connecting them became at least as difficult as
+implementing them. The recurring symptoms were unclear ownership, duplicated settings, startup
+ordering problems and broken backward compatibility. A new actuator could change the policy
+schema; a task could change spawning and termination; a UI edit could otherwise alter a value
+after a model had already been selected.
+
+Each of those failures produced one of the contracts in Chapter~\ref{ch:architecture}. Editable
+drafts become immutable snapshots. Policy schemas are derived and compared. Resumes create
+append-only revisions. Telemetry carries configuration identity. These mechanisms are not
+decorative software engineering around the RL experiment; they are what make it possible to
+tell whether two runs actually differ in the intended way.
+
+\section{Remaining technical debt}
+
+The resulting simulator is large for a single-author bachelor project, and the redesign is not
+complete in every corner. Some partial classes remain long, older serialized assets require
+migration care, and not every UI path has an automated test. The final public commit also remains
+to be frozen. These limitations follow directly from the same story: every new physical or
+learning capability created a software contract that the original prototype had never needed.

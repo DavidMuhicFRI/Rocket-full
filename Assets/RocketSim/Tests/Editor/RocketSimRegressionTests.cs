@@ -54,6 +54,15 @@ namespace RocketSim.Tests
         }
 
         [Test]
+        public void MlRunControlsSupportLongAdaptiveCurriculumContinuations()
+        {
+            Assert.That(MLAgentsConfig.MaximumSupportedMaxSteps, Is.GreaterThanOrEqualTo(80_000_000),
+                "A resumed landing curriculum needs enough total-step headroom to progress beyond the old 50M UI ceiling.");
+            Assert.That(MLAgentsConfig.MaximumSupportedKeepCheckpoints, Is.GreaterThanOrEqualTo(160),
+                "At a 500k interval, an 80M experiment needs capacity for 160 checkpoints when the full curve is retained.");
+        }
+
+        [Test]
         public void PpoYamlRoundTripPreservesTemporalSettings()
         {
             var source = new MLAgentsConfig();
@@ -287,6 +296,40 @@ namespace RocketSim.Tests
                 Assert.That(exact.shapingRate, Is.EqualTo(0.2f).Within(Epsilon));
                 Assert.That(exact.shapingRate, Is.GreaterThan(above.shapingRate));
                 Assert.That(above.shapingRate, Is.EqualTo(below.shapingRate).Within(Epsilon));
+            }
+        }
+
+        [Test]
+        public void HoverCannotFarmStabilityRewardsAwayFromTheCompleteTarget()
+        {
+            foreach (ScenarioType scenario in new[] { ScenarioType.Hover, ScenarioType.HoverTracking })
+            {
+                ScenarioObjectiveConfig objective = ScenarioObjectiveConfig.CreateDefault(scenario);
+                objective.rewards.Clear();
+                objective.terminations.Clear();
+                objective.rewards.hoverPlanarProximityRewardRate = 1f;
+                objective.rewards.hoverUprightRewardRate = 1f;
+                objective.rewards.hoverSpeedCalmRewardRate = 1f;
+                objective.rewards.hoverRotationCalmRewardRate = 1f;
+
+                RewardTerms exactTerms = SafeHoverTerms();
+                RewardTerms altitudeFlyawayTerms = exactTerms;
+                altitudeFlyawayTerms.verticalError = 60f;
+                RewardTerms planarFlyawayTerms = exactTerms;
+                planarFlyawayTerms.planarDistance = 100f;
+
+                RewardDecision exact = RocketRewardModel.Evaluate(
+                    scenario, exactTerms, HoverContext(), objective);
+                RewardDecision altitudeFlyaway = RocketRewardModel.Evaluate(
+                    scenario, altitudeFlyawayTerms, HoverContext(altitude: 90f), objective);
+                RewardDecision planarFlyaway = RocketRewardModel.Evaluate(
+                    scenario, planarFlyawayTerms, HoverContext(), objective);
+
+                Assert.That(exact.shapingRate, Is.EqualTo(4f).Within(Epsilon));
+                Assert.That(altitudeFlyaway.shapingRate, Is.LessThan(0.02f),
+                    "A calm rocket far from the commanded altitude must not earn a survivable reward floor.");
+                Assert.That(planarFlyaway.shapingRate, Is.LessThan(0.02f),
+                    "Satisfying altitude alone must not pay the full fixed-hover stability reward.");
             }
         }
 
@@ -567,15 +610,15 @@ namespace RocketSim.Tests
             Assert.That(leg.rewards.landingNearTargetAngularRateCostRate, Is.EqualTo(0.100f).Within(Epsilon));
             Assert.That(leg.rewards.landingReadinessProgressRewardRate, Is.EqualTo(4f).Within(Epsilon));
             Assert.That(leg.rewards.landingYawSpinCostRate, Is.EqualTo(0.025f).Within(Epsilon));
-            Assert.That(leg.rewards.landingDescentProfileErrorCostRate, Is.EqualTo(0.120f).Within(Epsilon));
-            Assert.That(leg.rewards.landingNearTargetVerticalSpeedCostRate, Is.EqualTo(0.080f).Within(Epsilon));
+            Assert.That(leg.rewards.landingDescentProfileErrorCostRate, Is.EqualTo(0.150f).Within(Epsilon));
+            Assert.That(leg.rewards.landingNearTargetVerticalSpeedCostRate, Is.EqualTo(0.120f).Within(Epsilon));
             Assert.That(leg.rewards.landingUpwardVelocityCostRate, Is.EqualTo(0.300f).Within(Epsilon));
             Assert.That(leg.rewards.controlEffortCostRate, Is.EqualTo(0.003f).Within(Epsilon));
             Assert.That(leg.rewards.timeCostRate, Is.Zero.Within(Epsilon));
             Assert.That(leg.rewards.firstFootContactReward, Is.Zero.Within(Epsilon));
             Assert.That(leg.rewards.stableTouchdownReward, Is.EqualTo(2f).Within(Epsilon));
             Assert.That(leg.rewards.legSuccessfulTouchdownReward, Is.EqualTo(30f).Within(Epsilon));
-            Assert.That(leg.rewards.legSuccessfulFuelEfficiencyReward, Is.EqualTo(4f).Within(Epsilon));
+            Assert.That(leg.rewards.legSuccessfulFuelEfficiencyReward, Is.EqualTo(6f).Within(Epsilon));
             Assert.That(leg.rewards.legHardTouchdownCost, Is.EqualTo(25f).Within(Epsilon));
             Assert.That(leg.rewards.legImpactSeverityCost, Is.EqualTo(20f).Within(Epsilon));
             Assert.That(leg.rewards.legStructuralStrikeCost, Is.EqualTo(25f).Within(Epsilon));
@@ -593,13 +636,13 @@ namespace RocketSim.Tests
             Assert.That(leg.shaping.legMissionEfficiencyBudgetFullFraction,
                 Is.EqualTo(0.28f).Within(Epsilon));
             Assert.That(leg.shaping.legRestartEquivalentFuelFraction,
-                Is.EqualTo(0.003f).Within(Epsilon));
+                Is.EqualTo(0.006f).Within(Epsilon));
             Assert.That(leg.shaping.legAdditionalEngineIgnitionEquivalentFuelFraction,
                 Is.EqualTo(0.0005f).Within(Epsilon));
             Assert.That(leg.shaping.legFuelEfficiencyStartDifficulty, Is.Zero.Within(Epsilon));
             Assert.That(leg.shaping.legFuelEfficiencyFullDifficulty, Is.Zero.Within(Epsilon));
             Assert.That(leg.shaping.legTouchdownQualityRewardFraction,
-                Is.EqualTo(0.75f).Within(Epsilon));
+                Is.EqualTo(0.85f).Within(Epsilon));
             Assert.That(leg.shaping.landingUpwardVelocityToleranceMps,
                 Is.EqualTo(0.5f).Within(Epsilon));
             Assert.That(leg.shaping.landingUpwardVelocityScaleMps,
@@ -832,7 +875,7 @@ namespace RocketSim.Tests
             Assert.That(objective.schemaVersion,
                 Is.EqualTo(ScenarioObjectiveConfig.CurrentSchemaVersion));
             Assert.That(objective.rewards.landingDescentProfileErrorCostRate,
-                Is.EqualTo(0.120f).Within(Epsilon));
+                Is.EqualTo(0.150f).Within(Epsilon));
             Assert.That(objective.rewards.landingReadinessProgressRewardRate,
                 Is.EqualTo(4f).Within(Epsilon));
             Assert.That(objective.shaping.legFuelEfficiencyStartDifficulty,
@@ -866,13 +909,13 @@ namespace RocketSim.Tests
             Assert.That(objective.schemaVersion,
                 Is.EqualTo(ScenarioObjectiveConfig.CurrentSchemaVersion));
             Assert.That(objective.rewards.legSuccessfulFuelEfficiencyReward,
-                Is.EqualTo(4f).Within(Epsilon));
+                Is.EqualTo(6f).Within(Epsilon));
             Assert.That(objective.shaping.legFuelEfficiencyBudgetFraction,
                 Is.EqualTo(0.20f).Within(Epsilon));
             Assert.That(objective.shaping.legMissionEfficiencyBudgetFullFraction,
                 Is.EqualTo(0.28f).Within(Epsilon));
             Assert.That(objective.shaping.legRestartEquivalentFuelFraction,
-                Is.EqualTo(0.003f).Within(Epsilon));
+                Is.EqualTo(0.006f).Within(Epsilon));
 
             ScenarioObjectiveConfig edited = VersionFourteenBalancedLegObjective();
             edited.rewards.landingReadinessProgressRewardRate = 3.9f;
@@ -890,6 +933,42 @@ namespace RocketSim.Tests
             Assert.That(edited.shaping.legRestartEquivalentFuelFraction,
                 Is.Zero.Within(Epsilon),
                 "A legacy custom objective must not silently acquire a new switching preference.");
+        }
+
+        [Test]
+        public void VersionFifteenBalancedLegObjectiveUpgradesL11GuidanceButEditsArePreserved()
+        {
+            ScenarioObjectiveConfig objective = VersionFifteenBalancedLegObjective();
+
+            objective.EnsureObjects(ScenarioType.LegLanding);
+
+            Assert.That(objective.schemaVersion,
+                Is.EqualTo(ScenarioObjectiveConfig.CurrentSchemaVersion));
+            Assert.That(objective.rewards.landingDescentProfileErrorCostRate,
+                Is.EqualTo(0.150f).Within(Epsilon));
+            Assert.That(objective.rewards.landingNearTargetVerticalSpeedCostRate,
+                Is.EqualTo(0.120f).Within(Epsilon));
+            Assert.That(objective.rewards.legSuccessfulFuelEfficiencyReward,
+                Is.EqualTo(6f).Within(Epsilon));
+            Assert.That(objective.shaping.legRestartEquivalentFuelFraction,
+                Is.EqualTo(0.006f).Within(Epsilon));
+            Assert.That(objective.shaping.legTouchdownQualityRewardFraction,
+                Is.EqualTo(0.85f).Within(Epsilon));
+
+            ScenarioObjectiveConfig edited = VersionFifteenBalancedLegObjective();
+            edited.rewards.landingDescentProfileErrorCostRate = 0.121f;
+
+            edited.EnsureObjects(ScenarioType.LegLanding);
+
+            Assert.That(edited.schemaVersion,
+                Is.EqualTo(ScenarioObjectiveConfig.CurrentSchemaVersion));
+            Assert.That(edited.rewards.landingDescentProfileErrorCostRate,
+                Is.EqualTo(0.121f).Within(Epsilon),
+                "A deliberately edited v15 objective must not be replaced.");
+            Assert.That(edited.rewards.legSuccessfulFuelEfficiencyReward,
+                Is.EqualTo(4f).Within(Epsilon));
+            Assert.That(edited.shaping.legRestartEquivalentFuelFraction,
+                Is.EqualTo(0.003f).Within(Epsilon));
         }
 
         [Test]
@@ -1008,7 +1087,7 @@ namespace RocketSim.Tests
             Assert.That(objective.rewards.landingGoalClosureRewardRate,
                 Is.EqualTo(0.50f).Within(Epsilon));
             Assert.That(objective.shaping.legTouchdownQualityRewardFraction,
-                Is.EqualTo(0.75f).Within(Epsilon));
+                Is.EqualTo(0.85f).Within(Epsilon));
             Assert.That(objective.terminations.legMinimumStableFeet, Is.EqualTo(4));
 
             ScenarioObjectiveConfig edited = VersionEightBalancedLegObjective();
@@ -3518,14 +3597,26 @@ namespace RocketSim.Tests
 
         static ScenarioObjectiveConfig VersionFourteenBalancedLegObjective()
         {
-            ScenarioObjectiveConfig objective =
-                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding);
+            ScenarioObjectiveConfig objective = VersionFifteenBalancedLegObjective();
             objective.schemaVersion = 14;
             objective.rewards.legSuccessfulFuelEfficiencyReward = 3f;
             objective.shaping.legFuelEfficiencyBudgetFraction = 0.08f;
             objective.shaping.legMissionEfficiencyBudgetFullFraction = 0f;
             objective.shaping.legRestartEquivalentFuelFraction = 0f;
             objective.shaping.legAdditionalEngineIgnitionEquivalentFuelFraction = 0f;
+            return objective;
+        }
+
+        static ScenarioObjectiveConfig VersionFifteenBalancedLegObjective()
+        {
+            ScenarioObjectiveConfig objective =
+                ScenarioObjectiveConfig.CreateDefault(ScenarioType.LegLanding);
+            objective.schemaVersion = 15;
+            objective.rewards.landingDescentProfileErrorCostRate = 0.120f;
+            objective.rewards.landingNearTargetVerticalSpeedCostRate = 0.080f;
+            objective.rewards.legSuccessfulFuelEfficiencyReward = 4f;
+            objective.shaping.legRestartEquivalentFuelFraction = 0.003f;
+            objective.shaping.legTouchdownQualityRewardFraction = 0.75f;
             return objective;
         }
 

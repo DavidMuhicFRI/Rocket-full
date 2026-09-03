@@ -1,0 +1,142 @@
+\chapter{Tasks, Rewards and Learning System}
+\label{ch:learning}
+
+The physical model defines what the rocket can do; the task definition determines what it is
+asked to learn. In the prototype, those two concerns were mixed inside \texttt{FalconAgent}.
+That was manageable for one landing experiment, but adding hover and target tracking created
+conflicting spawn rules, rewards and termination conditions. The learning system was therefore
+reorganized around task ownership before the final policies were trained.
+
+\section{Making each task own its objective}
+
+Every scenario now owns a versioned \texttt{ScenarioObjectiveConfig}. It contains the reward
+magnitudes, shaping scales and termination parameters that give numerical meaning to that task.
+The runtime applies the sign of costs, so values exposed in the UI remain nonnegative magnitudes;
+a value of zero disables a term.
+
+The distinction between continuous and one-off rewards became important after early policies
+learned to wait for repeated payment. Continuous shaping values are defined as rates and
+multiplied by the physics timestep. Contact events and terminal outcomes are emitted once. The
+evaluation sequence is also fixed: measure the physical state, build the task context, calculate
+shaping, add event and terminal terms, record the breakdown, and only then end the episode. A
+terminal event can no longer disappear because another component terminated the episode first.
+
+This organization did not make reward design automatic. It made each assumption visible and
+allowed a reward change to become a versioned experimental decision rather than a hidden code
+edit.
+
+\section{Putting unlike physical quantities on a common scale}
+
+Position error, speed and attitude are expressed in different units and ranges. Combining their
+raw values made coefficients difficult to interpret, so many shaping terms use exponential
+closeness
+\begin{equation}
+  E(x;s)=\exp\!\left(-\frac{\lvert x\rvert}{\lvert s\rvert}\right),
+  \label{eq:exp01}
+\end{equation}
+where the user-visible scale $s$ describes how quickly the value decreases as error $x$ grows.
+A general continuous reward rate can then be written
+\begin{equation}
+  \dot r = \sum_i w_i^+ E(e_i;s_i)-\sum_j w_j^- C_j,
+  \qquad r_t=\dot r\,\Delta t+r_{\mathrm{event}}+r_{\mathrm{terminal}}.
+  \label{eq:reward-general}
+\end{equation}
+The $w$ values are configurable magnitudes and each contribution can be logged separately. A
+large total return can therefore be traced back to the behaviour that generated it instead of
+being treated as proof that the policy is good.
+
+\section{Fixed hover: learning to remain still}
+
+Fixed hover isolates the most basic powered-flight question: can the policy keep the vehicle
+near one point without touching the ground or flying away? The rocket starts near
+\SI{50}{m} and is asked to settle near a target at \SI{30}{m}. Its reward combines altitude and
+planar proximity, uprightness, low translational speed and low angular rate, with optional costs
+for motion, effort and time.
+
+This apparently simple task exposed one of the earliest reward loopholes. When similar proximity
+terms were used for landing, hovering just above the surface accumulated more reward than ending
+the episode with a touchdown. The policy was not refusing to land; the numerical objective had
+made waiting more valuable. That behaviour led to the separation of rates, events and terminal
+outcomes used by every later task.
+
+A standard hover evaluation lasts \SI{60}{s}. The evaluator reports duration, position,
+velocity, attitude and fuel but has no predeclared binary success threshold. The completed
+\texttt{HoverFixed} evaluation is therefore reported through its physical distributions and
+termination outcomes, not converted into a success percentage after the fact.
+
+\section{Moving-target hover: separating travel from settling}
+
+Once a policy could remain near one point, target tracking added a transition between stable
+states. An evaluation episode begins with one hover target and relocates it twice after capture.
+Each target must be reached and held within \SI{35}{s}; the curriculum increases the relocation
+radius and tightens the capture limits.
+
+A single proximity reward was not enough for both parts of this behaviour. Far from the target,
+the useful action is to close distance at a sensible speed. Near it, the same speed becomes a
+liability and the policy should settle. The task therefore has an approach phase, which rewards
+closure, direction and useful speed, and a settle phase, which rewards centre proximity and calm
+horizontal, vertical and rotational motion. Moving away, loitering and excessive speed can be
+penalized. Capture is a timed event defined by bounded position and motion, not by crossing a
+distance threshold for one frame.
+
+This two-phase design became a useful bridge to landing. Both tasks require the policy to travel
+while far away and change priorities as the terminal region approaches.
+
+\section{Physical leg landing: rewarding the whole mission}
+
+Landing adds the final elements missing from tracking: a descent profile, irreversible contact
+and a requirement to remain supported afterwards. A height-dependent reference speed is based on
+\begin{equation}
+  v_{z,\mathrm{goal}}(h)=-k_v\sqrt{2g\max(h,0)},
+  \label{eq:descent-profile}
+\end{equation}
+where curriculum-dependent fraction $k_v$ controls how aggressively the vehicle should descend.
+In flight, the objective can use horizontal closure, profile error, uprightness, near-target
+speed, angular rate, control effort and time. At the surface, it distinguishes first contact,
+hard impact, rebound, support by four feet and stable touchdown.
+
+Runs L2--L11 progressively changed the relationship between those terms. The decisive rule in
+the final objective is that mission efficiency is calculated only after a successful landing.
+Fuel use, restarts and additional engine ignitions can then distinguish two successful solutions,
+but a failing policy cannot improve its outcome by switching everything off and giving up. The
+behaviours that led to this rule are followed chronologically in
+Section~\ref{sec:landing-iterations}.
+
+Safety after contact is not delegated entirely to the learned policy. Any external impact locks
+propulsion, off-pad impact ends immediately, and pad contact remains active long enough to
+measure rebound, supported feet and stable hold. Reward is thus a signal used to discover the
+behaviour, while evaluation success is a separate conjunction of physical conditions.
+
+\section{Keeping the learning algorithm constant}
+
+The tasks and simulator changed repeatedly, so the principal experiments kept one PPO
+configuration instead of adding hyperparameter search as another source of variation.
+Table~\ref{tab:ppo} lists the configuration shared by the completed tracking and L11 landing
+runs. It should be read as an implementation choice, not as evidence that these values are
+optimal.
+
+\begin{table}[htbp]
+  \centering
+  \caption{PPO configuration for \texttt{HoverTrackSimple3} and \texttt{L11}.}
+  \label{tab:ppo}
+  \begin{tabular}{ll@{\qquad}ll}
+    \toprule
+    Parameter & Value & Parameter & Value \\
+    \midrule
+    Batch size & 4096 & Buffer size & 40960 \\
+    Learning rate & $2\times10^{-4}$, linear & PPO clip $\epsilon$ & 0.2 \\
+    Entropy $\beta$ & 0.01 & GAE $\lambda$ & 0.98 \\
+    Epochs/update & 6 & Discount $\gamma$ & 0.9995 \\
+    Hidden units & 512 & Hidden layers & 3 \\
+    Time horizon & 1024 & Maximum steps & 30M tracking; 100M landing \\
+    Checkpoint interval & 500,000 & Trainer seed & 1 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The recorded environment used Python 3.10.12, ML-Agents 1.1.0, PyTorch 2.1.0 with CUDA 12.1,
+and an NVIDIA GeForce RTX 4070 SUPER. The Unity project used Unity 6000.4.1f1 and ML-Agents
+package 4.0.2. Neither principal run used fins, RCS or wind. Tracking used one engine channel,
+30 observations and four continuous actions; L11 used three independent engines, 52
+observations and 12 continuous actions. With the learning method fixed, the remaining changes
+can be interpreted through the task, actuator and simulator revisions described next.

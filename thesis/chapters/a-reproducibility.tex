@@ -1,0 +1,61 @@
+\chapter{Reproducibility Record}
+\label{app:reproducibility}
+
+The development chapters explain why each experiment changed. This appendix provides the other
+half of that story: the identifiers needed to trace each reported number back to a saved run.
+
+\section{Software environment}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Recorded software and hardware environment for the completed runs.}
+  \begin{tabular}{ll}
+    \toprule
+    Component & Version or value \\
+    \midrule
+    Unity Editor & 6000.4.1f1 \\
+    Unity ML-Agents package & 4.0.2 \\
+    Python & 3.10.12 \\
+    ML-Agents Python package & 1.1.0 \\
+    PyTorch & 2.1.0+cu121 \\
+    CUDA runtime & 12.1 \\
+    GPU & NVIDIA GeForce RTX 4070 SUPER \\
+    Physics timestep & \SI{0.01}{s} \\
+    Decision period & 3 physics steps \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Run identifiers}
+
+\begin{description}
+  \item[Hover training] \texttt{HoverFixed}, revision 2, 20,078,171 steps,
+  environment seed 1, trainer seed 1, evaluated export \texttt{Rocket.onnx}.
+  \item[Hover evaluation] completed 2026-09-03, seed 20257, 250 episodes,
+  summary \path{telemetry_HoverFixed_evaluation_20260903_134045_summary.json}.
+  \item[Tracking training] \texttt{HoverTrackSimple3}, revision 3, 30,000,039 steps,
+  environment seed 1, trainer seed 1.
+  \item[Tracking evaluation] completed 2026-08-24, seed 20257, 250 episodes,
+  summary \path{telemetry_HoverTrackSimple3_evaluation_20260824_192643_summary.json}.
+  \item[Landing baseline] \texttt{L10}, revision 4, 79,629,752 steps; evaluation completed
+  2026-08-31 with seed 20257 and 250 episodes,
+  summary \path{telemetry_L10_evaluation_20260831_191953_summary.json}.
+  \item[Landing training] \texttt{L11}, revision 2, 100,000,086 steps, environment seed 1,
+  trainer seed 1, evaluated export \texttt{Rocket.onnx}.
+  \item[Landing evaluation] completed 2026-09-02, seed 20257, 250 episodes,
+  summary \path{telemetry_L11_evaluation_20260901_235641_summary.json}.
+\end{description}
+
+\begin{thesistodo}
+Repository URL: TODO. Final commit: TODO. The present Git HEAD is not a valid substitute because
+the simulator working tree contains uncommitted changes. Add final tracking and hover hashes;
+the L11 landing hashes are recorded in Appendix~\ref{app:landing}.
+\end{thesistodo}
+
+\section{Artifact layout}
+
+The record closes the experimental loop only if the underlying files are kept together. For each
+run, the public artifact should preserve \texttt{RunManifest.json}, \texttt{RuntimeState.json},
+all numbered revisions, trainer logs, discussed checkpoints, the final ONNX model, the evaluation
+episode CSV and its summary JSON. The README should then describe the command or UI sequence used
+to load the session and repeat the evaluation.
